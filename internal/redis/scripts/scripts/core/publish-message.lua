@@ -1,0 +1,47 @@
+-- internal/redis/scripts/core/publish-message.lua
+--
+-- Copyright (c)
+-- Weyoss <weyoss@outlook.com>
+-- https://github.com/weyoss
+--
+-- This source code is licensed under the MIT license found in the LICENSE file
+-- in the root directory of this source tree.
+--
+-- Description:
+-- Publishes a message to a queue. This script is optimized for maximum performance
+-- by using a static HSET command, passing all properties directly.
+-- It includes an idempotency check to prevent duplicate messages.
+-- It validates queue operational state before publishing.
+--
+-- KEYS[1]: keyQueueProperties
+-- KEYS[2]: keyPriorityQueue
+-- KEYS[3]: keyQueuePending
+-- KEYS[4]: keyQueueScheduled
+-- KEYS[5]: keyQueuePublished
+-- KEYS[6]: keyQueueConsumerGroups
+-- KEYS[7]: keyMessage
+--
+-- ARGV layout (67 total arguments):
+-- ARGV[1-13]: Queue property keys and state values (13 values)
+-- ARGV[14-17]: Message priority and scheduling values (4 values)
+-- ARGV[18-41]: Message property keys (24 keys)
+-- ARGV[42-65]: Message property values (24 values)
+-- ARGV[66]: consumerGroupId
+-- ARGV[67]: operationLockId (optional, for locked queues)
+--
+-- Return codes:
+--   'OK' - Success
+--   'QUEUE_NOT_FOUND' - Queue does not exist
+--   'CONSUMER_GROUP_NOT_FOUND' - Specified consumer group does not exist
+--   'MESSAGE_PRIORITY_REQUIRED' - Priority queue requires priority
+--   'PRIORITY_QUEUING_NOT_ENABLED' - Non-priority queue received priority
+--   'UNKNOWN_QUEUE_TYPE' - Invalid queue type
+--   'QUEUE_STOPPED' - Queue is in STOPPED state
+--   'QUEUE_LOCKED' - Queue is locked and no valid lock ID provided
+--   'QUEUE_INVALID_STATE' - Queue is in unknown state
+--
+-- This script depends on 'shared-procedures/publish-message.lua'.
+-- The content of 'shared-procedures/publish-message.lua' must be prepended to this script before loading it into Redis.
+--
+
+return publish_message(KEYS, ARGV);

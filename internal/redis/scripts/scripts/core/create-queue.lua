@@ -1,0 +1,106 @@
+-- internal/redis/scripts/core/create-queue.lua
+--
+-- Copyright (c)
+-- Weyoss <weyoss@outlook.com>
+-- https://github.com/weyoss
+--
+-- This source code is licensed under the MIT license found in the LICENSE file
+-- in the root directory of this source tree.
+--
+-- Description:
+-- Creates a new queue and atomically initializes all of its properties,
+-- including counters, rate limits, and exchange bindings. Also records the
+-- initial state transition for the queue.
+--
+-- KEYS[1]: keyNamespaces
+-- KEYS[2]: keyNsQueues
+-- KEYS[3]: keyQueues
+-- KEYS[4]: keyQueueProperties
+-- KEYS[5]: keyQueueStateHistory  -- New key for state history
+--
+-- ARGV:
+-- ARGV[1-2]: General queue parameters (namespace, queue)
+-- ARGV[3-16]: All queue property keys and their corresponding values.
+-- ARGV[17]: EQueuePropertyOperationalState - Field name for operational state
+-- ARGV[18]: EQueueOperationalStateActive - ACTIVE state enum value
+-- ARGV[19]: maxQueueStateHistorySize
+-- ARGV[20]: EQueuePropertyLastStateChangeAt - Field name for last state change timestamp
+-- ARGV[21]: lastStateChangeAt - Current timestamp
+-- ARGV[22]: EQueuePropertyLockId - Field name for lock ID
+-- ARGV[23]: initialTransitionData - JSON string of initial state transition
+--
+-- Returns:
+--   - 'OK' on success
+--   - 'QUEUE_EXISTS' if the queue already exists
+
+-- Static Keys
+local keyNamespaces = KEYS[1]
+local keyNsQueues = KEYS[2]
+local keyQueues = KEYS[3]
+local keyQueueProperties = KEYS[4]
+local keyQueueStateHistory = KEYS[5]  -- New key for state history
+
+-- Arguments
+local namespace = ARGV[1]
+local queue = ARGV[2]
+local queuePropertiesQueueType = ARGV[3]
+local queueType = ARGV[4]
+local queuePropertiesQueueDeliveryModel = ARGV[5]
+local deliveryModel = ARGV[6]
+local queuePropertiesRateLimit = ARGV[7]
+local rateLimit = ARGV[8]
+local queuePropertiesMessagesCount = ARGV[9]
+local queuePropertiesAcknowledgedMessagesCount = ARGV[10]
+local queuePropertiesDeadLetteredMessagesCount = ARGV[11]
+local queuePropertiesPendingMessagesCount = ARGV[12]
+local queuePropertiesScheduledMessagesCount = ARGV[13]
+local queuePropertiesProcessingMessagesCount = ARGV[14]
+local queuePropertiesDelayedMessagesCount = ARGV[15]
+local queuePropertiesRequeuedMessagesCount = ARGV[16]
+
+-- New arguments for state management
+local EQueuePropertyOperationalState = ARGV[17]
+local EQueueOperationalStateActive = ARGV[18]
+local maxQueueStateHistorySize = tonumber(ARGV[19])
+local EQueuePropertyLastStateChangeAt = ARGV[20]
+local lastStateChangeAt = ARGV[21]
+local EQueuePropertyLockId = ARGV[22]
+local initialTransitionData = ARGV[23]
+
+-- Check if queue already exists to prevent overwriting
+if redis.call("SISMEMBER", keyQueues, queue) == 1 then
+    return 'QUEUE_EXISTS'
+end
+
+-- Add queue to the global and namespace-specific sets
+redis.call("SADD", keyQueues, queue)
+redis.call("SADD", keyNsQueues, queue)
+redis.call("SADD", keyNamespaces, namespace)
+
+-- Set all properties in one atomic command including operational state
+redis.call("HSET", keyQueueProperties,
+        queuePropertiesQueueType, queueType,
+        queuePropertiesQueueDeliveryModel, deliveryModel,
+        queuePropertiesRateLimit, rateLimit,
+-- Initialize all counters to 0 for a consistent state
+        queuePropertiesMessagesCount, 0,
+        queuePropertiesAcknowledgedMessagesCount, 0,
+        queuePropertiesDeadLetteredMessagesCount, 0,
+        queuePropertiesPendingMessagesCount, 0,
+        queuePropertiesScheduledMessagesCount, 0,
+        queuePropertiesProcessingMessagesCount, 0,
+        queuePropertiesDelayedMessagesCount, 0,
+        queuePropertiesRequeuedMessagesCount, 0,
+-- Initialize operational state
+        EQueuePropertyOperationalState, EQueueOperationalStateActive,
+        EQueuePropertyLastStateChangeAt, lastStateChangeAt,
+        EQueuePropertyLockId, ''  -- Initialize empty lock ID
+)
+
+-- Record initial state transition in history
+redis.call("LPUSH", keyQueueStateHistory, initialTransitionData)
+
+-- Trim history to last maxQueueStateHistorySize entries
+redis.call("LTRIM", keyQueueStateHistory, 0, maxQueueStateHistorySize - 1)
+
+return 'OK'
