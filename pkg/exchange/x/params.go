@@ -1,0 +1,163 @@
+/*
+ * Copyright (c) 2026
+ * Weyoss <weyoss@outlook.com>
+ * https://github.com/weyoss
+ *
+ * This source code is licensed under the MIT license found in the LICENSE file
+ * in the root directory of this source tree.
+ *
+ */
+
+package x
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
+	"github.com/weyoss/go-redis-smq/pkg/config"
+)
+
+var (
+	// ErrNameRequired indicates the exchange name was empty.
+	ErrNameRequired = errors.New("exchange name is required")
+
+	// ErrInvalidName indicates the exchange name failed validation.
+	ErrInvalidName = errors.New("invalid exchange name")
+
+	// ErrInvalidNamespace indicates the namespace failed validation.
+	ErrInvalidNamespace = errors.New("invalid namespace")
+)
+
+// ExchangeParams uniquely identifies an exchange and its routing type.
+// Self-validates on creation following the same pattern as QueueParams.
+// JSON serialization matches format:
+//
+//	{
+//	  "name": "orders",
+//	  "ns": "production",
+//	  "type": 0
+//	}
+type ExchangeParams struct {
+	name string
+	ns   string
+	typ  ExchangeType
+}
+
+// NewExchangeParams creates exchange params with the default namespace.
+//
+// Example:
+//
+//	params, err := exchange.NewExchangeParams("orders", exchange.TypeDirect)
+func NewExchangeParams(name string, typ ExchangeType) (*ExchangeParams, error) {
+	return NewExchangeParamsWithNS(name, "", typ)
+}
+
+// NewExchangeParamsWithNS creates exchange params with a custom namespace.
+// Validates name and namespace using Redis key validation rules.
+//
+// Example:
+//
+//	params, err := exchange.NewExchangeParamsWithNS("orders", "production", exchange.TypeDirect)
+func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*ExchangeParams, error) {
+	if name == "" {
+		return nil, ErrNameRequired
+	}
+	if namespace == "" {
+		namespace = config.Get().Namespace
+	}
+
+	validName, err := keys.ValidateKey(name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err.Error())
+	}
+
+	validNS, err := keys.ValidateKey(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err.Error())
+	}
+
+	return &ExchangeParams{
+		name: validName,
+		ns:   validNS,
+		typ:  typ,
+	}, nil
+}
+
+// Name returns the exchange name.
+func (p *ExchangeParams) Name() string { return p.name }
+
+// Namespace returns the exchange namespace.
+func (p *ExchangeParams) Namespace() string { return p.ns }
+
+// ExchangeType returns the exchange routing type.
+func (p *ExchangeParams) Type() ExchangeType { return p.typ }
+
+// Clone returns a deep copy of the exchange params.
+func (p *ExchangeParams) Clone() *ExchangeParams {
+	if p == nil {
+		return nil
+	}
+	return &ExchangeParams{
+		name: p.name,
+		ns:   p.ns,
+		typ:  p.typ,
+	}
+}
+
+// String returns the fully qualified exchange name.
+// Uses the format "name@namespace" for non-default namespaces.
+func (p *ExchangeParams) String() string {
+	return p.name + "@" + p.ns
+}
+
+// MarshalJSON implements custom JSON marshaling.
+// Produces: {"name":"orders","ns":"production","type":0}
+func (p *ExchangeParams) MarshalJSON() ([]byte, error) {
+	return json.Marshal(&struct {
+		Name string       `json:"name"`
+		NS   string       `json:"ns"`
+		Type ExchangeType `json:"type"`
+	}{
+		Name: p.name,
+		NS:   p.ns,
+		Type: p.typ,
+	})
+}
+
+// UnmarshalJSON implements custom JSON unmarshaling.
+// Expects: {"name":"orders","ns":"production","type":0}
+func (p *ExchangeParams) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Name string       `json:"name"`
+		NS   string       `json:"ns"`
+		Type ExchangeType `json:"type"`
+	}
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+	p.name = aux.Name
+	p.ns = aux.NS
+	p.typ = aux.Type
+	return nil
+}
+
+// MustExchangeParams creates exchange params and panics on error.
+// Useful for testing and initialization where params are known to be valid.
+func MustExchangeParams(name string, typ ExchangeType) *ExchangeParams {
+	p, err := NewExchangeParams(name, typ)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
+
+// MustExchangeParamsWithNS creates exchange params with namespace and panics on error.
+func MustExchangeParamsWithNS(name, ns string, typ ExchangeType) *ExchangeParams {
+	p, err := NewExchangeParamsWithNS(name, ns, typ)
+	if err != nil {
+		panic(err)
+	}
+	return p
+}
