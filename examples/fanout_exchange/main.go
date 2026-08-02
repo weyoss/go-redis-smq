@@ -1,0 +1,119 @@
+/*
+ * Copyright (c) 2026
+ * Weyoss <weyoss@outlook.com>
+ * https://github.com/weyoss
+ *
+ * This source code is licensed under the MIT license found in the LICENSE file
+ * in the root directory of this source tree.
+ *
+ */
+
+// Example: Fanout exchange — broadcast to all bound queues.
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"time"
+
+	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
+	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
+	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+)
+
+func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
+		log.Fatalf("init: %v", err)
+	}
+	defer redissmq.Shutdown()
+
+	// Create queues
+	emailQueue := q.MustQueueParams(fmt.Sprintf("email-alerts-%d", time.Now().UnixMilli()))
+	queue.Create(ctx, emailQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+
+	smsQueue := q.MustQueueParams(fmt.Sprintf("sms-alerts-%d", time.Now().UnixMilli()))
+	queue.Create(ctx, smsQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+
+	pushQueue := q.MustQueueParams(fmt.Sprintf("push-alerts-%d", time.Now().UnixMilli()))
+	queue.Create(ctx, pushQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+
+	// Create fanout exchange
+	fx := exchange.NewFanoutExchange(nil)
+	exchangeParams := x.MustExchangeParams("system-alerts", x.TypeFanout)
+
+	// Bind all queues — no routing key needed
+	if err := fx.BindQueue(ctx, emailQueue, exchangeParams); err != nil {
+		log.Fatalf("bind email: %v", err)
+	}
+	if err := fx.BindQueue(ctx, smsQueue, exchangeParams); err != nil {
+		log.Fatalf("bind sms: %v", err)
+	}
+	if err := fx.BindQueue(ctx, pushQueue, exchangeParams); err != nil {
+		log.Fatalf("bind push: %v", err)
+	}
+
+	// Show bound queues
+	bound, _ := fx.BoundQueues(ctx, exchangeParams)
+	log.Printf("Bound queues: %d", len(bound))
+	for _, q := range bound {
+		log.Printf("  - %s", q.String())
+	}
+
+	// Consumers
+	type result struct {
+		queue string
+		body  interface{}
+	}
+	ch := make(chan result, 3)
+
+	startConsumer := func(queue *q.QueueParams, label string) {
+		c := redissmq.NewConsumer()
+		c.Consume(queue, func(ctx context.Context, m *msg.Transferable) error {
+			ch <- result{queue: label, body: m.Body}
+			return nil
+		})
+		c.Run(ctx)
+	}
+
+	startConsumer(emailQueue, "email")
+	startConsumer(smsQueue, "sms")
+	startConsumer(pushQueue, "push")
+
+	// Producer
+	p := redissmq.NewProducer()
+	p.Run(ctx)
+
+	// Send one message — goes to ALL bound queues
+	m := msg.New().
+		SetBody(map[string]interface{}{
+			"alert":   "System maintenance in 5 minutes",
+			"urgency": "high",
+		}).
+		SetFanoutExchange(exchangeParams)
+	// No routing key needed for fanout
+
+	ids, err := p.Produce(ctx, m)
+	if err != nil {
+		log.Fatalf("produce: %v", err)
+	}
+	log.Printf("Produced 1 message → %d queue(s): %v", len(ids), ids)
+
+	// All 3 queues should receive the message
+	for i := 0; i < 3; i++ {
+		select {
+		case r := <-ch:
+			log.Printf("[%s] Received: %v", r.queue, r.body)
+		case <-time.After(10 * time.Second):
+			log.Fatal("timeout waiting for messages")
+		}
+	}
+
+	log.Println("Fanout exchange example complete")
+}
