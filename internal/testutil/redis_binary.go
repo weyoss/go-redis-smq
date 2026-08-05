@@ -79,6 +79,11 @@ func redisCachePath() string {
 }
 
 func downloadAndExtract(url, destPath string) error {
+	// Ensure the cache directory exists before creating the lock file.
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+		return fmt.Errorf("create cache dir: %w", err)
+	}
+
 	lockPath := destPath + ".lock"
 	if err := acquireLock(lockPath); err != nil {
 		return fmt.Errorf("lock: %w", err)
@@ -117,6 +122,8 @@ func downloadAndExtract(url, destPath string) error {
 		}
 
 		if filepath.Base(header.Name) == "valkey-server" {
+			// The cache directory already exists from the check above,
+			// but keep this as a safety net.
 			if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
 				return fmt.Errorf("mkdir: %w", err)
 			}
