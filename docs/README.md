@@ -1,7 +1,7 @@
 # Go Documentation
 
 Go implementation of RedisSMQ. For concepts that apply to all implementations, see
-the [shared documentation](../../../docs/README.md).
+the [RedisSMQ language‑agnostic documentation](https://github.com/weyoss/redis-smq-docs).
 
 ## Getting Started
 
@@ -25,29 +25,3 @@ the [shared documentation](../../../docs/README.md).
 - [Configuration](configuration.md) — System configuration API
 - [Graceful Shutdown](graceful-shutdown.md) — Clean shutdown patterns
 - [Error Handling](error-handling.md) — Error types and handling patterns
-
-## API Reference
-
-- [Go API Reference](../README.md) — Package overview and API summary
-
-## Shared Concepts
-
-For language-agnostic documentation on queues, exchanges, scheduling, rate limiting, and more, see:
-
-- [Architecture](../../../docs/architecture.md)
-- [Queues](../../../docs/queues.md)
-- [Queue Delivery Models](../../../docs/queue-delivery-models.md)
-- [Message Exchanges](../../../docs/message-exchanges.md)
-- [Messages](../../../docs/messages.md)
-- [Scheduling Messages](../../../docs/scheduling-messages.md)
-- [Queue Rate Limiting](../../../docs/queue-rate-limiting.md)
-- [Queue State Management](../../../docs/queue-state-management.md)
-- [Message Reliability](../../../docs/message-reliability.md)
-- [Consumer Groups](../../../docs/consumer-groups.md)
-- [Message Audit](../../../docs/message-audit.md)
-- [Configuration](../../../docs/configuration.md)
-- [Graceful Shutdown](../../../docs/graceful-shutdown.md)
-- [Event Bus](../../../docs/event-bus.md)
-- [Performance](../../../docs/performance.md)
-- [Interoperability](../../../docs/interoperability.md)
-- [Glossary](../../../docs/glossary.md)
