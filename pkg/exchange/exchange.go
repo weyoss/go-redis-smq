@@ -26,15 +26,9 @@ type Manager struct {
 	validator *internalExchange.Validator
 }
 
-// NewManager creates a new exchange manager with default codecs.
+// NewManager creates a new exchange manager with default TypeScript-compatible codecs.
 func NewManager() *Manager {
-	return NewManagerWithCodecs(nil)
-}
-
-// NewManagerWithCodecs creates a new exchange manager with custom codecs.
-// Pass nil to use default codecs.
-func NewManagerWithCodecs(codecs *internalExchange.Codecs) *Manager {
-	rdbManager := internalExchange.NewManagerWithCodecs(codecs)
+	rdbManager := internalExchange.NewManager()
 	return &Manager{
 		store:     rdbManager.Store(),
 		lookup:    rdbManager.Lookup(),
