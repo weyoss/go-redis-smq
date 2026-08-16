@@ -26,6 +26,11 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
+// Handler is the function signature for processing a message.
+// It is an alias of the internal consumer handler type so that
+// external users do not need to import internal packages.
+type Handler = internalConsumer.Handler
+
 type Consumer struct {
 	mu      sync.RWMutex
 	id      string
@@ -62,7 +67,7 @@ func (cons *Consumer) IsRunning() bool {
 	return cons.running
 }
 
-func (cons *Consumer) Consume(queue *q.QueueParams, handler internalConsumer.Handler) *Consumer {
+func (cons *Consumer) Consume(queue *q.QueueParams, handler Handler) *Consumer {
 	cons.log.Debug("adding handler", "queue", queue.String())
 	cons.runner.AddHandler(queue, "", handler)
 	if cons.IsRunning() {
@@ -72,7 +77,7 @@ func (cons *Consumer) Consume(queue *q.QueueParams, handler internalConsumer.Han
 	return cons
 }
 
-func (cons *Consumer) ConsumeWithGroup(queue *q.QueueParams, groupID string, handler internalConsumer.Handler) *Consumer {
+func (cons *Consumer) ConsumeWithGroup(queue *q.QueueParams, groupID string, handler Handler) *Consumer {
 	cons.log.Debug("adding handler with group", "queue", queue.String(), "group", groupID)
 	cons.runner.AddHandler(queue, groupID, handler)
 	if cons.IsRunning() {
