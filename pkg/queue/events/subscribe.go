@@ -15,60 +15,69 @@ import (
 	"log"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	"github.com/weyoss/go-redis-smq/internal/queue/events"
+	internalEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 )
 
-func SubscribeCreated(handler func(payload events.CreatedPayload)) (*eventbus.Subscription, error) {
+// Re-export internal payload types so external users can refer to them
+// without importing internal packages.
+
+type CreatedPayload = internalEvents.CreatedPayload
+type DeletedPayload = internalEvents.DeletedPayload
+type StateChangedPayload = internalEvents.StateChangedPayload
+type ConsumerGroupCreatedPayload = internalEvents.ConsumerGroupCreatedPayload
+type ConsumerGroupDeletedPayload = internalEvents.ConsumerGroupDeletedPayload
+
+func SubscribeCreated(handler func(payload CreatedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.CreatedPayload
+		var p CreatedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("queue events: failed to unmarshal Created payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventCreated)
+	}, internalEvents.EventCreated)
 }
 
-func SubscribeDeleted(handler func(events.DeletedPayload)) (*eventbus.Subscription, error) {
+func SubscribeDeleted(handler func(DeletedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.DeletedPayload
+		var p DeletedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("queue events: failed to unmarshal Deleted payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventDeleted)
+	}, internalEvents.EventDeleted)
 }
 
-func SubscribeStateChanged(handler func(events.StateChangedPayload)) (*eventbus.Subscription, error) {
+func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.StateChangedPayload
+		var p StateChangedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("queue events: failed to unmarshal StateChanged payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventStateChanged)
+	}, internalEvents.EventStateChanged)
 }
 
-func SubscribeConsumerGroupCreated(handler func(events.ConsumerGroupCreatedPayload)) (*eventbus.Subscription, error) {
+func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.ConsumerGroupCreatedPayload
+		var p ConsumerGroupCreatedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("queue events: failed to unmarshal ConsumerGroupCreated payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventConsumerGroupCreated)
+	}, internalEvents.EventConsumerGroupCreated)
 }
 
-func SubscribeConsumerGroupDeleted(handler func(events.ConsumerGroupDeletedPayload)) (*eventbus.Subscription, error) {
+func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.ConsumerGroupDeletedPayload
+		var p ConsumerGroupDeletedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("queue events: failed to unmarshal ConsumerGroupDeleted payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventConsumerGroupDeleted)
+	}, internalEvents.EventConsumerGroupDeleted)
 }
