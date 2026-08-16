@@ -25,12 +25,10 @@ type Manager struct {
 	purge     *internalQueue.PurgeManager
 }
 
+// NewManager creates a new queue manager with default codecs.
+// It uses the default Redis-backed internal manager.
 func NewManager() *Manager {
-	return NewManagerWithCodecs(nil)
-}
-
-func NewManagerWithCodecs(codecs *internalQueue.Codecs) *Manager {
-	rdbManager := internalQueue.NewManagerWithCodecs(codecs)
+	rdbManager := internalQueue.NewManager()
 	return &Manager{
 		store:     rdbManager.Store(),
 		lookup:    rdbManager.Lookup(),
