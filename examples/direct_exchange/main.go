@@ -42,7 +42,7 @@ func main() {
 	queue.Create(ctx, eventsQueue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	// Create direct exchange
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	exchangeParams := x.MustExchangeParams("app-events", x.TypeDirect)
 
 	// Bind queues to routing keys

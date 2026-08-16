@@ -28,12 +28,12 @@ func TestError_TypeMismatch(t *testing.T) {
 
 	// Create as topic
 	topicParams := x.MustExchangeParams("test-error-type-mismatch-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange(nil)
+	tx := exchange.NewTopicExchange()
 	tx.Create(ctx, topicParams, x.PolicyStandard)
 
 	// Try to use direct exchange methods on it
 	directParams := x.MustExchangeParams("test-error-type-mismatch-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	_, err := dx.MatchQueues(ctx, directParams, "test.key")
 	if err == nil {
@@ -47,7 +47,7 @@ func TestError_ExchangeNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	params := x.MustExchangeParams("nonexistent", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	_, err := dx.MatchQueues(ctx, params, "test.key")
 	if err == nil {
@@ -63,7 +63,7 @@ func TestError_UnbindNotBound(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-error-unbind-not-bound-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	err := dx.UnbindQueue(ctx, queueParams, exchangeParams, "never.bound")
@@ -77,7 +77,7 @@ func TestError_DuplicateExchange(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	params := x.MustExchangeParams("test-error-dup-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	err := dx.Create(ctx, params, x.PolicyStandard)
 	if err != nil {
@@ -99,7 +99,7 @@ func TestError_CrossNamespaceBinding(t *testing.T) {
 
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err == nil {
 		t.Fatal("expected error: namespace mismatch")
@@ -111,7 +111,7 @@ func TestError_DeleteNonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	params := x.MustExchangeParams("nonexistent-delete", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	err := dx.Delete(ctx, params)
 	if err == nil {
@@ -127,7 +127,7 @@ func TestError_EmptyRoutingKey(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-error-empty-rk-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "")
 	if err == nil {

@@ -25,7 +25,7 @@ func TestExchange_CreateInNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exParams := x.MustExchangeParamsWithNS("test-ns-ex", "exchange-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	err := dx.Create(ctx, exParams, x.PolicyStandard)
 	if err != nil {
 		t.Fatalf("create: %v", err)
@@ -42,8 +42,8 @@ func TestExchange_ListByNamespace(t *testing.T) {
 
 	ex1 := x.MustExchangeParamsWithNS("test-ns-list-ex1", "list-ex-ns", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("test-ns-list-ex2", "list-ex-ns", x.TypeTopic)
-	dx := exchange.NewDirectExchange(nil)
-	tx := exchange.NewTopicExchange(nil)
+	dx := exchange.NewDirectExchange()
+	tx := exchange.NewTopicExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 	tx.Create(ctx, ex2, x.PolicyStandard)
 
@@ -63,8 +63,8 @@ func TestExchange_NamespaceIsolation(t *testing.T) {
 
 	ex1 := x.MustExchangeParamsWithNS("same-name", "ex-ns-a", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("same-name", "ex-ns-b", x.TypeDirect)
-	dx1 := exchange.NewDirectExchange(nil)
-	dx2 := exchange.NewDirectExchange(nil)
+	dx1 := exchange.NewDirectExchange()
+	dx2 := exchange.NewDirectExchange()
 	dx1.Create(ctx, ex1, x.PolicyStandard)
 	dx2.Create(ctx, ex2, x.PolicyStandard)
 
@@ -87,8 +87,8 @@ func TestExchange_SameNameDifferentNamespaces(t *testing.T) {
 
 	ex1 := x.MustExchangeParamsWithNS("events", "production", x.TypeTopic)
 	ex2 := x.MustExchangeParamsWithNS("events", "staging", x.TypeTopic)
-	tx1 := exchange.NewTopicExchange(nil)
-	tx2 := exchange.NewTopicExchange(nil)
+	tx1 := exchange.NewTopicExchange()
+	tx2 := exchange.NewTopicExchange()
 	tx1.Create(ctx, ex1, x.PolicyStandard)
 	tx2.Create(ctx, ex2, x.PolicyStandard)
 
@@ -110,7 +110,7 @@ func TestExchange_BindInNamespace(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exParams := x.MustExchangeParamsWithNS("test-ns-bind-ex", "bind-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	err := dx.BindQueue(ctx, queueParams, exParams, "test.key")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestExchange_ListAfterDeletingNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	ex1 := x.MustExchangeParamsWithNS("test-ns-del-ex", "temp-ex-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 
 	nm := namespace.NewManager()

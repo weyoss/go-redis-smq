@@ -26,7 +26,7 @@ func TestEdge_RapidCreateDelete(t *testing.T) {
 
 	for i := 0; i < 10; i++ {
 		params := x.MustExchangeParams("test-edge-rapid", x.TypeDirect)
-		dx := exchange.NewDirectExchange(nil)
+		dx := exchange.NewDirectExchange()
 
 		err := dx.Create(ctx, params, x.PolicyStandard)
 		if err != nil {
@@ -48,7 +48,7 @@ func TestEdge_BindUnbindCycle(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-bind-cycle-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	for i := 0; i < 10; i++ {
 		err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -71,7 +71,7 @@ func TestEdge_LongRoutingKey(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-long-rk-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	longKey := "this.is.a.very.long.routing.key.that.tests.the.limits.of.redis.key.storage.and.should.still.work.correctly"
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, longKey)
@@ -93,7 +93,7 @@ func TestEdge_ManyBindings(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exchangeParams := x.MustExchangeParams("test-edge-many-bindings-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	queueCount := 20
 	for i := 0; i < queueCount; i++ {
@@ -124,7 +124,7 @@ func TestEdge_RoutingKeySpecialChars(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-special-rk-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	specialKeys := []string{
 		"order.created",
@@ -156,7 +156,7 @@ func TestEdge_ExchangeWithNamespace(t *testing.T) {
 
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
 	if err != nil {
 		t.Fatalf("bind: %v", err)
@@ -189,7 +189,7 @@ func TestEdge_TopicManyTokens(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-many-tokens-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange(nil)
+	tx := exchange.NewTopicExchange()
 
 	// Pattern with multiple wildcards
 	tx.BindQueue(ctx, queueParams, exchangeParams, "a.*.c.*.e.#")
@@ -206,7 +206,7 @@ func TestEdge_FanoutNoQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exchangeParams := x.MustExchangeParams("test-edge-fanout-empty", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	queues, err := fx.BoundQueues(ctx, exchangeParams)
@@ -224,11 +224,11 @@ func TestEdge_DeleteByType(t *testing.T) {
 
 	// Create as direct
 	params := x.MustExchangeParams("test-edge-delete-type", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, params, x.PolicyStandard)
 
 	// Try to delete as fanout — should fail
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fanoutParams := x.MustExchangeParams("test-edge-delete-type", x.TypeFanout)
 	err := fx.Delete(ctx, fanoutParams)
 	if err == nil {

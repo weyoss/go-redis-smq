@@ -27,7 +27,7 @@ func TestPolicy_StandardAllowsFIFO(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-standard-fifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -44,7 +44,7 @@ func TestPolicy_StandardAllowsLIFO(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeLIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-standard-lifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -61,7 +61,7 @@ func TestPolicy_StandardRejectsPriority(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypePriority, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-standard-prio-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -78,7 +78,7 @@ func TestPolicy_PriorityAllowsPriority(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypePriority, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-prio-allows-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyPriority)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -95,7 +95,7 @@ func TestPolicy_PriorityRejectsFIFO(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-prio-rejects-fifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyPriority)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -112,7 +112,7 @@ func TestPolicy_PriorityRejectsLIFO(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeLIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-prio-rejects-lifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyPriority)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -129,7 +129,7 @@ func TestPolicy_TopicExchangeEnforcement(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypePriority, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-topic-prio-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange(nil)
+	tx := exchange.NewTopicExchange()
 	tx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	err := tx.BindQueue(ctx, queueParams, exchangeParams, "test.*")
@@ -146,7 +146,7 @@ func TestPolicy_FanoutExchangeEnforcement(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypePriority, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-fanout-prio-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	err := fx.BindQueue(ctx, queueParams, exchangeParams)
@@ -165,7 +165,7 @@ func TestPolicy_AutoCreatedExchange(t *testing.T) {
 	testutil.CreateQueue(t, ctx, prioQueue, q.TypePriority, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-policy-auto-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	// First bind auto-creates exchange — no policy set yet, FIFO allowed
 	err := dx.BindQueue(ctx, fifoQueue, exchangeParams, "test.key")

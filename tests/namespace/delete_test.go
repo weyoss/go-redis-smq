@@ -52,8 +52,8 @@ func TestDelete_WithExchanges(t *testing.T) {
 
 	ex1 := x.MustExchangeParamsWithNS("test-del-ex1", "exchange-del-ns", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("test-del-ex2", "exchange-del-ns", x.TypeFanout)
-	dx := exchange.NewDirectExchange(nil)
-	fx := exchange.NewFanoutExchange(nil)
+	dx := exchange.NewDirectExchange()
+	fx := exchange.NewFanoutExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 	fx.Create(ctx, ex2, x.PolicyStandard)
 
@@ -82,7 +82,7 @@ func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exParams := x.MustExchangeParamsWithNS("test-del-mixed-ex", "mixed-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exParams, x.PolicyStandard)
 
 	nm := namespace.NewManager()

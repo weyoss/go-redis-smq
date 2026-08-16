@@ -73,7 +73,7 @@ func TestDeleteQueue_WithBoundExchange(t *testing.T) {
 
 	// Create and bind an exchange
 	exchangeParams := x.MustExchangeParams("test-exchange", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, params, exchangeParams, "test.key")
 
 	err := queue.Delete(ctx, params)

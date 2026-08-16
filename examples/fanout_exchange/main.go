@@ -45,7 +45,7 @@ func main() {
 	queue.Create(ctx, pushQueue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	// Create fanout exchange
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	exchangeParams := x.MustExchangeParams("system-alerts", x.TypeFanout)
 
 	// Bind all queues — no routing key needed

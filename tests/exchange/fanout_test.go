@@ -29,7 +29,7 @@ func TestFanout_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-create", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 
 	err := fx.Create(ctx, exchangeParams, x.PolicyStandard)
 	if err != nil {
@@ -45,7 +45,7 @@ func TestFanout_BindQueue(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-bind-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 
 	err := fx.BindQueue(ctx, queueParams, exchangeParams)
 	if err != nil {
@@ -66,7 +66,7 @@ func TestFanout_BroadcastsToAll(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q3, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-broadcast-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, q1, exchangeParams)
 	fx.BindQueue(ctx, q2, exchangeParams)
 	fx.BindQueue(ctx, q3, exchangeParams)
@@ -113,7 +113,7 @@ func TestFanout_IgnoresRoutingKey(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-ignore-rk-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, q1, exchangeParams)
 	fx.BindQueue(ctx, q2, exchangeParams)
 
@@ -153,7 +153,7 @@ func TestFanout_NoRoutingKeyNeeded(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-no-rk-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 
 	var count atomic.Int64
@@ -187,7 +187,7 @@ func TestFanout_Unbind(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-unbind-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 	fx.UnbindQueue(ctx, queueParams, exchangeParams)
@@ -208,7 +208,7 @@ func TestFanout_BoundQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-bound-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, q1, exchangeParams)
 	fx.BindQueue(ctx, q2, exchangeParams)
 
@@ -229,7 +229,7 @@ func TestFanout_DeleteWithBoundQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-delete-bound-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 
 	err := fx.Delete(ctx, exchangeParams)
@@ -246,7 +246,7 @@ func TestFanout_DeleteAfterUnbind(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-delete-unbind-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 	fx.UnbindQueue(ctx, queueParams, exchangeParams)
 

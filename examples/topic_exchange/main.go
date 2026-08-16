@@ -45,7 +45,7 @@ func main() {
 	queue.Create(ctx, allQueue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	// Create topic exchange
-	tx := exchange.NewTopicExchange(nil)
+	tx := exchange.NewTopicExchange()
 	exchangeParams := x.MustExchangeParams(fmt.Sprintf("app-events-%d", time.Now().UnixMilli()), x.TypeTopic)
 
 	// Bind queues with patterns:

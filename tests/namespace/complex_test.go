@@ -32,7 +32,7 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	ex1 := x.MustExchangeParamsWithNS("lifecycle-ex", "lifecycle-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 
 	// Verify namespace exists
@@ -103,8 +103,8 @@ func TestComplex_MultipleNamespaces(t *testing.T) {
 	// Namespace 2: exchanges only
 	ex1 := x.MustExchangeParamsWithNS("multi-ex1", "ns-with-exchanges", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("multi-ex2", "ns-with-exchanges", x.TypeFanout)
-	dx := exchange.NewDirectExchange(nil)
-	fx := exchange.NewFanoutExchange(nil)
+	dx := exchange.NewDirectExchange()
+	fx := exchange.NewFanoutExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 	fx.Create(ctx, ex2, x.PolicyStandard)
 
@@ -112,7 +112,7 @@ func TestComplex_MultipleNamespaces(t *testing.T) {
 	q3 := q.MustQueueParamsWithNS("multi-q3", "ns-with-both")
 	testutil.CreateQueue(t, ctx, q3, q.TypeFIFO, q.DeliveryPointToPoint)
 	ex3 := x.MustExchangeParamsWithNS("multi-ex3", "ns-with-both", x.TypeTopic)
-	tx := exchange.NewTopicExchange(nil)
+	tx := exchange.NewTopicExchange()
 	tx.Create(ctx, ex3, x.PolicyStandard)
 
 	nm := namespace.NewManager()
@@ -162,8 +162,8 @@ func TestComplex_CrossNamespaceIsolation(t *testing.T) {
 
 	ex1 := x.MustExchangeParamsWithNS("shared-name", "iso-ns-a", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("shared-name", "iso-ns-b", x.TypeFanout)
-	dx := exchange.NewDirectExchange(nil)
-	fx := exchange.NewFanoutExchange(nil)
+	dx := exchange.NewDirectExchange()
+	fx := exchange.NewFanoutExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 	fx.Create(ctx, ex2, x.PolicyStandard)
 

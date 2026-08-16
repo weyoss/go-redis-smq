@@ -67,8 +67,8 @@ func TestList_WithExchanges(t *testing.T) {
 	ex1 := x.MustExchangeParamsWithNS("test-list-ex1", "ns-exchange-alpha", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("test-list-ex2", "ns-exchange-beta", x.TypeFanout)
 
-	dx := exchange.NewDirectExchange(nil)
-	fx := exchange.NewFanoutExchange(nil)
+	dx := exchange.NewDirectExchange()
+	fx := exchange.NewFanoutExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 	fx.Create(ctx, ex2, x.PolicyStandard)
 
@@ -129,7 +129,7 @@ func TestList_MixedResources(t *testing.T) {
 
 	// Exchange in same namespace
 	ex1 := x.MustExchangeParamsWithNS("test-list-mixed-ex", "ns-mixed", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, ex1, x.PolicyStandard)
 
 	nm := namespace.NewManager()

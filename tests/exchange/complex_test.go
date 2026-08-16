@@ -32,14 +32,14 @@ func TestComplex_MixedExchangeTypes(t *testing.T) {
 	directQueue := q.MustQueueParams("test-complex-mixed-direct-q")
 	testutil.CreateQueue(t, ctx, directQueue, q.TypeFIFO, q.DeliveryPointToPoint)
 	directEx := x.MustExchangeParams("test-complex-mixed-direct-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, directQueue, directEx, "order.created")
 
 	// Topic exchange
 	topicQueue := q.MustQueueParams("test-complex-mixed-topic-q")
 	testutil.CreateQueue(t, ctx, topicQueue, q.TypeFIFO, q.DeliveryPointToPoint)
 	topicEx := x.MustExchangeParams("test-complex-mixed-topic-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange(nil)
+	tx := exchange.NewTopicExchange()
 	tx.BindQueue(ctx, topicQueue, topicEx, "user.*")
 
 	// Fanout exchange
@@ -48,7 +48,7 @@ func TestComplex_MixedExchangeTypes(t *testing.T) {
 	testutil.CreateQueue(t, ctx, fanoutQ1, q.TypeFIFO, q.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, fanoutQ2, q.TypeFIFO, q.DeliveryPointToPoint)
 	fanoutEx := x.MustExchangeParams("test-complex-mixed-fanout-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, fanoutQ1, fanoutEx)
 	fx.BindQueue(ctx, fanoutQ2, fanoutEx)
 
@@ -108,10 +108,10 @@ func TestComplex_OneQueueMultipleExchanges(t *testing.T) {
 	ex1 := x.MustExchangeParams("test-complex-shared-ex1", x.TypeDirect)
 	ex2 := x.MustExchangeParams("test-complex-shared-ex2", x.TypeFanout)
 
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, sharedQueue, ex1, "order.created")
 
-	fx := exchange.NewFanoutExchange(nil)
+	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, sharedQueue, ex2)
 
 	var count atomic.Int64
@@ -148,7 +148,7 @@ func TestComplex_MultipleProducersSameExchange(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-complex-multi-prod-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, queueParams, exchangeParams, "task.process")
 
 	var count atomic.Int64
@@ -189,7 +189,7 @@ func TestComplex_DynamicBindUnbind(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-complex-dynamic-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 
@@ -251,9 +251,9 @@ func TestComplex_ExchangeDiscovery(t *testing.T) {
 	ex2 := x.MustExchangeParamsWithNS("test-complex-discovery-ex2", "ns-alpha", x.TypeTopic)
 	ex3 := x.MustExchangeParamsWithNS("test-complex-discovery-ex3", "ns-beta", x.TypeFanout)
 
-	dx := exchange.NewDirectExchange(nil)
-	tx := exchange.NewTopicExchange(nil)
-	fx := exchange.NewFanoutExchange(nil)
+	dx := exchange.NewDirectExchange()
+	tx := exchange.NewTopicExchange()
+	fx := exchange.NewFanoutExchange()
 
 	dx.Create(ctx, ex1, x.PolicyStandard)
 	tx.Create(ctx, ex2, x.PolicyStandard)

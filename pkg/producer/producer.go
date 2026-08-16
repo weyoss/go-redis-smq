@@ -47,9 +47,9 @@ func New() *Producer {
 	id := uuid.New().String()
 	return &Producer{
 		id:             id,
-		directExchange: exchange.NewDirectExchange(nil),
-		fanoutExchange: exchange.NewFanoutExchange(nil),
-		topicExchange:  exchange.NewTopicExchange(nil),
+		directExchange: exchange.NewDirectExchange(),
+		fanoutExchange: exchange.NewFanoutExchange(),
+		topicExchange:  exchange.NewTopicExchange(),
 		log:            logger.New("producer", "manager", id),
 	}
 }

@@ -42,7 +42,7 @@ func TestExists_WithExchanges(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exParams := x.MustExchangeParamsWithNS("test-exists-ex", "exchange-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exParams, x.PolicyStandard)
 
 	nm := namespace.NewManager()

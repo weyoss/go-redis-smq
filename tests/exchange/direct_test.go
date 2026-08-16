@@ -29,7 +29,7 @@ func TestDirect_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	params := x.MustExchangeParams("test-direct-create", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	err := dx.Create(ctx, params, x.PolicyStandard)
 	if err != nil {
@@ -45,7 +45,7 @@ func TestDirect_BindQueue(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-bind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
 	if err != nil {
@@ -61,7 +61,7 @@ func TestDirect_BindAutoCreatesExchange(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-auto-create-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	// Bind without creating first — should auto-create
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
@@ -90,7 +90,7 @@ func TestDirect_MatchQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-match-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 	dx.BindQueue(ctx, q2, exchangeParams, "order.created")
@@ -109,7 +109,7 @@ func TestDirect_NoMatch(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exchangeParams := x.MustExchangeParams("test-direct-nomatch", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	queues, err := dx.MatchQueues(ctx, exchangeParams, "nonexistent.key")
@@ -129,7 +129,7 @@ func TestDirect_UnbindQueue(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-unbind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
 
@@ -149,7 +149,7 @@ func TestDirect_RoutingKeys(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	exchangeParams := x.MustExchangeParams("test-direct-keys-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
 	queue := q.MustQueueParams("test-direct-keys-q")
@@ -178,7 +178,7 @@ func TestDirect_ProduceConsume(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-prod-consume-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 	dx.BindQueue(ctx, q2, exchangeParams, "order.created")
 
@@ -231,7 +231,7 @@ func TestDirect_DuplicateBinding(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-dup-bind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
 
@@ -249,7 +249,7 @@ func TestDirect_DeleteWithBoundQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-delete-bound-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
 
 	err := dx.Delete(ctx, exchangeParams)
@@ -266,7 +266,7 @@ func TestDirect_DeleteAfterUnbind(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-delete-unbind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
 	dx.UnbindQueue(ctx, queue, exchangeParams, "order.created")
 
@@ -292,7 +292,7 @@ func TestDirect_MultipleRoutingKeys(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-multi-rk-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 	dx.BindQueue(ctx, q2, exchangeParams, "order.cancelled")
