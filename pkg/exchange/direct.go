@@ -25,11 +25,9 @@ type DirectExchange struct {
 }
 
 // NewDirectExchange creates a new direct exchange manager.
-// Pass nil to use the default Redis-backed manager.
-func NewDirectExchange(manager *internalExchange.Manager) *DirectExchange {
-	if manager == nil {
-		manager = internalExchange.NewManager()
-	}
+// It uses the default Redis-backed internal manager.
+func NewDirectExchange() *DirectExchange {
+	manager := internalExchange.NewManager()
 	return &DirectExchange{
 		store:       manager.Store(),
 		directStore: manager.Direct(),
