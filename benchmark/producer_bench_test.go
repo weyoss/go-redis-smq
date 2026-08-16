@@ -121,7 +121,7 @@ func BenchmarkProducer_ViaExchange(b *testing.B) {
 	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams(fmt.Sprintf("bench-ex-%d", time.Now().UnixNano()), x.TypeDirect)
-	dx := exchange.NewDirectExchange(nil)
+	dx := exchange.NewDirectExchange()
 	if err := dx.BindQueue(ctx, params, exchangeParams, "bench.key"); err != nil {
 		b.Fatalf("bind: %v", err)
 	}
