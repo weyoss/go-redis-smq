@@ -14,17 +14,22 @@ import (
 	"encoding/json"
 	"log"
 
-	"github.com/weyoss/go-redis-smq/internal/config/events"
+	internalEvents "github.com/weyoss/go-redis-smq/internal/config/events"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 )
 
-func SubscribeUpdated(handler func(payload events.UpdatedPayload)) (*eventbus.Subscription, error) {
+// Re-export internal payload types so external users can refer to them
+// without importing internal packages.
+
+type UpdatedPayload = internalEvents.UpdatedPayload
+
+func SubscribeUpdated(handler func(payload UpdatedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.UpdatedPayload
+		var p UpdatedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("config events: failed to unmarshal Updated payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventUpdated)
+	}, internalEvents.EventUpdated)
 }
