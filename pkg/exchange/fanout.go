@@ -25,7 +25,7 @@ import (
 //
 // Example:
 //
-//	fx := exchange.NewFanoutExchange(nil)
+//	fx := exchange.NewFanoutExchange()
 //	fx.Create(ctx, params, x.PolicyStandard)
 //	fx.BindQueue(ctx, queueParams, exchangeParams)
 //	queues, _ := fx.MatchQueues(ctx, exchangeParams)
@@ -35,11 +35,9 @@ type FanoutExchange struct {
 }
 
 // NewFanoutExchange creates a new fanout exchange manager.
-// Pass nil to use the default Redis-backed manager.
-func NewFanoutExchange(manager *internalExchange.Manager) *FanoutExchange {
-	if manager == nil {
-		manager = internalExchange.NewManager()
-	}
+// It uses the default Redis-backed internal manager.
+func NewFanoutExchange() *FanoutExchange {
+	manager := internalExchange.NewManager()
 	return &FanoutExchange{
 		store:       manager.Store(),
 		fanoutStore: manager.Fanout(),
