@@ -15,60 +15,66 @@ import (
 	"log"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	"github.com/weyoss/go-redis-smq/internal/producer/events"
+	internalEvents "github.com/weyoss/go-redis-smq/internal/producer/events"
 )
 
-func SubscribeUp(handler func(payload events.LifecyclePayload)) (*eventbus.Subscription, error) {
+// Re-export internal payload types so external users can refer to them
+// without importing internal packages.
+
+type LifecyclePayload = internalEvents.LifecyclePayload
+type MessagePublishedPayload = internalEvents.MessagePublishedPayload
+
+func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.LifecyclePayload
+		var p LifecyclePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("producer events: failed to unmarshal Up payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventUp)
+	}, internalEvents.EventUp)
 }
 
-func SubscribeDown(handler func(events.LifecyclePayload)) (*eventbus.Subscription, error) {
+func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.LifecyclePayload
+		var p LifecyclePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("producer events: failed to unmarshal Down payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventDown)
+	}, internalEvents.EventDown)
 }
 
-func SubscribeGoingUp(handler func(events.LifecyclePayload)) (*eventbus.Subscription, error) {
+func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.LifecyclePayload
+		var p LifecyclePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("producer events: failed to unmarshal GoingUp payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventGoingUp)
+	}, internalEvents.EventGoingUp)
 }
 
-func SubscribeGoingDown(handler func(events.LifecyclePayload)) (*eventbus.Subscription, error) {
+func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.LifecyclePayload
+		var p LifecyclePayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("producer events: failed to unmarshal GoingDown payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventGoingDown)
+	}, internalEvents.EventGoingDown)
 }
 
-func SubscribeMessagePublished(handler func(events.MessagePublishedPayload)) (*eventbus.Subscription, error) {
+func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p events.MessagePublishedPayload
+		var p MessagePublishedPayload
 		if err := json.Unmarshal(payload, &p); err != nil {
 			log.Printf("producer events: failed to unmarshal MessagePublished payload: %v", err)
 			return
 		}
 		handler(p)
-	}, events.EventMessagePublished)
+	}, internalEvents.EventMessagePublished)
 }
