@@ -27,7 +27,7 @@ import (
 //
 // Example:
 //
-//	tx := exchange.NewTopicExchange(nil)
+//	tx := exchange.NewTopicExchange()
 //	tx.Create(ctx, params, x.PolicyStandard)
 //	tx.BindQueue(ctx, queueParams, exchangeParams, "order.#")
 //	queues, _ := tx.MatchQueues(ctx, exchangeParams, "order.created")
@@ -37,11 +37,9 @@ type TopicExchange struct {
 }
 
 // NewTopicExchange creates a new topic exchange manager.
-// Pass nil to use the default Redis-backed manager.
-func NewTopicExchange(manager *internalExchange.Manager) *TopicExchange {
-	if manager == nil {
-		manager = internalExchange.NewManager()
-	}
+// It uses the default Redis-backed internal manager.
+func NewTopicExchange() *TopicExchange {
+	manager := internalExchange.NewManager()
 	return &TopicExchange{
 		store:      manager.Store(),
 		topicStore: manager.Topic(),
