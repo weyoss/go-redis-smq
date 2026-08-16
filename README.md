@@ -12,8 +12,8 @@
 
 ---
 
-> **Other implementations:** [redis-smq](https://github.com/weyoss/redis-smq) (TypeScript)  
-> **Language‑agnostic concepts:** [redis-smq-docs](https://github.com/weyoss/redis-smq-docs) – architecture, queues, exchanges, and more.
+**Other implementations:** [redis-smq](https://github.com/weyoss/redis-smq) (TypeScript)  
+**Language‑agnostic concepts:** [redis-smq-docs](https://github.com/weyoss/redis-smq-docs) – architecture, queues, exchanges, and more.
 
 ## ✨ Why RedisSMQ?
 
