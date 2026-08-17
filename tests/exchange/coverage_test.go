@@ -1,0 +1,73 @@
+/*
+ * Copyright (c) 2026
+ * Weyoss <weyoss@outlook.com>
+ * https://github.com/weyoss
+ *
+ * This source code is licensed under the MIT license found in the LICENSE file
+ * in the root directory of this source tree.
+ *
+ */
+
+package exchange_test
+
+import (
+	"testing"
+
+	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+)
+
+func TestExchange_TypeStringAndIsValid(t *testing.T) {
+	if x.TypeDirect.String() != "direct" {
+		t.Errorf("TypeDirect.String() = %q", x.TypeDirect.String())
+	}
+	if x.TypeFanout.String() != "fanout" {
+		t.Errorf("TypeFanout.String() = %q", x.TypeFanout.String())
+	}
+	if x.TypeTopic.String() != "topic" {
+		t.Errorf("TypeTopic.String() = %q", x.TypeTopic.String())
+	}
+	if x.ExchangeType(99).String() != "unknown" {
+		t.Errorf("invalid type string = %q", x.ExchangeType(99).String())
+	}
+
+	for _, typ := range []x.ExchangeType{x.TypeDirect, x.TypeFanout, x.TypeTopic} {
+		if !typ.IsValid() {
+			t.Errorf("%v should be valid", typ)
+		}
+	}
+	if x.ExchangeType(99).IsValid() {
+		t.Error("invalid type should not be valid")
+	}
+}
+
+func TestExchange_PolicyStringAndIsValid(t *testing.T) {
+	if x.PolicyStandard.String() != "standard" {
+		t.Errorf("PolicyStandard.String() = %q", x.PolicyStandard.String())
+	}
+	if x.PolicyPriority.String() != "priority" {
+		t.Errorf("PolicyPriority.String() = %q", x.PolicyPriority.String())
+	}
+	if x.ExchangePolicy(99).String() != "unknown" {
+		t.Errorf("invalid policy string = %q", x.ExchangePolicy(99).String())
+	}
+	if !x.PolicyStandard.IsValid() || !x.PolicyPriority.IsValid() {
+		t.Error("valid policies should be valid")
+	}
+	if x.ExchangePolicy(99).IsValid() {
+		t.Error("invalid policy should not be valid")
+	}
+}
+
+func TestExchange_ParamsClone(t *testing.T) {
+	params := x.MustExchangeParamsWithNS("orders", "production", x.TypeTopic)
+	clone := params.Clone()
+	if clone == nil {
+		t.Fatal("Clone returned nil")
+	}
+	if clone == params {
+		t.Error("Clone should return a new instance")
+	}
+	if clone.Name() != params.Name() || clone.Namespace() != params.Namespace() || clone.Type() != params.Type() {
+		t.Errorf("Clone fields mismatch")
+	}
+}
