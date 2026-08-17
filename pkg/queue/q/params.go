@@ -19,7 +19,10 @@ import (
 )
 
 // QueueParams uniquely identifies a queue within a namespace.
-// Self-validates on creation using Redis key validation rules.
+//
+// The type self-validates on creation using Redis key validation rules.
+//
+// Example:
 //
 //	{
 //	  "name": "orders",
@@ -40,7 +43,9 @@ func NewQueueParams(name string) (*QueueParams, error) {
 }
 
 // NewQueueParamsWithNS creates queue params with a custom namespace.
-// Validates name and namespace using Redis key validation rules.
+// It validates the name and namespace using Redis key validation rules.
+//
+// An empty namespace falls back to the configured default namespace.
 //
 // Example:
 //
@@ -70,12 +75,25 @@ func NewQueueParamsWithNS(name, namespace string) (*QueueParams, error) {
 }
 
 // Name returns the queue name.
-func (p *QueueParams) Name() string { return p.name }
+// It returns an empty string if the receiver is nil.
+func (p *QueueParams) Name() string {
+	if p == nil {
+		return ""
+	}
+	return p.name
+}
 
 // NS returns the queue namespace.
-func (p *QueueParams) NS() string { return p.ns }
+// It returns an empty string if the receiver is nil.
+func (p *QueueParams) NS() string {
+	if p == nil {
+		return ""
+	}
+	return p.ns
+}
 
 // Clone returns a deep copy of the queue params.
+// It returns nil if the receiver is nil.
 func (p *QueueParams) Clone() *QueueParams {
 	if p == nil {
 		return nil
@@ -86,14 +104,18 @@ func (p *QueueParams) Clone() *QueueParams {
 	}
 }
 
-// String returns the fully qualified queue name.
-// Uses the format "name@namespace" for non-default namespaces.
+// String returns the fully qualified queue name in the form
+// "name@namespace".
+// It returns an empty string if the receiver is nil.
 func (p *QueueParams) String() string {
+	if p == nil {
+		return ""
+	}
 	return p.name + "@" + p.ns
 }
 
-// MarshalJSON implements custom JSON marshaling
-// Produces: {"name":"orders","ns":"production"}
+// MarshalJSON implements custom JSON marshaling for TypeScript compatibility.
+// It produces: {"name":"orders","ns":"production"}.
 func (p QueueParams) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Name string `json:"name"`
@@ -104,8 +126,8 @@ func (p QueueParams) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling
-// Expects: {"name":"orders","ns":"production"}
+// UnmarshalJSON implements custom JSON unmarshaling for TypeScript compatibility.
+// It expects: {"name":"orders","ns":"production"}.
 func (p *QueueParams) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Name string `json:"name"`
@@ -114,6 +136,7 @@ func (p *QueueParams) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+
 	p.name = aux.Name
 	p.ns = aux.NS
 	return nil
@@ -121,6 +144,10 @@ func (p *QueueParams) UnmarshalJSON(data []byte) error {
 
 // MustQueueParams creates queue params and panics on error.
 // Useful for testing and initialization where params are known to be valid.
+//
+// Example:
+//
+//	params := queue.MustQueueParams("orders")
 func MustQueueParams(name string) *QueueParams {
 	p, err := NewQueueParams(name)
 	if err != nil {
@@ -130,6 +157,10 @@ func MustQueueParams(name string) *QueueParams {
 }
 
 // MustQueueParamsWithNS creates queue params with namespace and panics on error.
+//
+// Example:
+//
+//	params := queue.MustQueueParamsWithNS("orders", "production")
 func MustQueueParamsWithNS(name, ns string) *QueueParams {
 	p, err := NewQueueParamsWithNS(name, ns)
 	if err != nil {

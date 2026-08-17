@@ -18,13 +18,18 @@ import (
 )
 
 // ConsumerGroupManager manages consumer groups for PUB/SUB queues.
-// Consumer groups allow multiple consumers to process messages from the same queue,
-// with each message delivered to all groups.
+//
+// Consumer groups enable the Pub/Sub delivery model where each message is
+// delivered to all groups, but only to a single consumer within each group.
+// The manager provides methods to create, list, and delete these groups.
 type ConsumerGroupManager struct {
 	store *internalQueue.ConsumerGroupStore
 }
 
 // NewConsumerGroupManager creates a new consumer group manager.
+//
+// It returns a manager that delegates all operations to the internal
+// Redis-backed store.
 func NewConsumerGroupManager() *ConsumerGroupManager {
 	return &ConsumerGroupManager{
 		store: internalQueue.NewConsumerGroupStore(),
@@ -32,48 +37,59 @@ func NewConsumerGroupManager() *ConsumerGroupManager {
 }
 
 // Save creates a consumer group for a queue.
-// Returns 1 if the group was created, 0 if it already exists.
+//
+// It returns 1 if the group was newly created, or 0 if it already existed.
+// The queue must use the Pub/Sub delivery model for groups to be supported.
 //
 // Example:
 //
-//	result, err := consumerGroups.Save(ctx, queueParams, "email-group")
+//	result, err := manager.Save(ctx, queueParams, "email-group")
 func (cgm *ConsumerGroupManager) Save(ctx context.Context, queueParams *q.QueueParams, groupID string) (int64, error) {
 	return cgm.store.Save(ctx, queueParams, groupID)
 }
 
 // Delete removes a consumer group from a queue.
-// The group must be empty and have no active consumers.
+//
+// The group must be empty (no pending messages) and have no active
+// consumers. The queue must use the Pub/Sub delivery model.
 //
 // Example:
 //
-//	err := consumerGroups.Delete(ctx, queueParams, "email-group")
+//	err := manager.Delete(ctx, queueParams, "email-group")
 func (cgm *ConsumerGroupManager) Delete(ctx context.Context, queueParams *q.QueueParams, groupID string) error {
 	return cgm.store.Delete(ctx, queueParams, groupID)
 }
 
-// List returns all consumer groups for a queue.
+// List returns all consumer group IDs for a queue.
 //
 // Example:
 //
-//	groups, err := consumerGroups.List(ctx, queueParams)
+//	groups, err := manager.List(ctx, queueParams)
 func (cgm *ConsumerGroupManager) List(ctx context.Context, queueParams *q.QueueParams) ([]string, error) {
 	return cgm.store.List(ctx, queueParams)
 }
 
-// Default consumer group manager instance.
+// defaultConsumerGroupManager is the shared instance used by the
+// package-level convenience functions.
 var defaultConsumerGroupManager = NewConsumerGroupManager()
 
 // SaveConsumerGroup creates a consumer group using the default manager.
+//
+// See ConsumerGroupManager.Save for details.
 func SaveConsumerGroup(ctx context.Context, queueParams *q.QueueParams, groupID string) (int64, error) {
 	return defaultConsumerGroupManager.Save(ctx, queueParams, groupID)
 }
 
 // DeleteConsumerGroup deletes a consumer group using the default manager.
+//
+// See ConsumerGroupManager.Delete for details.
 func DeleteConsumerGroup(ctx context.Context, queueParams *q.QueueParams, groupID string) error {
 	return defaultConsumerGroupManager.Delete(ctx, queueParams, groupID)
 }
 
 // ListConsumerGroups returns consumer groups using the default manager.
+//
+// See ConsumerGroupManager.List for details.
 func ListConsumerGroups(ctx context.Context, queueParams *q.QueueParams) ([]string, error) {
 	return defaultConsumerGroupManager.List(ctx, queueParams)
 }

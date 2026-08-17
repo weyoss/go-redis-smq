@@ -11,6 +11,8 @@
 package q
 
 // LockOwner identifies the entity holding a queue lock.
+//
+// EQueueStateLockOwner enum for cross-language compatibility.
 type LockOwner int
 
 const (
@@ -19,6 +21,7 @@ const (
 )
 
 // String returns a human-readable representation.
+// Unknown values return "UNKNOWN".
 func (o LockOwner) String() string {
 	switch o {
 	case LockOwnerPurgeJob:

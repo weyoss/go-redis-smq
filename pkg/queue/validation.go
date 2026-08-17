@@ -38,18 +38,22 @@ func (m *Manager) CanDequeue(ctx context.Context, params *q.QueueParams) error {
 
 // Package-level convenience functions.
 
+// MustExist validates that a queue exists using the default manager.
 func MustExist(ctx context.Context, params *q.QueueParams) error {
 	return defaultManager.MustExist(ctx, params)
 }
 
+// MustBeOperational validates that a queue exists and is operational using the default manager.
 func MustBeOperational(ctx context.Context, params *q.QueueParams) error {
 	return defaultManager.MustBeOperational(ctx, params)
 }
 
+// CanEnqueue checks if a queue can accept messages using the default manager.
 func CanEnqueue(ctx context.Context, params *q.QueueParams) error {
 	return defaultManager.CanEnqueue(ctx, params)
 }
 
+// CanDequeue checks if a queue can deliver messages using the default manager.
 func CanDequeue(ctx context.Context, params *q.QueueParams) error {
 	return defaultManager.CanDequeue(ctx, params)
 }

@@ -11,6 +11,7 @@
 package q
 
 // QueueType represents the ordering semantics of a queue.
+// Values match TypeScript EQueueType enum for cross-language compatibility.
 // Integer values are persisted in Redis and must not be changed.
 type QueueType int
 
@@ -29,6 +30,7 @@ const (
 func (t QueueType) Int() int { return int(t) }
 
 // String returns a human-readable representation.
+// Unknown values return "unknown".
 func (t QueueType) String() string {
 	switch t {
 	case TypeFIFO:
@@ -43,4 +45,7 @@ func (t QueueType) String() string {
 }
 
 // IsValid reports whether the queue type value is within the valid range.
-func (t QueueType) IsValid() bool { return t >= TypeLIFO && t <= TypePriority }
+// Valid types are TypeLIFO through TypePriority.
+func (t QueueType) IsValid() bool {
+	return t >= TypeLIFO && t <= TypePriority
+}

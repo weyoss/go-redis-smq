@@ -32,6 +32,7 @@ const (
 func (s QueueState) Int() int { return int(s) }
 
 // String returns a human-readable representation.
+// Unknown values return "unknown".
 func (s QueueState) String() string {
 	switch s {
 	case StateActive:
@@ -54,7 +55,10 @@ func (s QueueState) IsOperational() bool {
 }
 
 // IsValid reports whether the state value is within the valid range.
-func (s QueueState) IsValid() bool { return s >= StateActive && s <= StateLocked }
+// Valid states are StateActive through StateLocked.
+func (s QueueState) IsValid() bool {
+	return s >= StateActive && s <= StateLocked
+}
 
 // allowedTransitions defines the valid state transition graph.
 // Use CanTransitionTo() to query — do not access this map directly.
@@ -66,6 +70,7 @@ var allowedTransitions = map[QueueState][]QueueState{
 }
 
 // CanTransitionTo reports whether transitioning from s to target is allowed.
+// It returns false for invalid or unknown states.
 func (s QueueState) CanTransitionTo(target QueueState) bool {
 	for _, allowed := range allowedTransitions[s] {
 		if allowed == target {

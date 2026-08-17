@@ -26,8 +26,6 @@ func (m *Manager) ListByNamespace(ctx context.Context, namespace string) ([]q.Qu
 	return m.lookup.ByNamespace(ctx, namespace)
 }
 
-// Package-level convenience functions using the default manager.
-
 // ListAll returns all queues using the default manager.
 func ListAll(ctx context.Context) ([]q.QueueParams, error) {
 	return defaultManager.ListAll(ctx)

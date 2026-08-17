@@ -8,11 +8,6 @@
  *
  */
 
-// Package queue provides message queue operations including CRUD, rate limiting,
-// and state management.
-//
-// This file contains the RateLimitParams type for rate limiting configuration.
-// Rate limit operations (Set, Clear, Get) are in queue.go.
 package q
 
 import (
@@ -23,12 +18,14 @@ import (
 
 // RateLimitParams represents rate limiting configuration for a queue.
 //
+// JSON format matches TypeScript IRateLimitParams for cross-language compatibility:
+//
 //	{
 //	  "limit": 100,
 //	  "interval": 60000
 //	}
 //
-// Note: "interval" is serialized as milliseconds.
+// Note: "interval" is serialized as milliseconds to match TypeScript.
 type RateLimitParams struct {
 	limit    int
 	interval time.Duration
@@ -51,7 +48,11 @@ func NewRateLimitParams(limit int, interval time.Duration) (*RateLimitParams, er
 }
 
 // Validate checks if rate limit parameters are valid.
+// The limit must be greater than zero and the interval must be at least one second.
 func (p *RateLimitParams) Validate() error {
+	if p == nil {
+		return ErrInvalidRateLimit
+	}
 	if p.limit <= 0 {
 		return ErrInvalidRateLimit
 	}
@@ -62,14 +63,30 @@ func (p *RateLimitParams) Validate() error {
 }
 
 // Limit returns the maximum number of messages allowed.
-func (p *RateLimitParams) Limit() int { return p.limit }
+// It returns 0 if the receiver is nil.
+func (p *RateLimitParams) Limit() int {
+	if p == nil {
+		return 0
+	}
+	return p.limit
+}
 
 // Interval returns the time window duration.
-func (p *RateLimitParams) Interval() time.Duration { return p.interval }
+// It returns 0 if the receiver is nil.
+func (p *RateLimitParams) Interval() time.Duration {
+	if p == nil {
+		return 0
+	}
+	return p.interval
+}
 
-// MarshalJSON implements custom JSON marshaling.
-// Serializes interval as milliseconds.
+// MarshalJSON implements custom JSON marshaling for TypeScript compatibility.
+// The interval is serialized as milliseconds.
 func (p *RateLimitParams) MarshalJSON() ([]byte, error) {
+	if p == nil {
+		return json.Marshal(nil)
+	}
+
 	return json.Marshal(&struct {
 		Limit    int   `json:"limit"`
 		Interval int64 `json:"interval"`
@@ -79,8 +96,8 @@ func (p *RateLimitParams) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling.
-// Expects interval in milliseconds.
+// UnmarshalJSON implements custom JSON unmarshaling from TypeScript format.
+// It expects interval in milliseconds.
 func (p *RateLimitParams) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Limit    int   `json:"limit"`
@@ -89,13 +106,18 @@ func (p *RateLimitParams) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
+
 	p.limit = aux.Limit
 	p.interval = time.Duration(aux.Interval) * time.Millisecond
 	return p.Validate()
 }
 
 // String returns a human-readable representation.
+// It returns an empty string if the receiver is nil.
 func (p *RateLimitParams) String() string {
+	if p == nil {
+		return ""
+	}
 	return fmt.Sprintf("%d messages per %s", p.limit, p.interval)
 }
 

@@ -20,8 +20,8 @@ import (
 //
 // Example:
 //
-//	params := queue.MustQueueParamsWithNS("orders", "production")
-//	err := queue.Create(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+//	params := q.MustQueueParamsWithNS("orders", "production")
+//	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
 func (m *Manager) Create(ctx context.Context, params *q.QueueParams, queueType q.QueueType, deliveryModel q.DeliveryModel) error {
 	return m.store.Save(ctx, params, queueType, deliveryModel)
 }
@@ -30,8 +30,8 @@ func (m *Manager) Create(ctx context.Context, params *q.QueueParams, queueType q
 //
 // Example:
 //
-//	rl := queue.MustRateLimitParams(100, time.Minute)
-//	err := queue.CreateWithRateLimit(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint, rl)
+//	rl := q.MustRateLimitParams(100, time.Minute)
+//	err := queue.NewManager().CreateWithRateLimit(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint, rl)
 func (m *Manager) CreateWithRateLimit(
 	ctx context.Context,
 	params *q.QueueParams,
@@ -58,12 +58,12 @@ func (m *Manager) Exists(ctx context.Context, params *q.QueueParams) (bool, erro
 }
 
 // Delete removes a queue and all associated data.
-// This includes messages, consumer groups, exchange bindings, and state history.
+//
+// This includes messages, consumer groups, exchange bindings, and state
+// history. The queue must be empty and have no active consumers.
 func (m *Manager) Delete(ctx context.Context, params *q.QueueParams) error {
 	return m.store.Delete(ctx, params)
 }
-
-// Package-level convenience functions using the default manager.
 
 // Create creates a queue using the default manager.
 func Create(ctx context.Context, params *q.QueueParams, queueType q.QueueType, deliveryModel q.DeliveryModel) error {

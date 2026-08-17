@@ -17,11 +17,16 @@ import (
 )
 
 // SetRateLimit sets a rate limit on a queue.
+//
+// The rate limit controls how many messages can be dequeued within a
+// given time interval. The queue must not be in the Locked state.
 func (m *Manager) SetRateLimit(ctx context.Context, params *q.QueueParams, rl *q.RateLimitParams) error {
 	return m.store.SetRateLimit(ctx, params, rl)
 }
 
 // ClearRateLimit removes the rate limit from a queue.
+//
+// After clearing, the queue delivers messages without throttling.
 func (m *Manager) ClearRateLimit(ctx context.Context, params *q.QueueParams) error {
 	return m.store.ClearRateLimit(ctx, params)
 }
@@ -30,8 +35,6 @@ func (m *Manager) ClearRateLimit(ctx context.Context, params *q.QueueParams) err
 func (m *Manager) RateLimit(ctx context.Context, params *q.QueueParams) (*q.RateLimitParams, error) {
 	return m.store.GetRateLimit(ctx, params)
 }
-
-// Package-level convenience functions using the default manager.
 
 // SetRateLimit sets a rate limit using the default manager.
 func SetRateLimit(ctx context.Context, params *q.QueueParams, rl *q.RateLimitParams) error {

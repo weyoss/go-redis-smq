@@ -28,6 +28,7 @@ const (
 func (dm DeliveryModel) Int() int { return int(dm) }
 
 // String returns a human-readable representation.
+// Unknown values return "unknown".
 func (dm DeliveryModel) String() string {
 	switch dm {
 	case DeliveryPointToPoint:
