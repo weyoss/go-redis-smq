@@ -43,4 +43,4 @@ func (t QueueType) String() string {
 }
 
 // IsValid reports whether the queue type value is within the valid range.
-func (t QueueType) IsValid() bool { return t >= TypeFIFO && t <= TypePriority }
+func (t QueueType) IsValid() bool { return t >= TypeLIFO && t <= TypePriority }
