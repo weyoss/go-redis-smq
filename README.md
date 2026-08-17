@@ -27,6 +27,8 @@
 - **Go** ≥ 1.25
 - **Redis** ≥ 4
 
+> 📊 See [BUILD.md](BUILD.md) for CI status, code coverage, and build instructions.
+
 ## 📦 Installation
 
 ```bash
