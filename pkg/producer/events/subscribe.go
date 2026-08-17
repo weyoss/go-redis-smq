@@ -8,6 +8,10 @@
  *
  */
 
+// Package events provides public subscription functions for RedisSMQ producer events.
+//
+// These functions allow external users to subscribe to producer lifecycle
+// events and message publication events without importing internal packages.
 package events
 
 import (
@@ -18,12 +22,20 @@ import (
 	internalEvents "github.com/weyoss/go-redis-smq/internal/producer/events"
 )
 
-// Re-export internal payload types so external users can refer to them
-// without importing internal packages.
+// Re-exported payload types. These aliases allow external users to refer to
+// event payload types without importing internal packages.
 
+// LifecyclePayload is the payload for producer lifecycle events such as
+// producer.up, producer.down, producer.goingUp, and producer.goingDown.
 type LifecyclePayload = internalEvents.LifecyclePayload
+
+// MessagePublishedPayload is the payload for the producer.messagePublished
+// event.
 type MessagePublishedPayload = internalEvents.MessagePublishedPayload
 
+// SubscribeUp registers a handler for the producer.up event.
+//
+// The handler receives a LifecyclePayload containing the producer ID.
 func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
 		var p LifecyclePayload
@@ -35,6 +47,9 @@ func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription
 	}, internalEvents.EventUp)
 }
 
+// SubscribeDown registers a handler for the producer.down event.
+//
+// The handler receives a LifecyclePayload containing the producer ID.
 func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
 		var p LifecyclePayload
@@ -46,6 +61,9 @@ func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, erro
 	}, internalEvents.EventDown)
 }
 
+// SubscribeGoingUp registers a handler for the producer.goingUp event.
+//
+// The handler receives a LifecyclePayload containing the producer ID.
 func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
 		var p LifecyclePayload
@@ -57,6 +75,9 @@ func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, e
 	}, internalEvents.EventGoingUp)
 }
 
+// SubscribeGoingDown registers a handler for the producer.goingDown event.
+//
+// The handler receives a LifecyclePayload containing the producer ID.
 func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
 		var p LifecyclePayload
@@ -68,6 +89,11 @@ func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription,
 	}, internalEvents.EventGoingDown)
 }
 
+// SubscribeMessagePublished registers a handler for the
+// producer.messagePublished event.
+//
+// The handler receives a MessagePublishedPayload containing the message ID,
+// destination queue, producer ID, and optional consumer group ID.
 func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
 		var p MessagePublishedPayload

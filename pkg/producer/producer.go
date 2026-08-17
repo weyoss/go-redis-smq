@@ -8,6 +8,13 @@
  *
  */
 
+// Package producer provides the public API for creating and managing
+// RedisSMQ producers.
+//
+// A producer is responsible for publishing messages to queues or exchanges.
+// It maintains its own lifecycle, supports automatic shutdown on context
+// cancellation, and exposes methods to produce messages directly or through
+// exchanges.
 package producer
 
 import (
@@ -32,6 +39,11 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
+// Producer is a message publisher.
+//
+// It can send messages directly to queues or through exchanges (direct,
+// topic, or fanout). A producer must be started with Run before it can
+// publish messages. After use, it should be stopped with Shutdown.
 type Producer struct {
 	mu             sync.RWMutex
 	running        bool
@@ -43,6 +55,9 @@ type Producer struct {
 	log            *slog.Logger
 }
 
+// New creates a new producer instance with a unique identifier.
+//
+// The producer is not running until Run is called.
 func New() *Producer {
 	id := uuid.New().String()
 	return &Producer{
@@ -54,6 +69,13 @@ func New() *Producer {
 	}
 }
 
+// Run starts the producer and prepares it for publishing.
+//
+// It loads the Pub/Sub consumer group cache and marks the producer as
+// running. If the provided context is cancelled, the producer will
+// automatically shut itself down.
+//
+// Run is idempotent; calling it on an already running producer is a no‑op.
 func (prod *Producer) Run(ctx context.Context) error {
 	prod.mu.Lock()
 	defer prod.mu.Unlock()
@@ -93,6 +115,10 @@ func (prod *Producer) Run(ctx context.Context) error {
 	return nil
 }
 
+// Shutdown gracefully stops the producer.
+//
+// It clears any cached Pub/Sub targets and marks the producer as not
+// running. Shutdown is idempotent and safe to call multiple times.
 func (prod *Producer) Shutdown(ctx context.Context) {
 	prod.mu.Lock()
 	defer prod.mu.Unlock()
@@ -121,14 +147,23 @@ func (prod *Producer) Shutdown(ctx context.Context) {
 	})
 }
 
+// IsRunning reports whether the producer is currently running.
 func (prod *Producer) IsRunning() bool {
 	prod.mu.RLock()
 	defer prod.mu.RUnlock()
 	return prod.running
 }
 
+// ID returns the unique identifier of the producer.
 func (prod *Producer) ID() string { return prod.id }
 
+// Produce publishes a message to its configured destination.
+//
+// The message must have either a queue or an exchange set. For direct and
+// topic exchanges, a routing key is also required.
+//
+// It returns the list of message IDs that were published. For Pub/Sub
+// queues, multiple IDs may be returned – one per consumer group.
 func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]string, error) {
 	prod.mu.RLock()
 	running := prod.running
@@ -159,6 +194,8 @@ func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]
 	return prod.produceToExchange(ctx, m, exchangeParams, resolver)
 }
 
+// produceToQueue publishes a message directly to a queue, handling
+// Pub/Sub consumer groups if applicable.
 func (prod *Producer) produceToQueue(ctx context.Context, m *msg.ProducibleMessage, queueParams *q.QueueParams, resolver *internalProducer.PubSubTargetResolver) ([]string, error) {
 	var targets []string
 	if resolver != nil {
@@ -210,6 +247,8 @@ func (prod *Producer) produceToQueue(ctx context.Context, m *msg.ProducibleMessa
 	return []string{id}, nil
 }
 
+// produceToExchange publishes a message through an exchange, routing it
+// to all matching queues.
 func (prod *Producer) produceToExchange(ctx context.Context, m *msg.ProducibleMessage, exchangeParams *x.ExchangeParams, resolver *internalProducer.PubSubTargetResolver) ([]string, error) {
 	queues, err := prod.matchExchangeQueues(ctx, exchangeParams, m.ExchangeRoutingKey())
 	if err != nil {
@@ -250,6 +289,8 @@ func (prod *Producer) produceToExchange(ctx context.Context, m *msg.ProducibleMe
 	return ids, nil
 }
 
+// matchExchangeQueues resolves the destination queues for an exchange
+// based on its type and the routing key.
 func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x.ExchangeParams, routingKey string) ([]q.QueueParams, error) {
 	switch exchangeParams.Type() {
 	case x.TypeDirect:
@@ -272,6 +313,8 @@ func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x
 	}
 }
 
+// dispatch publishes a single envelope to a queue using the Lua publish
+// script, and returns the message ID.
 func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.Envelope, queueParams *q.QueueParams) (string, error) {
 	envelope.SetDestinationQueue(queueParams)
 	messageID := envelope.ID()
