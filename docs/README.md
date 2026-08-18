@@ -19,6 +19,7 @@ the [RedisSMQ language‑agnostic documentation](https://github.com/weyoss/redis
 - [Scheduling Messages](scheduling-messages.md) — Delays, CRON, and repeating delivery
 - [Consumer Groups](consumer-groups.md) — Pub/Sub consumer groups
 - [Namespaces](namespaces.md) — Namespace management
+- [Event Bus](event-bus.md) — Real‑time system events
 
 ## Operations
 
