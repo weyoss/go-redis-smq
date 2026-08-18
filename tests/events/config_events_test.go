@@ -15,10 +15,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weyoss/go-redis-smq/internal/config/events"
+	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	configEvents "github.com/weyoss/go-redis-smq/pkg/config/events"
 )
 
 // Scenario: Subscribe to config updated event
@@ -28,8 +27,8 @@ func TestConfigEvents_SubscribeUpdated(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.UpdatedPayload
-	sub, err := configEvents.SubscribeUpdated(func(p events.UpdatedPayload) {
+	var received internalConfigEvents.UpdatedPayload
+	sub, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -75,8 +74,8 @@ func TestConfigEvents_UpdatedIncludesFullConfig(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.UpdatedPayload
-	sub, _ := configEvents.SubscribeUpdated(func(p events.UpdatedPayload) {
+	var received internalConfigEvents.UpdatedPayload
+	sub, _ := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -86,7 +85,9 @@ func TestConfigEvents_UpdatedIncludesFullConfig(t *testing.T) {
 	cfg.Namespace = "event-test-ns"
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 5000
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -118,7 +119,7 @@ func TestConfigEvents_VersionMonotonic(t *testing.T) {
 	var mu sync.Mutex
 	var versions []int
 
-	sub, _ := configEvents.SubscribeUpdated(func(p events.UpdatedPayload) {
+	sub, _ := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()
 		versions = append(versions, p.Version)
 		mu.Unlock()
@@ -128,7 +129,9 @@ func TestConfigEvents_VersionMonotonic(t *testing.T) {
 	cfg := config.Get()
 	for i := 0; i < 3; i++ {
 		cfg.Logger.Enabled = !cfg.Logger.Enabled
-		config.Save(ctx, cfg)
+		if _, err := config.Save(ctx, cfg); err != nil {
+			t.Fatalf("save %d: %v", i, err)
+		}
 		time.Sleep(100 * time.Millisecond)
 	}
 
@@ -156,25 +159,27 @@ func TestConfigEvents_MultipleSubscribers(t *testing.T) {
 	wg.Add(3)
 
 	var mu sync.Mutex
-	var received []events.UpdatedPayload
+	var received []internalConfigEvents.UpdatedPayload
 
-	handler := func(p events.UpdatedPayload) {
+	handler := func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()
 		received = append(received, p)
 		mu.Unlock()
 		wg.Done()
 	}
 
-	sub1, _ := configEvents.SubscribeUpdated(handler)
-	sub2, _ := configEvents.SubscribeUpdated(handler)
-	sub3, _ := configEvents.SubscribeUpdated(handler)
+	sub1, _ := internalConfigEvents.SubscribeUpdated(handler)
+	sub2, _ := internalConfigEvents.SubscribeUpdated(handler)
+	sub3, _ := internalConfigEvents.SubscribeUpdated(handler)
 	defer sub1.Unsubscribe()
 	defer sub2.Unsubscribe()
 	defer sub3.Unsubscribe()
 
 	cfg := config.Get()
 	cfg.Logger.Enabled = true
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 
 	done := make(chan struct{})
 	go func() {
@@ -204,7 +209,7 @@ func TestConfigEvents_Unsubscribe(t *testing.T) {
 	var mu sync.Mutex
 	var eventCount int
 
-	sub, _ := configEvents.SubscribeUpdated(func(p events.UpdatedPayload) {
+	sub, _ := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()
 		eventCount++
 		mu.Unlock()
@@ -214,7 +219,9 @@ func TestConfigEvents_Unsubscribe(t *testing.T) {
 
 	// First save — should trigger event
 	cfg.Logger.Enabled = true
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 	time.Sleep(200 * time.Millisecond)
 
 	mu.Lock()
@@ -230,7 +237,9 @@ func TestConfigEvents_Unsubscribe(t *testing.T) {
 
 	// Second save — should NOT trigger event
 	cfg.Logger.Enabled = false
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 	time.Sleep(200 * time.Millisecond)
 
 	mu.Lock()
@@ -249,7 +258,7 @@ func TestConfigEvents_AllConfigChanges(t *testing.T) {
 	var mu sync.Mutex
 	var eventCount int
 
-	sub, _ := configEvents.SubscribeUpdated(func(p events.UpdatedPayload) {
+	sub, _ := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()
 		eventCount++
 		mu.Unlock()
@@ -260,25 +269,33 @@ func TestConfigEvents_AllConfigChanges(t *testing.T) {
 
 	// Change namespace
 	cfg.Namespace = "events-test-ns"
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	// Change logger
 	cfg.Logger.Enabled = true
 	cfg.Logger.Options.LogLevel = 0
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	// Change audit settings
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	// Change unacknowledgment history
 	cfg.MessageAudit.UnacknowledgementHistory.Enabled = true
 	cfg.MessageAudit.UnacknowledgementHistory.MaxSize = 50
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save: %v", err)
+	}
 	time.Sleep(100 * time.Millisecond)
 
 	time.Sleep(300 * time.Millisecond)

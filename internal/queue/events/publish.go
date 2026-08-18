@@ -13,25 +13,32 @@ package events
 import (
 	"context"
 
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
+	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
-func PublishCreated(ctx context.Context, payload CreatedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventCreated, payload)
+// PublishCreated publishes a queue.queueCreated event to the appropriate
+// bus(es) according to the routing policy.
+func PublishCreated(ctx context.Context, queue q.QueueParams, props q.QueueProps) {
+	eventmultiplexer.Publish(ctx, EventCreated, queue, props)
 }
 
-func PublishDeleted(ctx context.Context, payload DeletedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventDeleted, payload)
+// PublishDeleted publishes a queue.queueDeleted event.
+func PublishDeleted(ctx context.Context, queue q.QueueParams) {
+	eventmultiplexer.Publish(ctx, EventDeleted, queue)
 }
 
-func PublishStateChanged(ctx context.Context, payload StateChangedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventStateChanged, payload)
+// PublishStateChanged publishes a queue.stateChanged event.
+func PublishStateChanged(ctx context.Context, queue q.QueueParams, transition q.StateTransition) {
+	eventmultiplexer.Publish(ctx, EventStateChanged, queue, transition)
 }
 
-func PublishConsumerGroupCreated(ctx context.Context, payload ConsumerGroupCreatedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventConsumerGroupCreated, payload)
+// PublishConsumerGroupCreated publishes a queue.consumerGroupCreated event.
+func PublishConsumerGroupCreated(ctx context.Context, queue q.QueueParams, groupID string) {
+	eventmultiplexer.Publish(ctx, EventConsumerGroupCreated, queue, groupID)
 }
 
-func PublishConsumerGroupDeleted(ctx context.Context, payload ConsumerGroupDeletedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventConsumerGroupDeleted, payload)
+// PublishConsumerGroupDeleted publishes a queue.consumerGroupDeleted event.
+func PublishConsumerGroupDeleted(ctx context.Context, queue q.QueueParams, groupID string) {
+	eventmultiplexer.Publish(ctx, EventConsumerGroupDeleted, queue, groupID)
 }

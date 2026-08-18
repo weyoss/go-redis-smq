@@ -24,7 +24,6 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/pkg/config/cfg"
-	"github.com/weyoss/go-redis-smq/pkg/config/events"
 )
 
 var (
@@ -94,10 +93,7 @@ func Save(ctx context.Context, c *cfg.Config) (int, error) {
 	c.Version = version
 	instance.Store(c)
 
-	internalConfigEvents.PublishUpdated(ctx, internalConfigEvents.UpdatedPayload{
-		Config:  c,
-		Version: version,
-	})
+	internalConfigEvents.PublishUpdated(ctx, c, version)
 
 	return version, nil
 }
@@ -121,10 +117,7 @@ func Reset(ctx context.Context) error {
 	defaults.Version = version
 	instance.Store(defaults)
 
-	internalConfigEvents.PublishUpdated(ctx, internalConfigEvents.UpdatedPayload{
-		Config:  defaults,
-		Version: version,
-	})
+	internalConfigEvents.PublishUpdated(ctx, defaults, version)
 
 	return nil
 }
@@ -160,6 +153,7 @@ func Reload(ctx context.Context) error {
 	return nil
 }
 
+// loadOrDefault loads the configuration from Redis or saves defaults.
 func loadOrDefault(ctx context.Context) *cfg.Config {
 	key := keys.System{}.Config()
 
@@ -172,7 +166,7 @@ func loadOrDefault(ctx context.Context) *cfg.Config {
 	if err != nil {
 		currentVersion := 0
 		if v, ok := hash[internalConfig.ConfigFieldVersion]; ok {
-			fmt.Sscanf(v, "%d", &currentVersion)
+			_, _ = fmt.Sscanf(v, "%d", &currentVersion)
 		}
 		return saveDefaults(ctx, currentVersion)
 	}
@@ -180,6 +174,7 @@ func loadOrDefault(ctx context.Context) *cfg.Config {
 	return c
 }
 
+// saveDefaults saves default configuration and returns it.
 func saveDefaults(ctx context.Context, expectedVersion int) *cfg.Config {
 	defaults := cfg.DefaultConfig()
 	version, err := save(ctx, defaults, expectedVersion)
@@ -190,8 +185,11 @@ func saveDefaults(ctx context.Context, expectedVersion int) *cfg.Config {
 	return defaults
 }
 
+// subscribeToUpdates subscribes to configuration updates on the system event bus
+// using the internal subscription helper. The callback updates the in-memory
+// configuration when a newer version arrives.
 func subscribeToUpdates() {
-	events.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
+	_, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()
 		defer mu.Unlock()
 
@@ -201,14 +199,18 @@ func subscribeToUpdates() {
 		}
 
 		if p.Version > c.Version {
-			c.Version = p.Config.Version
+			c.Version = p.Version
 			c.Namespace = p.Config.Namespace
 			c.Logger = p.Config.Logger
 			c.MessageAudit = p.Config.MessageAudit
 		}
 	})
+	if err != nil {
+		fmt.Printf("config: failed to subscribe to configuration updates: %v\n", err)
+	}
 }
 
+// save persists the configuration using the Lua script.
 func save(ctx context.Context, c *cfg.Config, currentVersion int) (int, error) {
 	key := keys.System{}.Config()
 

@@ -8,12 +8,17 @@
  *
  */
 
+// Package events defines internal producer event names and payload types.
+//
+// These events are published through the event multiplexer to the
+// appropriate bus (system or user) according to the event routing policy.
 package events
 
 import (
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
+// Producer event names.
 const (
 	// Lifecycle
 	EventUp        = "producer.up"
@@ -21,21 +26,28 @@ const (
 	EventGoingUp   = "producer.goingUp"
 	EventGoingDown = "producer.goingDown"
 
-	// Message
+	// Message publication
 	EventMessagePublished = "producer.messagePublished"
 )
 
-// ── Lifecycle ──
+// ── Lifecycle payload ──
 
+// LifecyclePayload is used by public subscribers to receive the producer ID
+// from producer lifecycle events.
 type LifecyclePayload struct {
 	ProducerID string `json:"producerId"`
 }
 
-// ── Message ──
+// ── Message payload ──
 
+// MessagePublishedPayload is used by public subscribers to receive the
+// arguments of a producer.messagePublished event.
+//
+// It matches the TypeScript event signature:
+//
+//	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
 type MessagePublishedPayload struct {
 	MessageID  string        `json:"messageId"`
 	Queue      q.QueueParams `json:"queue"`
-	GroupID    string        `json:"groupId,omitempty"`
 	ProducerID string        `json:"producerId"`
 }

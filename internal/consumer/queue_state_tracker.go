@@ -11,13 +11,13 @@
 package consumer
 
 import (
+	"encoding/json"
 	"log/slog"
 	"sync"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalQueueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	queueEvents "github.com/weyoss/go-redis-smq/pkg/queue/events"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
@@ -50,7 +50,7 @@ func NewQueueStateTracker(
 		log:       logger.New("consumer", "queue-state-tracker"),
 	}
 
-	sub, err := queueEvents.SubscribeStateChanged(func(p internalQueueEvents.StateChangedPayload) {
+	sub, err := internalQueueEvents.SubscribeStateChanged(func(p internalQueueEvents.StateChangedPayload) {
 		t.handleStateChange(p)
 	})
 	if err != nil {
@@ -61,6 +61,16 @@ func NewQueueStateTracker(
 	t.log.Debug("queue state tracker started")
 
 	return t
+}
+
+// decodeEventArg converts a positional event argument received from Redis
+// Pub/Sub (typically a map[string]interface{}) into the target Go type.
+func decodeEventArg(arg interface{}, target interface{}) error {
+	data, err := json.Marshal(arg)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
 }
 
 func (t *QueueStateTracker) handleStateChange(p internalQueueEvents.StateChangedPayload) {

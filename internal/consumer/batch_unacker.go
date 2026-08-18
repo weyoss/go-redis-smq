@@ -23,11 +23,16 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
+// unackEntry is a pending unacknowledgment entry.
 type unackEntry struct {
 	msg   *internalMessage.Envelope
 	cause UnacknowledgeCause
 }
 
+// BatchUnacker buffers unacknowledgments and flushes them in batches.
+//
+// It improves throughput by grouping multiple unacknowledgment operations
+// into a single Redis Lua script call when batch mode is enabled.
 type BatchUnacker struct {
 	mu             sync.Mutex
 	queue          *q.QueueParams
@@ -43,6 +48,7 @@ type BatchUnacker struct {
 	log            *slog.Logger
 }
 
+// NewBatchUnacker creates a new batch unacknowledger.
 func NewBatchUnacker(queue *q.QueueParams, groupID, consumerID string, cfg c.BatchConfig) *BatchUnacker {
 	return &BatchUnacker{
 		queue:          queue,
@@ -55,6 +61,7 @@ func NewBatchUnacker(queue *q.QueueParams, groupID, consumerID string, cfg c.Bat
 	}
 }
 
+// Run starts the batch unacker.
 func (bu *BatchUnacker) Run(ctx context.Context) {
 	bu.ctx, bu.cancel = context.WithCancel(ctx)
 	bu.log.Debug("batch unacker started",
@@ -64,6 +71,8 @@ func (bu *BatchUnacker) Run(ctx context.Context) {
 	)
 }
 
+// Unack adds a message to the unacknowledgment batch or processes it
+// immediately if batching is disabled.
 func (bu *BatchUnacker) Unack(msg *internalMessage.Envelope, cause UnacknowledgeCause) {
 	if !bu.cfg.Enabled {
 		bu.unacknowledge([]unackEntry{{msg: msg, cause: cause}})
@@ -89,12 +98,15 @@ func (bu *BatchUnacker) Unack(msg *internalMessage.Envelope, cause Unacknowledge
 	}
 }
 
+// Flush sends all buffered unacknowledgments immediately.
 func (bu *BatchUnacker) Flush() {
 	bu.mu.Lock()
 	defer bu.mu.Unlock()
 	bu.flush()
 }
 
+// Shutdown stops the batch unacker and flushes any pending
+// unacknowledgments.
 func (bu *BatchUnacker) Shutdown() {
 	bu.mu.Lock()
 	defer bu.mu.Unlock()
@@ -114,6 +126,8 @@ func (bu *BatchUnacker) Shutdown() {
 	bu.wg.Wait()
 }
 
+// flush sends the current buffer to the unacknowledger in a separate
+// goroutine and resets the buffer.
 func (bu *BatchUnacker) flush() {
 	if len(bu.buffer) == 0 {
 		return
@@ -136,6 +150,8 @@ func (bu *BatchUnacker) flush() {
 	}()
 }
 
+// unacknowledge processes a batch of unacknowledgments and publishes the
+// corresponding consumer events.
 func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -155,23 +171,9 @@ func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 
 	bu.log.Debug("batch unack completed", "count", len(entries))
 
-	basePayload := consumerEvents.MessagePayload{
-		Queue:            *bu.queue,
-		GroupID:          bu.groupID,
-		MessageHandlerID: bu.consumerID,
-		ConsumerID:       bu.consumerID,
-	}
-
 	for _, entry := range entries {
 		msgID := entry.msg.ID()
 		action, deadLetterCause := resolveUnackAction(entry.msg, entry.cause)
-
-		basePayload.MessageID = msgID
-
-		consumerEvents.PublishMessageUnacknowledged(ctx, consumerEvents.MessageUnacknowledgedPayload{
-			MessagePayload: basePayload,
-			Cause:          int(entry.cause),
-		})
 
 		switch action {
 		case ActionDeadLetter:
@@ -180,22 +182,24 @@ func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 				"cause", int(entry.cause),
 				"deadLetterCause", int(deadLetterCause),
 			)
-			consumerEvents.PublishMessageDeadLettered(ctx, consumerEvents.MessageDeadLetteredPayload{
-				MessagePayload: basePayload,
-				Cause:          int(deadLetterCause),
-			})
+			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
+			consumerEvents.PublishMessageDeadLettered(ctx, msgID, *bu.queue, bu.consumerID, int(deadLetterCause))
+
 		case ActionDelay:
 			bu.log.Debug("message delayed for retry",
 				"messageID", msgID,
 				"cause", int(entry.cause),
 			)
-			consumerEvents.PublishMessageDelayed(ctx, basePayload)
+			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
+			consumerEvents.PublishMessageDelayed(ctx, msgID, *bu.queue, bu.consumerID)
+
 		case ActionRequeue:
 			bu.log.Debug("message requeued",
 				"messageID", msgID,
 				"cause", int(entry.cause),
 			)
-			consumerEvents.PublishMessageRequeued(ctx, basePayload)
+			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
+			consumerEvents.PublishMessageRequeued(ctx, msgID, *bu.queue, bu.consumerID)
 		}
 	}
 }

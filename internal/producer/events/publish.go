@@ -13,25 +13,36 @@ package events
 import (
 	"context"
 
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
+	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
-func PublishUp(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventUp, payload)
+// PublishUp publishes a producer.up event to the public user bus.
+func PublishUp(ctx context.Context, producerID string) {
+	eventmultiplexer.Publish(ctx, EventUp, producerID)
 }
 
-func PublishDown(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventDown, payload)
+// PublishDown publishes a producer.down event to the public user bus.
+func PublishDown(ctx context.Context, producerID string) {
+	eventmultiplexer.Publish(ctx, EventDown, producerID)
 }
 
-func PublishGoingUp(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventGoingUp, payload)
+// PublishGoingUp publishes a producer.goingUp event to the public user bus.
+func PublishGoingUp(ctx context.Context, producerID string) {
+	eventmultiplexer.Publish(ctx, EventGoingUp, producerID)
 }
 
-func PublishGoingDown(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventGoingDown, payload)
+// PublishGoingDown publishes a producer.goingDown event to the public user bus.
+func PublishGoingDown(ctx context.Context, producerID string) {
+	eventmultiplexer.Publish(ctx, EventGoingDown, producerID)
 }
 
-func PublishMessagePublished(ctx context.Context, payload MessagePublishedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessagePublished, payload)
+// PublishMessagePublished publishes a producer.messagePublished event to the
+// public user bus.
+//
+// The arguments match the TypeScript event signature:
+//
+//	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
+func PublishMessagePublished(ctx context.Context, messageID string, queue q.QueueParams, producerID string) {
+	eventmultiplexer.Publish(ctx, EventMessagePublished, messageID, queue, producerID)
 }

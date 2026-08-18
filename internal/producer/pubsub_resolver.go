@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2026
- * Weyoss <weyoss@outlook.com>
- * https://github.com/weyoss
- *
- * This source code is licensed under the MIT license found in the LICENSE file
- * in the root directory of this source tree.
- *
- */
-
 package producer
 
 import (
@@ -17,11 +7,11 @@ import (
 	"strconv"
 	"sync"
 
+	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalQueueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	queueEvents "github.com/weyoss/go-redis-smq/pkg/queue/events"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
@@ -29,6 +19,7 @@ type PubSubTargetResolver struct {
 	mu         sync.RWMutex
 	targets    map[string][]string
 	subscribed bool
+	subs       []*eventbus.Subscription
 	log        *slog.Logger
 }
 
@@ -129,10 +120,9 @@ func (r *PubSubTargetResolver) Load(ctx context.Context) error {
 	)
 
 	if !r.subscribed {
-		queueEvents.SubscribeCreated(r.onQueueCreated)
-		queueEvents.SubscribeDeleted(r.onQueueDeleted)
-		queueEvents.SubscribeConsumerGroupCreated(r.onConsumerGroupCreated)
-		queueEvents.SubscribeConsumerGroupDeleted(r.onConsumerGroupDeleted)
+		if err := r.subscribe(); err != nil {
+			return err
+		}
 		r.subscribed = true
 		r.log.Debug("subscribed to queue events")
 	}
@@ -140,9 +130,62 @@ func (r *PubSubTargetResolver) Load(ctx context.Context) error {
 	return nil
 }
 
+func (r *PubSubTargetResolver) subscribe() error {
+	sub1, err := internalQueueEvents.SubscribeCreated(func(p internalQueueEvents.CreatedPayload) {
+		r.onQueueCreated(p)
+	})
+	if err != nil {
+		return err
+	}
+	r.subs = append(r.subs, sub1)
+
+	sub2, err := internalQueueEvents.SubscribeDeleted(func(p internalQueueEvents.DeletedPayload) {
+		r.onQueueDeleted(p)
+	})
+	if err != nil {
+		return err
+	}
+	r.subs = append(r.subs, sub2)
+
+	sub3, err := internalQueueEvents.SubscribeConsumerGroupCreated(func(p internalQueueEvents.ConsumerGroupCreatedPayload) {
+		r.onConsumerGroupCreated(p)
+	})
+	if err != nil {
+		return err
+	}
+	r.subs = append(r.subs, sub3)
+
+	sub4, err := internalQueueEvents.SubscribeConsumerGroupDeleted(func(p internalQueueEvents.ConsumerGroupDeletedPayload) {
+		r.onConsumerGroupDeleted(p)
+	})
+	if err != nil {
+		return err
+	}
+	r.subs = append(r.subs, sub4)
+
+	return nil
+}
+
+// decodeArg converts a positional event argument received from Redis Pub/Sub
+// (typically a map[string]interface{} after JSON decoding) into the target Go type.
+func decodeArg(arg interface{}, target interface{}) error {
+	data, err := json.Marshal(arg)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
+}
+
 func (r *PubSubTargetResolver) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+
+	// Unsubscribe from the system event bus.
+	for _, sub := range r.subs {
+		sub.Unsubscribe()
+	}
+	r.subs = nil
+
 	r.targets = make(map[string][]string)
 	r.log.Debug("pub/sub targets cleared")
 }

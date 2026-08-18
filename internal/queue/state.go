@@ -268,10 +268,7 @@ func (s *State) saveState(
 		return nil, err
 	}
 
-	queueEvents.PublishStateChanged(ctx, queueEvents.StateChangedPayload{
-		Queue:      *params,
-		Transition: *t,
-	})
+	queueEvents.PublishStateChanged(ctx, *params, *t)
 
 	return result, nil
 }

@@ -10,16 +10,17 @@
 
 // Package events provides public subscription functions for RedisSMQ queue events.
 //
-// The functions in this package let external consumers observe queue lifecycle
-// events such as creation, deletion, state changes, and consumer group changes.
+// These functions automatically start the public user event bus on first use.
+// No explicit initialisation is required.
 package events
 
 import (
+	"context"
 	"encoding/json"
-	"log"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
+	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Re-exported payload types. These aliases allow external users to refer to
@@ -42,48 +43,81 @@ type ConsumerGroupCreatedPayload = internalEvents.ConsumerGroupCreatedPayload
 // queue.consumerGroupDeleted event.
 type ConsumerGroupDeletedPayload = internalEvents.ConsumerGroupDeletedPayload
 
+func decodeArg(arg interface{}, target interface{}) error {
+	data, err := json.Marshal(arg)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(data, target)
+}
+
 // SubscribeCreated registers a handler for the queue.queueCreated event.
 //
 // The handler receives a CreatedPayload containing the queue and its
 // properties. The returned subscription can be used to unsubscribe.
-func SubscribeCreated(handler func(payload CreatedPayload)) (*eventbus.Subscription, error) {
-	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p CreatedPayload
-		if err := json.Unmarshal(payload, &p); err != nil {
-			log.Printf("queue events: failed to unmarshal Created payload: %v", err)
+func SubscribeCreated(handler func(CreatedPayload)) (*eventbus.Subscription, error) {
+	bus := eventbus.InitUser(context.Background())
+
+	return bus.Subscribe(func(_ string, args []interface{}) {
+		if len(args) < 2 {
 			return
 		}
-		handler(p)
+
+		var queue q.QueueParams
+		var props q.QueueProps
+		if err := decodeArg(args[0], &queue); err != nil {
+			return
+		}
+		if err := decodeArg(args[1], &props); err != nil {
+			return
+		}
+
+		handler(CreatedPayload{Queue: queue, Properties: props})
 	}, internalEvents.EventCreated)
 }
 
 // SubscribeDeleted registers a handler for the queue.queueDeleted event.
 //
 // The handler receives a DeletedPayload containing the deleted queue.
-// The returned subscription can be used to unsubscribe.
 func SubscribeDeleted(handler func(DeletedPayload)) (*eventbus.Subscription, error) {
-	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p DeletedPayload
-		if err := json.Unmarshal(payload, &p); err != nil {
-			log.Printf("queue events: failed to unmarshal Deleted payload: %v", err)
+	bus := eventbus.InitUser(context.Background())
+
+	return bus.Subscribe(func(_ string, args []interface{}) {
+		if len(args) < 1 {
 			return
 		}
-		handler(p)
+
+		var queue q.QueueParams
+		if err := decodeArg(args[0], &queue); err != nil {
+			return
+		}
+
+		handler(DeletedPayload{Queue: queue})
 	}, internalEvents.EventDeleted)
 }
 
 // SubscribeStateChanged registers a handler for the queue.stateChanged event.
 //
 // The handler receives a StateChangedPayload containing the queue and the
-// state transition. The returned subscription can be used to unsubscribe.
+// state transition.
 func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscription, error) {
-	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p StateChangedPayload
-		if err := json.Unmarshal(payload, &p); err != nil {
-			log.Printf("queue events: failed to unmarshal StateChanged payload: %v", err)
+	bus := eventbus.InitUser(context.Background())
+
+	return bus.Subscribe(func(_ string, args []interface{}) {
+		if len(args) < 2 {
 			return
 		}
-		handler(p)
+
+		var queue q.QueueParams
+		var transition q.StateTransition
+		if err := decodeArg(args[0], &queue); err != nil {
+			return
+		}
+		if err := decodeArg(args[1], &transition); err != nil {
+			return
+		}
+
+		handler(StateChangedPayload{Queue: queue, Transition: transition})
 	}, internalEvents.EventStateChanged)
 }
 
@@ -93,13 +127,23 @@ func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscri
 // The handler receives a ConsumerGroupCreatedPayload containing the queue
 // and the new group ID.
 func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*eventbus.Subscription, error) {
-	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p ConsumerGroupCreatedPayload
-		if err := json.Unmarshal(payload, &p); err != nil {
-			log.Printf("queue events: failed to unmarshal ConsumerGroupCreated payload: %v", err)
+	bus := eventbus.InitUser(context.Background())
+
+	return bus.Subscribe(func(_ string, args []interface{}) {
+		if len(args) < 2 {
 			return
 		}
-		handler(p)
+
+		var queue q.QueueParams
+		var groupID string
+		if err := decodeArg(args[0], &queue); err != nil {
+			return
+		}
+		if err := decodeArg(args[1], &groupID); err != nil {
+			return
+		}
+
+		handler(ConsumerGroupCreatedPayload{Queue: queue, GroupID: groupID})
 	}, internalEvents.EventConsumerGroupCreated)
 }
 
@@ -109,12 +153,22 @@ func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*
 // The handler receives a ConsumerGroupDeletedPayload containing the queue
 // and the deleted group ID.
 func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (*eventbus.Subscription, error) {
-	return eventbus.Singleton().Subscribe(func(_ string, payload json.RawMessage) {
-		var p ConsumerGroupDeletedPayload
-		if err := json.Unmarshal(payload, &p); err != nil {
-			log.Printf("queue events: failed to unmarshal ConsumerGroupDeleted payload: %v", err)
+	bus := eventbus.InitUser(context.Background())
+
+	return bus.Subscribe(func(_ string, args []interface{}) {
+		if len(args) < 2 {
 			return
 		}
-		handler(p)
+
+		var queue q.QueueParams
+		var groupID string
+		if err := decodeArg(args[0], &queue); err != nil {
+			return
+		}
+		if err := decodeArg(args[1], &groupID); err != nil {
+			return
+		}
+
+		handler(ConsumerGroupDeletedPayload{Queue: queue, GroupID: groupID})
 	}, internalEvents.EventConsumerGroupDeleted)
 }

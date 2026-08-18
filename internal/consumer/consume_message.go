@@ -24,6 +24,9 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
+// ConsumeMessage handles a single dequeued message. It invokes the user
+// handler, enforces expiration and consume timeouts, and routes the result
+// to the batch acker or unacker.
 type ConsumeMessage struct {
 	queue        *q.QueueParams
 	groupID      string
@@ -34,6 +37,7 @@ type ConsumeMessage struct {
 	log          *slog.Logger
 }
 
+// NewConsumeMessage creates a new ConsumeMessage instance.
 func NewConsumeMessage(
 	queue *q.QueueParams,
 	groupID string,
@@ -53,30 +57,29 @@ func NewConsumeMessage(
 	}
 }
 
+// Consume processes a dequeued message envelope.
 func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.Envelope) {
 	m := envelope.ToTransferable()
 
-	// Publish message received event
-	consumerEvents.PublishMessageReceived(ctx, consumerEvents.MessageReceivedPayload{
-		MessageID:  m.ID,
-		Queue:      *c.queue,
-		ConsumerID: c.consumerID,
-	})
+	// Publish message received event.
+	consumerEvents.PublishMessageReceived(ctx, m.ID, *c.queue, c.consumerID)
 
 	c.log.Debug("consuming message", "messageID", m.ID)
 
+	// Handle expired messages immediately.
 	if c.isExpired(m) {
 		c.log.Warn("message expired — unacknowledging", "messageID", m.ID, "ttl", m.TTL)
 		c.batchUnacker.Unack(envelope, CauseTTLExpired)
 		return
 	}
 
-	// Apply consume timeout if set. The handler receives a deadline context as a
-	// hint, but the forced timer below is the authoritative enforcement.
+	// Apply consume timeout if set. The handler receives a deadline context
+	// as a hint, but the forced timer below is authoritative.
 	ctx, cancel := c.handlerContext(ctx, m)
 	defer cancel()
 
-	// Forced timeout: unacknowledge the message if the handler doesn't finish in time.
+	// Forced timeout: unacknowledge the message if the handler doesn't
+	// finish in time.
 	var timedOut atomic.Bool
 	if m.ConsumeTimeout > 0 {
 		go func() {
@@ -88,7 +91,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 		}()
 	}
 
-	// Invoke handler (with panic recovery).
+	// Invoke handler with panic recovery.
 	var err error
 	func() {
 		defer func() {
@@ -100,8 +103,8 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 		err = c.invokeHandler(ctx, m)
 	}()
 
-	// If the forced timer has already fired, the message was already unacknowledged.
-	// Do not ack or unack again.
+	// If the forced timer already fired, the message was already
+	// unacknowledged. Do not ack or unack again.
 	if timedOut.Load() {
 		return
 	}
@@ -113,16 +116,11 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 	} else {
 		c.log.Debug("handler succeeded — acknowledging", "messageID", m.ID)
 		c.batchAcker.Ack(m.ID)
-		consumerEvents.PublishMessageAcknowledged(ctx, consumerEvents.MessagePayload{
-			MessageID:        m.ID,
-			Queue:            *c.queue,
-			GroupID:          c.groupID,
-			MessageHandlerID: c.consumerID,
-			ConsumerID:       c.consumerID,
-		})
+		consumerEvents.PublishMessageAcknowledged(ctx, m.ID, *c.queue, c.consumerID)
 	}
 }
 
+// isExpired checks whether a message has exceeded its TTL.
 func (c *ConsumeMessage) isExpired(m *msg.Transferable) bool {
 	if m.TTL <= 0 {
 		return false
@@ -130,6 +128,8 @@ func (c *ConsumeMessage) isExpired(m *msg.Transferable) bool {
 	return time.Since(time.UnixMilli(m.CreatedAt)) >= time.Duration(m.TTL)*time.Millisecond
 }
 
+// handlerContext returns a context with a timeout if the message has a
+// consume timeout configured.
 func (c *ConsumeMessage) handlerContext(ctx context.Context, m *msg.Transferable) (context.Context, context.CancelFunc) {
 	if m.ConsumeTimeout > 0 {
 		timeout := time.Duration(m.ConsumeTimeout) * time.Millisecond
@@ -142,6 +142,7 @@ func (c *ConsumeMessage) handlerContext(ctx context.Context, m *msg.Transferable
 	return ctx, func() {}
 }
 
+// invokeHandler calls the user-supplied handler.
 func (c *ConsumeMessage) invokeHandler(ctx context.Context, m *msg.Transferable) error {
 	return c.handler(ctx, m)
 }

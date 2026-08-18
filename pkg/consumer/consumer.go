@@ -115,9 +115,7 @@ func (cons *Consumer) Run(ctx context.Context) error {
 
 	cons.log.Info("starting consumer")
 
-	consumerEvents.PublishGoingUp(ctx, consumerEvents.LifecyclePayload{
-		ConsumerID: cons.id,
-	})
+	consumerEvents.PublishGoingUp(ctx, cons.id)
 
 	cons.ctx, cons.cancel = context.WithCancel(ctx)
 
@@ -125,9 +123,7 @@ func (cons *Consumer) Run(ctx context.Context) error {
 		cons.log.Error("failed to run handlers", "error", err)
 		cons.cancel()
 		cons.cancel = nil
-		consumerEvents.PublishDown(ctx, consumerEvents.LifecyclePayload{
-			ConsumerID: cons.id,
-		})
+		consumerEvents.PublishDown(ctx, cons.id)
 		return fmt.Errorf("consumer: run handlers: %w", err)
 	}
 
@@ -151,9 +147,7 @@ func (cons *Consumer) Run(ctx context.Context) error {
 		"queues", len(cons.runner.Queues()),
 	)
 
-	consumerEvents.PublishUp(cons.ctx, consumerEvents.LifecyclePayload{
-		ConsumerID: cons.id,
-	})
+	consumerEvents.PublishUp(cons.ctx, cons.id)
 
 	return nil
 }
@@ -182,9 +176,7 @@ func (cons *Consumer) shutdownLocked() {
 
 	cons.log.Info("shutting down consumer")
 
-	consumerEvents.PublishGoingDown(context.Background(), consumerEvents.LifecyclePayload{
-		ConsumerID: cons.id,
-	})
+	consumerEvents.PublishGoingDown(context.Background(), cons.id)
 
 	cons.running = false
 
@@ -203,9 +195,7 @@ func (cons *Consumer) shutdownLocked() {
 
 	cons.log.Info("consumer shut down complete")
 
-	consumerEvents.PublishDown(context.Background(), consumerEvents.LifecyclePayload{
-		ConsumerID: cons.id,
-	})
+	consumerEvents.PublishDown(context.Background(), cons.id)
 }
 
 func (cons *Consumer) Queues() []*q.QueueParams {

@@ -53,10 +53,7 @@ func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *q.QueuePar
 	}
 
 	if result == 1 {
-		queueEvents.PublishConsumerGroupCreated(ctx, queueEvents.ConsumerGroupCreatedPayload{
-			Queue:   *queueParams,
-			GroupID: groupID,
-		})
+		queueEvents.PublishConsumerGroupCreated(ctx, *queueParams, groupID)
 	}
 
 	return result, nil
@@ -105,10 +102,7 @@ func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *q.QueueP
 
 	switch replyStr {
 	case "OK":
-		queueEvents.PublishConsumerGroupDeleted(ctx, queueEvents.ConsumerGroupDeletedPayload{
-			Queue:   *queueParams,
-			GroupID: groupID,
-		})
+		queueEvents.PublishConsumerGroupDeleted(ctx, *queueParams, groupID)
 		return nil
 	case "QUEUE_LOCKED":
 		return q.ErrLocked

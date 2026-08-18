@@ -13,45 +13,62 @@ package events
 import (
 	"context"
 
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
+	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
-func PublishUp(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventUp, payload)
+// PublishUp publishes a consumer.up event to the public user bus.
+func PublishUp(ctx context.Context, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventUp, consumerID)
 }
 
-func PublishDown(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventDown, payload)
+// PublishDown publishes a consumer.down event to the public user bus.
+func PublishDown(ctx context.Context, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventDown, consumerID)
 }
 
-func PublishGoingUp(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventGoingUp, payload)
+// PublishGoingUp publishes a consumer.goingUp event to the public user bus.
+func PublishGoingUp(ctx context.Context, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventGoingUp, consumerID)
 }
 
-func PublishGoingDown(ctx context.Context, payload LifecyclePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventGoingDown, payload)
+// PublishGoingDown publishes a consumer.goingDown event to the public user bus.
+func PublishGoingDown(ctx context.Context, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventGoingDown, consumerID)
 }
 
-func PublishMessageReceived(ctx context.Context, payload MessageReceivedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessageReceived, payload)
+// PublishMessageReceived publishes a consumer.messageReceived event to the
+// public user bus.
+func PublishMessageReceived(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventMessageReceived, messageID, queue, consumerID)
 }
 
-func PublishMessageAcknowledged(ctx context.Context, payload MessagePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessageAcknowledged, payload)
+// PublishMessageAcknowledged publishes a consumer.messageAcknowledged event
+// to the public user bus.
+func PublishMessageAcknowledged(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventMessageAcknowledged, messageID, queue, consumerID)
 }
 
-func PublishMessageUnacknowledged(ctx context.Context, payload MessageUnacknowledgedPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessageUnacknowledged, payload)
+// PublishMessageUnacknowledged publishes a consumer.messageUnacknowledged
+// event to the public user bus.
+func PublishMessageUnacknowledged(ctx context.Context, messageID string, queue q.QueueParams, consumerID string, cause int) {
+	eventmultiplexer.Publish(ctx, EventMessageUnacknowledged, messageID, queue, consumerID, cause)
 }
 
-func PublishMessageDeadLettered(ctx context.Context, payload MessageDeadLetteredPayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessageDeadLettered, payload)
+// PublishMessageDeadLettered publishes a consumer.messageDeadLettered event
+// to the public user bus.
+func PublishMessageDeadLettered(ctx context.Context, messageID string, queue q.QueueParams, consumerID string, cause int) {
+	eventmultiplexer.Publish(ctx, EventMessageDeadLettered, messageID, queue, consumerID, cause)
 }
 
-func PublishMessageRequeued(ctx context.Context, payload MessagePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessageRequeued, payload)
+// PublishMessageRequeued publishes a consumer.messageRequeued event to the
+// public user bus.
+func PublishMessageRequeued(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventMessageRequeued, messageID, queue, consumerID)
 }
 
-func PublishMessageDelayed(ctx context.Context, payload MessagePayload) error {
-	return eventbus.Singleton().Publish(ctx, EventMessageDelayed, payload)
+// PublishMessageDelayed publishes a consumer.messageDelayed event to the
+// public user bus.
+func PublishMessageDelayed(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+	eventmultiplexer.Publish(ctx, EventMessageDelayed, messageID, queue, consumerID)
 }

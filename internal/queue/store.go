@@ -141,13 +141,10 @@ func (s *Store) SaveWithRateLimit(
 
 	switch replyStr {
 	case "OK":
-		queueEvents.PublishCreated(ctx, queueEvents.CreatedPayload{
-			Queue: *queueParams,
-			Properties: q.QueueProps{
-				Type:          queueType,
-				DeliveryModel: deliveryModel,
-				RateLimit:     rateLimit,
-			},
+		queueEvents.PublishCreated(ctx, *queueParams, q.QueueProps{
+			Type:          queueType,
+			DeliveryModel: deliveryModel,
+			RateLimit:     rateLimit,
 		})
 		return nil
 	case "QUEUE_EXISTS":
@@ -308,9 +305,7 @@ func (s *Store) Delete(ctx context.Context, queueParams *q.QueueParams) error {
 
 	switch replyStr {
 	case "OK":
-		queueEvents.PublishDeleted(ctx, queueEvents.DeletedPayload{
-			Queue: *queueParams,
-		})
+		queueEvents.PublishDeleted(ctx, *queueParams)
 		return nil
 	case "QUEUE_LOCKED":
 		return q.ErrLocked

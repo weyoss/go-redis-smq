@@ -30,8 +30,10 @@ import (
 type Config = redis.Config
 
 var (
-	systemCtx   context.Context
-	systemStop  context.CancelFunc
+	systemCtx       context.Context
+	systemStop      context.CancelFunc
+	purgeWorkerStop func()
+
 	lifecycleMu sync.Mutex
 	initialized bool
 )
@@ -56,6 +58,7 @@ func registerConsumer(c *consumer.Consumer) {
 	instances.consumers = append(instances.consumers, c)
 }
 
+// Init initialises RedisSMQ
 func Init(ctx context.Context, cfg Config) error {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
@@ -68,7 +71,8 @@ func Init(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("redissmq: redis init failed: %w", err)
 	}
 
-	eventbus.Init(ctx)
+	// Always initialise and start the system bus.
+	eventbus.InitSystem(ctx)
 
 	if err := config.Init(ctx); err != nil {
 		return fmt.Errorf("redissmq: config init failed: %w", err)
@@ -78,9 +82,9 @@ func Init(ctx context.Context, cfg Config) error {
 
 	systemCtx, systemStop = context.WithCancel(ctx)
 
-	internalQueue.StartPurgeWorker(systemCtx)
+	purgeWorkerStop = internalQueue.StartPurgeWorker(systemCtx)
 
-	// Auto‑shutdown when the context is cancelled.
+	// Auto-shutdown when the context is cancelled.
 	go func() {
 		<-ctx.Done()
 		Shutdown()
@@ -91,6 +95,11 @@ func Init(ctx context.Context, cfg Config) error {
 	return nil
 }
 
+// Shutdown gracefully stops RedisSMQ.
+//
+// It stops the purge worker, consumers, producers, event buses, logger,
+// configuration, and Redis client. Shutdown is safe to call multiple times
+// and supports being called again after a new Init.
 func Shutdown() {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
@@ -102,7 +111,14 @@ func Shutdown() {
 	l := logger.New("redissmq")
 	l.Info("RedisSMQ shutting down...")
 
-	// Cancel system context to signal workers to stop.
+	// Stop the purge worker first. This cancels its context and waits
+	// briefly for it to exit cleanly.
+	if purgeWorkerStop != nil {
+		purgeWorkerStop()
+		purgeWorkerStop = nil
+	}
+
+	// Cancel the system context to signal other background workers.
 	if systemStop != nil {
 		systemStop()
 		systemStop = nil
@@ -129,12 +145,14 @@ func Shutdown() {
 	}
 	l.Info("producers shut down", "count", len(producers))
 
-	eventbus.Shutdown()
+	// Shut down the public user bus if it was initialised.
+	eventbus.ShutdownUser()
+
+	// Shut down the internal system bus.
+	eventbus.ShutdownSystem()
 
 	l.Info("RedisSMQ shut down complete")
 
-	// Disable logging before closing config to prevent panics from
-	// background goroutines that outlive the configuration.
 	logger.Shutdown()
 	config.Close()
 	redis.Close()
@@ -142,12 +160,16 @@ func Shutdown() {
 	initialized = false
 }
 
+// NewProducer creates a new producer and registers it for lifecycle
+// management.
 func NewProducer() *producer.Producer {
 	p := producer.New()
 	registerProducer(p)
 	return p
 }
 
+// NewConsumer creates a new consumer and registers it for lifecycle
+// management.
 func NewConsumer(opts ...c.Option) *consumer.Consumer {
 	cons := consumer.New(opts...)
 	registerConsumer(cons)

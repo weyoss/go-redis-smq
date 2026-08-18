@@ -87,9 +87,7 @@ func (prod *Producer) Run(ctx context.Context) error {
 
 	prod.log.Info("starting producer")
 
-	producerEvents.PublishGoingUp(ctx, producerEvents.LifecyclePayload{
-		ProducerID: prod.id,
-	})
+	producerEvents.PublishGoingUp(ctx, prod.id)
 
 	prod.pubSubResolver = internalProducer.NewPubSubTargetResolver(prod.id)
 	if err := prod.pubSubResolver.Load(ctx); err != nil {
@@ -108,9 +106,7 @@ func (prod *Producer) Run(ctx context.Context) error {
 
 	prod.log.Info("producer started")
 
-	producerEvents.PublishUp(ctx, producerEvents.LifecyclePayload{
-		ProducerID: prod.id,
-	})
+	producerEvents.PublishUp(ctx, prod.id)
 
 	return nil
 }
@@ -130,9 +126,7 @@ func (prod *Producer) Shutdown(ctx context.Context) {
 
 	prod.log.Info("shutting down producer")
 
-	producerEvents.PublishGoingDown(ctx, producerEvents.LifecyclePayload{
-		ProducerID: prod.id,
-	})
+	producerEvents.PublishGoingDown(ctx, prod.id)
 
 	prod.running = false
 	if prod.pubSubResolver != nil {
@@ -142,9 +136,7 @@ func (prod *Producer) Shutdown(ctx context.Context) {
 
 	prod.log.Info("producer shut down complete")
 
-	producerEvents.PublishDown(ctx, producerEvents.LifecyclePayload{
-		ProducerID: prod.id,
-	})
+	producerEvents.PublishDown(ctx, prod.id)
 }
 
 // IsRunning reports whether the producer is currently running.
@@ -374,12 +366,7 @@ func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.En
 	switch replyStr {
 	case "OK":
 		if !isScheduled {
-			producerEvents.PublishMessagePublished(ctx, producerEvents.MessagePublishedPayload{
-				MessageID:  messageID,
-				Queue:      *queueParams,
-				GroupID:    envelope.ConsumerGroupID(),
-				ProducerID: prod.id,
-			})
+			producerEvents.PublishMessagePublished(ctx, messageID, *queueParams, prod.id)
 		}
 		prod.log.Debug("message published",
 			"messageID", messageID,
