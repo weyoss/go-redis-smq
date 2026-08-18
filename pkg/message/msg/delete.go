@@ -14,32 +14,49 @@ package msg
 type DeleteStatus string
 
 const (
-	// DeleteStatusOK indicates all messages were successfully deleted.
+	// DeleteStatusOK indicates that all requested messages were successfully
+	// deleted.
 	DeleteStatusOK DeleteStatus = "OK"
 
-	// DeleteStatusPartialSuccess indicates some messages were deleted.
+	// DeleteStatusPartialSuccess indicates that some messages were deleted
+	// while others could not be deleted.
 	DeleteStatusPartialSuccess DeleteStatus = "PARTIAL_SUCCESS"
 
-	// DeleteStatusNotFound indicates no messages were found.
+	// DeleteStatusNotFound indicates that none of the requested messages
+	// were found.
 	DeleteStatusNotFound DeleteStatus = "MESSAGE_NOT_FOUND"
 
-	// DeleteStatusInProcess indicates messages are currently being processed.
+	// DeleteStatusInProcess indicates that the requested messages are
+	// currently being processed and cannot be deleted.
 	DeleteStatusInProcess DeleteStatus = "MESSAGE_IN_PROCESS"
 
-	// DeleteStatusNotDeleted indicates messages could not be deleted.
+	// DeleteStatusNotDeleted indicates that the requested messages could not
+	// be deleted.
 	DeleteStatusNotDeleted DeleteStatus = "MESSAGE_NOT_DELETED"
 )
 
 // DeleteStats holds counters for a delete operation.
 type DeleteStats struct {
+	// Processed is the total number of message IDs examined.
 	Processed int `json:"processed"`
-	Success   int `json:"success"`
-	NotFound  int `json:"notFound"`
+
+	// Success is the number of messages successfully deleted.
+	Success int `json:"success"`
+
+	// NotFound is the number of message IDs that did not correspond to an
+	// existing message.
+	NotFound int `json:"notFound"`
+
+	// InProcess is the number of messages that were skipped because they are
+	// currently being processed.
 	InProcess int `json:"inProcess"`
 }
 
-// DeleteResponse contains the result of a message deletion.
+// DeleteResponse contains the result of a message deletion operation.
 type DeleteResponse struct {
+	// Status summarizes the overall result of the operation.
 	Status DeleteStatus `json:"status"`
-	Stats  DeleteStats  `json:"stats"`
+
+	// Stats contains detailed counters for the operation.
+	Stats DeleteStats `json:"stats"`
 }

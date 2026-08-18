@@ -8,6 +8,10 @@
  *
  */
 
+// Package c provides configuration options and types for RedisSMQ consumers.
+//
+// This file contains batch configuration types for acknowledgments and
+// unacknowledgments.
 package c
 
 import "time"
@@ -21,12 +25,17 @@ type BatchConfig struct {
 	// Default: 100
 	BatchSize int
 
-	// BatchTimeout is the maximum time to wait before flushing a partial batch.
-	// Default: 10 seconds
+	// BatchTimeout is the maximum time to wait before flushing a partial
+	// batch. Default: 10 seconds.
 	BatchTimeout time.Duration
 }
 
-// DefaultBatchConfig returns sensible defaults.
+// DefaultBatchConfig returns sensible defaults for batch processing.
+//
+// The defaults are:
+//   - Enabled: false
+//   - BatchSize: 100
+//   - BatchTimeout: 10 seconds
 func DefaultBatchConfig() BatchConfig {
 	return BatchConfig{
 		Enabled:      false,

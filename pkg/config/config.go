@@ -8,6 +8,12 @@
  *
  */
 
+// Package config provides public APIs for reading, saving, reloading, and
+// resetting RedisSMQ system configuration.
+//
+// Configuration is stored in Redis and shared across all connected
+// instances. Changes are propagated automatically over the internal event
+// bus using version-controlled updates.
 package config
 
 import (
@@ -33,7 +39,9 @@ var (
 )
 
 // Init initializes the configuration singleton.
-// Safe to call multiple times; subsequent calls are no-ops.
+//
+// It is safe to call multiple times; subsequent calls are no-ops. If no
+// configuration exists in Redis, default configuration is saved.
 func Init(ctx context.Context) error {
 	if instance.Load() != nil {
 		return nil
@@ -57,7 +65,8 @@ func Init(ctx context.Context) error {
 }
 
 // Get returns the current configuration.
-// Panics if Init has not been called.
+//
+// It panics if Init has not been called.
 func Get() *cfg.Config {
 	c := instance.Load()
 	if c == nil {
@@ -73,9 +82,13 @@ func Close() {
 	instance.Swap(nil)
 }
 
-// Save persists the configuration and publishes an update event.
+// Save persists the given configuration and publishes an update event.
+//
 // Use config.Get() to obtain the current config, modify fields as needed,
-// then pass the result to Save. The config replaces the entire stored config.
+// then pass the result to Save. The config replaces the entire stored
+// configuration.
+//
+// It returns the new configuration version.
 func Save(ctx context.Context, c *cfg.Config) (int, error) {
 	mu.Lock()
 	defer mu.Unlock()
@@ -123,6 +136,9 @@ func Reset(ctx context.Context) error {
 }
 
 // Reload reloads the configuration from Redis.
+//
+// If the configuration cannot be loaded, default configuration is saved and
+// used instead.
 func Reload(ctx context.Context) error {
 	mu.Lock()
 	defer mu.Unlock()
@@ -185,9 +201,9 @@ func saveDefaults(ctx context.Context, expectedVersion int) *cfg.Config {
 	return defaults
 }
 
-// subscribeToUpdates subscribes to configuration updates on the system event bus
-// using the internal subscription helper. The callback updates the in-memory
-// configuration when a newer version arrives.
+// subscribeToUpdates subscribes to configuration updates on the system event
+// bus using the internal subscription helper. The callback updates the
+// in-memory configuration when a newer version arrives.
 func subscribeToUpdates() {
 	_, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()

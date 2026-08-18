@@ -8,19 +8,26 @@
  *
  */
 
+// Package c provides configuration options and types for RedisSMQ consumers.
+//
+// It includes the Options struct, functional options, and batch configuration
+// types used when creating consumers via consumer.New.
 package c
 
-import (
-	"time"
-)
+import "time"
 
 // Options holds consumer configuration.
 type Options struct {
 	// HeartbeatTTL is the key expiry time for heartbeat keys.
 	// Minimum 3 seconds, default 60 seconds.
+	// Matches TypeScript heartbeatTTL.
 	HeartbeatTTL time.Duration
-	BatchAcks    BatchConfig
-	BatchUnacks  BatchConfig
+
+	// BatchAcks configures batch acknowledgments.
+	BatchAcks BatchConfig
+
+	// BatchUnacks configures batch unacknowledgments.
+	BatchUnacks BatchConfig
 }
 
 // Option is a functional option for configuring a Consumer.

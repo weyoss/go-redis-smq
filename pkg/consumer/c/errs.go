@@ -8,20 +8,27 @@
  *
  */
 
+// Package c defines configuration-related types and sentinel errors for
+// RedisSMQ consumers.
 package c
 
 import "errors"
 
+// Common consumer errors.
 var (
-	// ErrNoQueues indicates the consumer has no queues registered.
+	// ErrNoQueues indicates that the consumer has no queues registered.
+	// It is returned by Consumer.Run when no handlers were added.
 	ErrNoQueues = errors.New("consumer has no queues registered")
 
-	// ErrQueueStopped indicates the queue is stopped and cannot process messages.
+	// ErrQueueStopped indicates that the queue is stopped and cannot
+	// process messages.
 	ErrQueueStopped = errors.New("queue is stopped")
 
-	// ErrQueueLocked indicates the queue is locked and cannot process messages.
+	// ErrQueueLocked indicates that the queue is locked and cannot process
+	// messages.
 	ErrQueueLocked = errors.New("queue is locked")
 
-	// ErrQueueInvalidState indicates the queue is in an invalid state.
+	// ErrQueueInvalidState indicates that the queue is in an invalid
+	// operational state for consumption.
 	ErrQueueInvalidState = errors.New("queue is in invalid state")
 )

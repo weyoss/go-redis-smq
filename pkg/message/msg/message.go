@@ -20,15 +20,16 @@ import (
 )
 
 // ProducibleMessage configures a message for production to queues or exchanges.
-// Uses a builder pattern for fluent configuration.
+//
+// It uses a builder pattern for fluent configuration.
 //
 // Example:
 //
-//	msg := message.New().
+//	msg := msg.New().
 //	    SetBody(map[string]interface{}{"userId": 123}).
 //	    SetQueue(queueParams).
 //	    SetTTL(5 * time.Minute).
-//	    SetPriority(message.PriorityHigh)
+//	    SetPriority(msg.PriorityHigh)
 type ProducibleMessage struct {
 	createdAt             time.Time
 	ttl                   time.Duration
@@ -62,6 +63,7 @@ func New() *ProducibleMessage {
 }
 
 // SetDefaultConsumeOptions sets the default options for all future messages.
+// Only non-negative values are applied.
 func SetDefaultConsumeOptions(opts ConsumeOptions) {
 	if opts.TTL >= 0 {
 		defaultOptions.TTL = opts.TTL
@@ -83,7 +85,8 @@ func (m *ProducibleMessage) CreatedAt() time.Time { return m.createdAt }
 // TTL returns the time-to-live duration.
 func (m *ProducibleMessage) TTL() time.Duration { return m.ttl }
 
-// SetTTL sets the time-to-live for the message (0 = no expiration).
+// SetTTL sets the time-to-live for the message. Negative values are treated
+// as zero (no expiration).
 func (m *ProducibleMessage) SetTTL(ttl time.Duration) *ProducibleMessage {
 	if ttl < 0 {
 		ttl = 0
@@ -95,7 +98,8 @@ func (m *ProducibleMessage) SetTTL(ttl time.Duration) *ProducibleMessage {
 // RetryThreshold returns the maximum retry attempts.
 func (m *ProducibleMessage) RetryThreshold() int { return m.retryThreshold }
 
-// SetRetryThreshold sets the maximum number of retry attempts (0 = no retries).
+// SetRetryThreshold sets the maximum number of retry attempts.
+// Negative values are treated as zero.
 func (m *ProducibleMessage) SetRetryThreshold(threshold int) *ProducibleMessage {
 	if threshold < 0 {
 		threshold = 0
@@ -108,6 +112,7 @@ func (m *ProducibleMessage) SetRetryThreshold(threshold int) *ProducibleMessage 
 func (m *ProducibleMessage) RetryDelay() time.Duration { return m.retryDelay }
 
 // SetRetryDelay sets the delay between retry attempts.
+// Negative values are treated as zero.
 func (m *ProducibleMessage) SetRetryDelay(delay time.Duration) *ProducibleMessage {
 	if delay < 0 {
 		delay = 0
@@ -119,7 +124,8 @@ func (m *ProducibleMessage) SetRetryDelay(delay time.Duration) *ProducibleMessag
 // ConsumeTimeout returns the consumption timeout.
 func (m *ProducibleMessage) ConsumeTimeout() time.Duration { return m.consumeTimeout }
 
-// SetConsumeTimeout sets the maximum time for message consumption (0 = no timeout).
+// SetConsumeTimeout sets the maximum time for message consumption.
+// Negative values are treated as zero.
 func (m *ProducibleMessage) SetConsumeTimeout(timeout time.Duration) *ProducibleMessage {
 	if timeout < 0 {
 		timeout = 0
@@ -131,13 +137,13 @@ func (m *ProducibleMessage) SetConsumeTimeout(timeout time.Duration) *Producible
 // Body returns the message payload.
 func (m *ProducibleMessage) Body() interface{} { return m.body }
 
-// SetBody sets the message payload (any JSON-serializable value).
+// SetBody sets the message payload. The payload must be JSON-serializable.
 func (m *ProducibleMessage) SetBody(body interface{}) *ProducibleMessage {
 	m.body = body
 	return m
 }
 
-// Priority returns the message priority.
+// Priority returns the message priority, or nil if not set.
 func (m *ProducibleMessage) Priority() *MessagePriority { return m.priority }
 
 // SetPriority sets the priority level for the message.
@@ -160,7 +166,8 @@ func (m *ProducibleMessage) ScheduledCron() string { return m.scheduledCron }
 
 // SetScheduledCron sets a CRON expression for scheduled delivery.
 // The expression is validated at set time using the internal CRON validator.
-// Invalid expressions are silently ignored to maintain builder pattern compatibility.
+// Invalid expressions are silently ignored to maintain builder pattern
+// compatibility.
 func (m *ProducibleMessage) SetScheduledCron(cronExpr string) *ProducibleMessage {
 	expr := strings.TrimSpace(cronExpr)
 	if expr == "" {
@@ -173,10 +180,11 @@ func (m *ProducibleMessage) SetScheduledCron(cronExpr string) *ProducibleMessage
 	return m
 }
 
-// ScheduledDelay returns the scheduled delay.
+// ScheduledDelay returns the scheduled delay, or nil if not set.
 func (m *ProducibleMessage) ScheduledDelay() *time.Duration { return m.scheduledDelay }
 
 // SetScheduledDelay sets a delay before initial delivery.
+// Negative values are treated as zero.
 func (m *ProducibleMessage) SetScheduledDelay(delay time.Duration) *ProducibleMessage {
 	if delay < 0 {
 		delay = 0
@@ -185,10 +193,13 @@ func (m *ProducibleMessage) SetScheduledDelay(delay time.Duration) *ProducibleMe
 	return m
 }
 
-// ScheduledRepeatPeriod returns the repeat period.
-func (m *ProducibleMessage) ScheduledRepeatPeriod() *time.Duration { return m.scheduledRepeatPeriod }
+// ScheduledRepeatPeriod returns the repeat period, or nil if not set.
+func (m *ProducibleMessage) ScheduledRepeatPeriod() *time.Duration {
+	return m.scheduledRepeatPeriod
+}
 
 // SetScheduledRepeatPeriod sets the repeat period for scheduled delivery.
+// Negative values are treated as zero.
 func (m *ProducibleMessage) SetScheduledRepeatPeriod(period time.Duration) *ProducibleMessage {
 	if period < 0 {
 		period = 0
@@ -201,6 +212,7 @@ func (m *ProducibleMessage) SetScheduledRepeatPeriod(period time.Duration) *Prod
 func (m *ProducibleMessage) ScheduledRepeat() int { return m.scheduledRepeat }
 
 // SetScheduledRepeat sets the number of times to repeat after initial delivery.
+// Negative values are treated as zero.
 func (m *ProducibleMessage) SetScheduledRepeat(repeat int) *ProducibleMessage {
 	if repeat < 0 {
 		repeat = 0
@@ -218,13 +230,14 @@ func (m *ProducibleMessage) ResetScheduledParams() *ProducibleMessage {
 	return m
 }
 
-// Exchange returns the exchange configuration.
+// Exchange returns the exchange configuration, if any.
 func (m *ProducibleMessage) Exchange() *x.ExchangeParams { return m.exchange }
 
 // ExchangeRoutingKey returns the exchange routing key.
 func (m *ProducibleMessage) ExchangeRoutingKey() string { return m.exchangeRoutingKey }
 
 // SetDirectExchange sets a direct exchange for routing.
+// It clears any previously set queue.
 func (m *ProducibleMessage) SetDirectExchange(params *x.ExchangeParams) *ProducibleMessage {
 	m.exchange = params
 	m.queue = nil
@@ -233,6 +246,7 @@ func (m *ProducibleMessage) SetDirectExchange(params *x.ExchangeParams) *Produci
 }
 
 // SetFanoutExchange sets a fanout exchange for broadcasting.
+// It clears any previously set queue.
 func (m *ProducibleMessage) SetFanoutExchange(params *x.ExchangeParams) *ProducibleMessage {
 	m.exchange = params
 	m.queue = nil
@@ -241,6 +255,7 @@ func (m *ProducibleMessage) SetFanoutExchange(params *x.ExchangeParams) *Produci
 }
 
 // SetTopicExchange sets a topic exchange for pattern routing.
+// It clears any previously set queue.
 func (m *ProducibleMessage) SetTopicExchange(params *x.ExchangeParams) *ProducibleMessage {
 	m.exchange = params
 	m.queue = nil
@@ -254,11 +269,11 @@ func (m *ProducibleMessage) SetExchangeRoutingKey(key string) *ProducibleMessage
 	return m
 }
 
-// Queue returns the target queue.
+// Queue returns the target queue, if any.
 func (m *ProducibleMessage) Queue() *q.QueueParams { return m.queue }
 
 // SetQueue sets the target queue for direct delivery.
-// Clears any previously set exchange.
+// It clears any previously set exchange.
 func (m *ProducibleMessage) SetQueue(params *q.QueueParams) *ProducibleMessage {
 	m.queue = params
 	m.exchange = nil

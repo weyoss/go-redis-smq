@@ -8,18 +8,20 @@
  *
  */
 
+// Package cfg defines public configuration types and sentinel errors used by
+// RedisSMQ's configuration API.
 package cfg
 
 import "errors"
 
-var (
-	// ErrNotInitialized indicates config.Init() has not been called.
-	ErrNotInitialized = errors.New("config not initialized")
+// ErrNotInitialized indicates that the configuration system has not been
+// initialized. Call config.Init() before using config.Get or config.Save.
+var ErrNotInitialized = errors.New("config not initialized")
 
-	// ErrVersionMismatch indicates the config was modified by another instance
-	// between reading and saving. Caller should re-read and retry.
-	ErrVersionMismatch = errors.New("config version mismatch — modified by another instance")
+// ErrVersionMismatch indicates that the configuration was modified by another
+// instance between reading and saving. The caller should re-read the current
+// configuration and retry the operation.
+var ErrVersionMismatch = errors.New("config version mismatch — modified by another instance")
 
-	// ErrInvalidConfig indicates the configuration passed to Save is invalid.
-	ErrInvalidConfig = errors.New("invalid configuration")
-)
+// ErrInvalidConfig indicates that the configuration passed to Save is invalid.
+var ErrInvalidConfig = errors.New("invalid configuration")

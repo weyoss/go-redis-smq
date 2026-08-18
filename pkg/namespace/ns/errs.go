@@ -8,14 +8,20 @@
  *
  */
 
+// Package ns defines namespace-specific sentinel errors and validation errors
+// used by the public namespace API.
 package ns
 
 import "errors"
 
-// Sentinel errors.
-var (
-	ErrNotFound     = errors.New("namespace not found")
-	ErrInvalidName  = errors.New("invalid namespace name")
-	ErrNameRequired = errors.New("namespace name is required")
-	ErrNotEmpty     = errors.New("namespace is not empty")
-)
+// ErrNotFound indicates that the requested namespace does not exist.
+var ErrNotFound = errors.New("namespace not found")
+
+// ErrInvalidName indicates that the namespace name is not valid.
+var ErrInvalidName = errors.New("invalid namespace name")
+
+// ErrNameRequired indicates that the namespace name is empty.
+var ErrNameRequired = errors.New("namespace name is required")
+
+// ErrNotEmpty indicates that the namespace still contains queues or exchanges.
+var ErrNotEmpty = errors.New("namespace is not empty")

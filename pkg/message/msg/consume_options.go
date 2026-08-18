@@ -10,22 +10,34 @@
 
 package msg
 
-// ConsumeOptions defines default message consumption behavior.
+// ConsumeOptions defines default message consumption behaviour.
+//
+// These defaults are applied to every new message created with msg.New()
+// unless overridden by calling msg.SetDefaultConsumeOptions.
 type ConsumeOptions struct {
-	// TTL is the time-to-live in milliseconds (0 = no expiration).
+	// TTL is the default time-to-live in milliseconds.
+	// A value of 0 means messages do not expire.
 	TTL int64 `json:"ttl"`
 
-	// RetryThreshold is the maximum retry attempts (0 = no retries).
+	// RetryThreshold is the default maximum number of retry attempts.
+	// A value of 0 means messages are not retried.
 	RetryThreshold int `json:"retryThreshold"`
 
-	// RetryDelay is the delay between retries in milliseconds.
+	// RetryDelay is the default delay between retries in milliseconds.
 	RetryDelay int64 `json:"retryDelay"`
 
-	// ConsumeTimeout is the maximum consumption time in milliseconds (0 = no timeout).
+	// ConsumeTimeout is the default maximum consumption time in milliseconds.
+	// A value of 0 means no timeout is enforced.
 	ConsumeTimeout int64 `json:"consumeTimeout"`
 }
 
-// DefaultConsumeOptions returns sensible defaults.
+// DefaultConsumeOptions returns sensible default consumption options.
+//
+// The defaults are:
+//   - TTL: 0 (no expiration)
+//   - RetryThreshold: 3
+//   - RetryDelay: 60000 ms (1 minute)
+//   - ConsumeTimeout: 0 (no timeout)
 func DefaultConsumeOptions() ConsumeOptions {
 	return ConsumeOptions{
 		TTL:            0,

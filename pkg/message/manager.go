@@ -8,6 +8,11 @@
  *
  */
 
+// Package message provides a public API for managing RedisSMQ messages.
+//
+// It includes operations for retrieving, deleting, requeueing, inspecting
+// status and state, and accessing unacknowledgment history. All functions
+// accept and return only public types.
 package message
 
 import (
@@ -18,13 +23,15 @@ import (
 )
 
 // Manager provides message lifecycle operations.
-// Handles getting, deleting, and requeueing messages by ID,
-// plus status and state inspection.
+//
+// It allows callers to retrieve messages by ID, delete one or many messages,
+// requeue dead-lettered or acknowledged messages, inspect status and state,
+// and read unacknowledgment history when audit is enabled.
 type Manager struct {
 	store *internalMessage.Store
 }
 
-// NewManager creates a new message manager.
+// NewManager creates a new message manager with default codecs.
 func NewManager() *Manager {
 	internalMgr := internalMessage.NewManager()
 	return &Manager{
@@ -71,6 +78,7 @@ func (m *Manager) Get(ctx context.Context, messageID string) (*msg.Transferable,
 }
 
 // GetAll retrieves multiple messages by their IDs.
+//
 // Messages that are not found are silently skipped.
 //
 // Example:
@@ -100,6 +108,7 @@ func (m *Manager) Delete(ctx context.Context, messageID string) (*msg.DeleteResp
 }
 
 // DeleteAll removes multiple messages by their IDs.
+//
 // Messages are grouped by queue and consumer group for efficient deletion.
 //
 // Example:
@@ -114,6 +123,7 @@ func (m *Manager) DeleteAll(ctx context.Context, messageIDs []string) (*msg.Dele
 }
 
 // Requeue creates a new copy of a message for reprocessing.
+//
 // The original message must be in Acknowledged or DeadLettered status.
 // Returns the new message ID.
 //
@@ -125,6 +135,7 @@ func (m *Manager) Requeue(ctx context.Context, messageID string) (string, error)
 }
 
 // UnacknowledgmentHistory retrieves the unacknowledgment history for a message.
+//
 // Requires message audit to be enabled in configuration.
 //
 // Example:
