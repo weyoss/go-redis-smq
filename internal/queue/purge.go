@@ -32,6 +32,7 @@ const (
 	defaultPurgeBatchDelay  = 5 * time.Second
 	workerHeartbeatInterval = 10 * time.Second
 	workerHeartbeatTTL      = 30 * time.Second
+	pollInterval            = 1 * time.Second
 )
 
 type PurgeManager struct {
@@ -60,15 +61,15 @@ func NewPurgeManager(state *State, messageStore *internalMessage.Store) *PurgeMa
 var (
 	purgeWorkerMu      sync.Mutex
 	purgeWorkerCancel  context.CancelFunc
-	purgeWorkerClient  *rdb.Client
 	purgeWorkerDone    chan struct{}
 	purgeWorkerStarted bool
 )
 
-// StartPurgeWorker creates a dedicated Redis client for blocking commands.
-// On shutdown, closing this client terminates the TCP connection,
-// immediately unblocking any pending BRPopLPush.
-// Safe to call multiple times — subsequent calls are no-ops.
+// StartPurgeWorker starts the background purge worker.
+//
+// It uses a non‑blocking RPOPLPUSH polling loop instead of a blocking
+// BRPOPLPUSH. This avoids go‑redis blocking‑command deadlocks during
+// shutdown and allows RedisSMQ.Shutdown to wait for the worker cleanly.
 func StartPurgeWorker(ctx context.Context) func() {
 	purgeWorkerMu.Lock()
 	defer purgeWorkerMu.Unlock()
@@ -83,24 +84,13 @@ func StartPurgeWorker(ctx context.Context) func() {
 
 	pm := NewManager().Purge()
 
-	// Create a dedicated Redis client for the purge worker.
-	// BRPopLPush blocks the connection and does not respect context cancellation,
-	// so we need a separate client that can be closed to unblock it.
-	opts := redisClient.Client().Options()
-	purgeWorkerClient = rdb.NewClient(opts)
-
 	workerCtx, cancel := context.WithCancel(ctx)
 	purgeWorkerCancel = cancel
 	purgeWorkerDone = make(chan struct{})
 
 	go func() {
 		defer close(purgeWorkerDone)
-		defer func() {
-			if purgeWorkerClient != nil {
-				purgeWorkerClient.Close()
-			}
-		}()
-		pm.work(workerCtx, purgeWorkerClient)
+		pm.work(workerCtx)
 	}()
 
 	purgeWorkerStarted = true
@@ -112,22 +102,24 @@ func StartPurgeWorker(ctx context.Context) func() {
 	}
 }
 
+// stopPurgeWorker cancels the worker context and waits for the worker
+// goroutine to exit. Because the worker no longer uses a blocking Redis
+// command, this returns quickly and never hangs.
 func stopPurgeWorker() {
-	// 1. Close the dedicated client first — unblocks any pending BRPopLPush
-	if purgeWorkerClient != nil {
-		purgeWorkerClient.Close()
-		purgeWorkerClient = nil
-	}
-	// 2. Cancel context — ensures the error handler sees ctx.Done() immediately
 	if purgeWorkerCancel != nil {
 		purgeWorkerCancel()
 		purgeWorkerCancel = nil
 	}
-	// 3. Wait for the goroutine to fully exit
+
 	if purgeWorkerDone != nil {
-		<-purgeWorkerDone
+		select {
+		case <-purgeWorkerDone:
+		case <-time.After(5 * time.Second):
+			// Safety timeout; should never be reached.
+		}
 		purgeWorkerDone = nil
 	}
+
 	purgeWorkerStarted = false
 }
 
@@ -177,7 +169,7 @@ func (pm *PurgeManager) Cancel(ctx context.Context, queueParams *q.QueueParams, 
 	return nil
 }
 
-func (pm *PurgeManager) work(ctx context.Context, redisClient *rdb.Client) {
+func (pm *PurgeManager) work(ctx context.Context) {
 	pm.recoverStuckJobs(ctx)
 	go pm.heartbeatLoop(ctx)
 
@@ -191,17 +183,24 @@ func (pm *PurgeManager) work(ctx context.Context, redisClient *rdb.Client) {
 		default:
 		}
 
-		jobID, err := acquire(ctx, redisClient)
+		jobID, err := acquire(ctx)
 		if err != nil {
+			if err == rdb.Nil {
+				// No job available. Wait a bit or stop on cancel.
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(pollInterval):
+				}
+				continue
+			}
+
 			pm.log.Debug("acquire job failed", "error", err)
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second):
 			}
-			continue
-		}
-		if jobID == "" {
 			continue
 		}
 
@@ -440,11 +439,12 @@ func resolveCategoryKey(filter q.BrowseFilter, qKey keys.Queue) string {
 	}
 }
 
-func acquire(ctx context.Context, conn *rdb.Client) (string, error) {
-	return conn.BRPopLPush(
+// acquire uses a non‑blocking atomic pop‑push. It returns redis.Nil when
+// no job is available.
+func acquire(ctx context.Context) (string, error) {
+	return redisClient.Client().RPopLPush(
 		ctx,
 		keys.System{}.PendingPurgeJobs(),
 		keys.System{}.ActivePurgeJobs(),
-		0,
 	).Result()
 }
