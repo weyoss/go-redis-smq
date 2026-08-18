@@ -12,14 +12,9 @@ package msg
 
 import "errors"
 
-var (
-	ErrNotFound                   = errors.New("message not found")
-	ErrNotRequeuable              = errors.New("message is not requeuable")
-	ErrExchangeRequired           = errors.New("exchange required for routing key")
-	ErrDestinationQueueAlreadySet = errors.New("destination queue already set")
-	ErrDestinationQueueRequired   = errors.New("destination queue required")
-	ErrInvalidPriority            = errors.New("invalid message priority")
-	ErrInvalidCronExpression      = errors.New("invalid cron expression")
-	ErrMessageExpired             = errors.New("message has expired")
-	ErrRetryThresholdExceeded     = errors.New("retry threshold exceeded")
-)
+// ErrNotFound indicates that the requested message does not exist.
+var ErrNotFound = errors.New("message not found")
+
+// ErrNotRequeuable indicates that the message cannot be requeued because
+// its current status is not Acknowledged or DeadLettered.
+var ErrNotRequeuable = errors.New("message is not requeuable")
