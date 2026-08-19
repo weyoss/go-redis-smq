@@ -8,10 +8,6 @@
  *
  */
 
-// Package events provides public subscription functions for RedisSMQ producer events.
-//
-// These functions automatically start the public user event bus on first use.
-// No explicit initialisation is required.
 package events
 
 import (

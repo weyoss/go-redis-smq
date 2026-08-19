@@ -8,11 +8,6 @@
  *
  */
 
-// Package message provides a public API for managing RedisSMQ messages.
-//
-// It includes operations for retrieving, deleting, requeueing, inspecting
-// status and state, and accessing unacknowledgment history. All functions
-// accept and return only public types.
 package message
 
 import (
