@@ -49,3 +49,34 @@ jobs:
       - name: Run benchmarks (optional)
         if: github.event_name == 'push' && github.ref == 'refs/heads/next'
         run: go test -bench=. -benchmem -run=^$ ./benchmark/... -timeout 30m
+
+  pkg-go-dev-refresh:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: success() && github.event_name == 'push' && (startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.ref == 'refs/heads/next')
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine version
+        id: version
+        env:
+          REF: ${{ github.ref }}
+          REF_TYPE: ${{ github.ref_type }}
+          COMMIT_SHA: ${{ github.sha }}
+        run: |
+          if [ "$REF_TYPE" = "tag" ]; then
+            VERSION="${REF#refs/tags/}"
+          else
+            SHORT_SHA=$(echo "${COMMIT_SHA}" | cut -c1-12)
+            TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
+            VERSION="v0.0.0-${TIMESTAMP}-${SHORT_SHA}"
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Trigger pkg.go.dev refresh
+        env:
+          VERSION: ${{ steps.version.outputs.VERSION }}
+        run: |
+          echo "Requesting pkg.go.dev to index version ${VERSION}"
+          curl -fsSL "https://proxy.golang.org/github.com/weyoss/go-redis-smq/@v/${VERSION}.info"
