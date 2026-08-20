@@ -69,8 +69,9 @@ jobs:
             VERSION="${REF#refs/tags/}"
           else
             SHORT_SHA=$(echo "${COMMIT_SHA}" | cut -c1-12)
-            TIMESTAMP=$(date -u +%Y%m%d%H%M%S)
-            VERSION="v0.0.0-${TIMESTAMP}-${SHORT_SHA}"
+            # Get the commit timestamp in UTC compact form
+            UTC_TS=$(git show -s --format=%ct | xargs -I{} date -u -d @{} +%Y%m%d%H%M%S)
+            VERSION="v0.0.0-${UTC_TS}-${SHORT_SHA}"
           fi
           echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
 
