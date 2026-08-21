@@ -177,3 +177,11 @@ func DeleteAll(ctx context.Context, messageIDs []string) (*msg.DeleteResponse, e
 func Requeue(ctx context.Context, messageID string) (string, error) {
 	return defaultManager.Requeue(ctx, messageID)
 }
+
+// UnacknowledgmentHistory retrieves the unacknowledgment history for a message
+// using the default manager.
+//
+// Requires message audit to be enabled in configuration.
+func UnacknowledgmentHistory(ctx context.Context, messageID string) ([]string, error) {
+	return defaultManager.UnacknowledgmentHistory(ctx, messageID)
+}
