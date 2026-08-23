@@ -8,9 +8,7 @@
  *
  */
 
-// Package ns defines namespace-specific sentinel errors and validation errors
-// used by the public namespace API.
-package ns
+package namespace
 
 import "errors"
 

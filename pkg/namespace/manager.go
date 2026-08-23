@@ -20,7 +20,6 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/namespace/ns"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
@@ -76,7 +75,7 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 		return err
 	}
 	if !exists {
-		return ns.ErrNotFound
+		return ErrNotFound
 	}
 
 	// Delete all queues in the namespace
@@ -87,7 +86,7 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 
 	for _, qp := range queues {
 		if err := m.queueStore.Delete(ctx, &qp); err != nil {
-			if errors.Is(err, ns.ErrNotFound) {
+			if errors.Is(err, ErrNotFound) {
 				continue
 			}
 			return fmt.Errorf("delete queue %s: %w", qp.Name(), err)
@@ -102,7 +101,7 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 
 	for _, ep := range exchanges {
 		if err := m.exchangeStore.Delete(ctx, &ep); err != nil {
-			if errors.Is(err, ns.ErrNotFound) {
+			if errors.Is(err, ErrNotFound) {
 				continue
 			}
 			return fmt.Errorf("delete exchange %s: %w", ep.Name(), err)
@@ -138,12 +137,12 @@ func (m *Manager) ListExchanges(ctx context.Context, name string) ([]x.ExchangeP
 // validate validates a namespace name.
 func validate(name string) (string, error) {
 	if name == "" {
-		return "", ns.ErrNameRequired
+		return "", ErrNameRequired
 	}
 
 	validName, err := keys.ValidateKey(name)
 	if err != nil {
-		return "", fmt.Errorf("%w: %s", ns.ErrInvalidName, err.Error())
+		return "", fmt.Errorf("%w: %s", ErrInvalidName, err.Error())
 	}
 
 	return validName, nil
