@@ -8,7 +8,7 @@
  *
  */
 
-package events
+package producer
 
 import (
 	"context"

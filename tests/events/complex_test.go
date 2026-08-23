@@ -28,7 +28,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	consumerEventsPkg "github.com/weyoss/go-redis-smq/pkg/consumer/events"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	producerEventsPkg "github.com/weyoss/go-redis-smq/pkg/producer/events"
+	"github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 	queueEventsPkg "github.com/weyoss/go-redis-smq/pkg/queue/events"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
@@ -48,14 +48,14 @@ func TestComplexEvents_NormalFlow(t *testing.T) {
 	})
 	defer sub1.Unsubscribe()
 
-	sub2, _ := producerEventsPkg.SubscribeUp(func(p internalProducerEvents.LifecyclePayload) {
+	sub2, _ := producer.SubscribeUp(func(p internalProducerEvents.LifecyclePayload) {
 		mu.Lock()
 		eventTypes["producer.up"]++
 		mu.Unlock()
 	})
 	defer sub2.Unsubscribe()
 
-	sub3, _ := producerEventsPkg.SubscribeMessagePublished(func(p internalProducerEvents.MessagePublishedPayload) {
+	sub3, _ := producer.SubscribeMessagePublished(func(p internalProducerEvents.MessagePublishedPayload) {
 		mu.Lock()
 		eventTypes["producer.messagePublished"]++
 		mu.Unlock()
@@ -323,14 +323,14 @@ func TestComplexEvents_CrossDomainOrdering(t *testing.T) {
 	var mu sync.Mutex
 	var eventOrder []string
 
-	sub1, _ := producerEventsPkg.SubscribeUp(func(p internalProducerEvents.LifecyclePayload) {
+	sub1, _ := producer.SubscribeUp(func(p internalProducerEvents.LifecyclePayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "producer.up")
 		mu.Unlock()
 	})
 	defer sub1.Unsubscribe()
 
-	sub2, _ := producerEventsPkg.SubscribeMessagePublished(func(p internalProducerEvents.MessagePublishedPayload) {
+	sub2, _ := producer.SubscribeMessagePublished(func(p internalProducerEvents.MessagePublishedPayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "producer.published")
 		mu.Unlock()

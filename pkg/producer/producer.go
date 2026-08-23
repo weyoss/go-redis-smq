@@ -35,7 +35,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/producer/p"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
@@ -164,7 +163,7 @@ func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]
 
 	if !running {
 		prod.log.Warn("produce called but producer not running")
-		return nil, p.ErrNotRunning
+		return nil, ErrNotRunning
 	}
 
 	if queueParams := m.Queue(); queueParams != nil {
@@ -175,7 +174,7 @@ func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]
 	exchangeParams := m.Exchange()
 	if exchangeParams == nil {
 		prod.log.Warn("produce called without queue or exchange")
-		return nil, p.ErrExchangeRequired
+		return nil, ErrExchangeRequired
 	}
 
 	prod.log.Debug("producing to exchange",
@@ -256,7 +255,7 @@ func (prod *Producer) produceToExchange(ctx context.Context, m *msg.ProducibleMe
 			"exchange", exchangeParams.String(),
 			"routingKey", m.ExchangeRoutingKey(),
 		)
-		return nil, p.ErrNoMatchingQueues
+		return nil, ErrNoMatchingQueues
 	}
 
 	prod.log.Debug("matched exchange queues",
@@ -287,13 +286,13 @@ func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x
 	switch exchangeParams.Type() {
 	case x.TypeDirect:
 		if routingKey == "" {
-			return nil, p.ErrRoutingKeyRequired
+			return nil, ErrRoutingKeyRequired
 		}
 		return prod.directExchange.MatchQueues(ctx, exchangeParams, routingKey)
 
 	case x.TypeTopic:
 		if routingKey == "" {
-			return nil, p.ErrRoutingKeyRequired
+			return nil, ErrRoutingKeyRequired
 		}
 		return prod.topicExchange.MatchQueues(ctx, exchangeParams, routingKey)
 
@@ -382,19 +381,19 @@ func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.En
 			"queue", queueParams.String(),
 			"group", envelope.ConsumerGroupID(),
 		)
-		return "", p.ErrConsumerGroupNotFound
+		return "", ErrConsumerGroupNotFound
 	case "MESSAGE_PRIORITY_REQUIRED":
 		prod.log.Warn("message priority required", "queue", queueParams.String())
-		return "", p.ErrPriorityRequired
+		return "", ErrPriorityRequired
 	case "MESSAGE_ALREADY_EXISTS":
 		prod.log.Warn("message already exists", "messageID", messageID)
-		return "", p.ErrMessageAlreadyExists
+		return "", ErrMessageAlreadyExists
 	case "PRIORITY_QUEUING_NOT_ENABLED":
 		prod.log.Warn("priority queuing not enabled", "queue", queueParams.String())
-		return "", p.ErrPriorityNotEnabled
+		return "", ErrPriorityNotEnabled
 	case "UNKNOWN_QUEUE_TYPE":
 		prod.log.Warn("unknown queue type", "queue", queueParams.String())
-		return "", p.ErrUnknownQueueType
+		return "", ErrUnknownQueueType
 	case "QUEUE_STOPPED":
 		prod.log.Warn("queue stopped", "queue", queueParams.String())
 		return "", q.ErrNotOperational
@@ -403,7 +402,7 @@ func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.En
 		return "", q.ErrLocked
 	case "QUEUE_INVALID_STATE":
 		prod.log.Warn("queue in invalid state", "queue", queueParams.String())
-		return "", p.ErrInvalidQueueState
+		return "", ErrInvalidQueueState
 	default:
 		prod.log.Error("unexpected publish reply",
 			"messageID", messageID,

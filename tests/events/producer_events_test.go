@@ -19,7 +19,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/producer/events"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	producerEvents "github.com/weyoss/go-redis-smq/pkg/producer/events"
+	"github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
@@ -30,28 +30,28 @@ func TestProducerEvents_Lifecycle(t *testing.T) {
 	var mu sync.Mutex
 	var lifecycle []string
 
-	subUp, _ := producerEvents.SubscribeUp(func(p events.LifecyclePayload) {
+	subUp, _ := producer.SubscribeUp(func(p events.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "up:"+p.ProducerID)
 		mu.Unlock()
 	})
 	defer subUp.Unsubscribe()
 
-	subDown, _ := producerEvents.SubscribeDown(func(p events.LifecyclePayload) {
+	subDown, _ := producer.SubscribeDown(func(p events.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "down:"+p.ProducerID)
 		mu.Unlock()
 	})
 	defer subDown.Unsubscribe()
 
-	subGoingUp, _ := producerEvents.SubscribeGoingUp(func(p events.LifecyclePayload) {
+	subGoingUp, _ := producer.SubscribeGoingUp(func(p events.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "goingUp:"+p.ProducerID)
 		mu.Unlock()
 	})
 	defer subGoingUp.Unsubscribe()
 
-	subGoingDown, _ := producerEvents.SubscribeGoingDown(func(p events.LifecyclePayload) {
+	subGoingDown, _ := producer.SubscribeGoingDown(func(p events.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "goingDown:"+p.ProducerID)
 		mu.Unlock()
@@ -118,7 +118,7 @@ func TestProducerEvents_MessagePublished_DirectToQueue(t *testing.T) {
 	wg.Add(1)
 
 	var received events.MessagePublishedPayload
-	sub, err := producerEvents.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
+	sub, err := producer.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -168,7 +168,7 @@ func TestProducerEvents_MessagePublished_Scheduled(t *testing.T) {
 	var mu sync.Mutex
 	var publishedIDs []string
 
-	sub, _ := producerEvents.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
+	sub, _ := producer.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
 		mu.Lock()
 		publishedIDs = append(publishedIDs, p.MessageID)
 		mu.Unlock()
@@ -210,7 +210,7 @@ func TestProducerEvents_MessagePublished_ProducerID(t *testing.T) {
 	wg.Add(1)
 
 	var received events.MessagePublishedPayload
-	sub, _ := producerEvents.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
+	sub, _ := producer.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -259,9 +259,9 @@ func TestProducerEvents_MultipleSubscribers(t *testing.T) {
 		wg.Done()
 	}
 
-	sub1, _ := producerEvents.SubscribeMessagePublished(handler)
-	sub2, _ := producerEvents.SubscribeMessagePublished(handler)
-	sub3, _ := producerEvents.SubscribeMessagePublished(handler)
+	sub1, _ := producer.SubscribeMessagePublished(handler)
+	sub2, _ := producer.SubscribeMessagePublished(handler)
+	sub3, _ := producer.SubscribeMessagePublished(handler)
 	defer sub1.Unsubscribe()
 	defer sub2.Unsubscribe()
 	defer sub3.Unsubscribe()
@@ -301,7 +301,7 @@ func TestProducerEvents_MultipleProducers(t *testing.T) {
 	var mu sync.Mutex
 	producerIDs := make(map[string]bool)
 
-	sub, _ := producerEvents.SubscribeUp(func(p events.LifecyclePayload) {
+	sub, _ := producer.SubscribeUp(func(p events.LifecyclePayload) {
 		mu.Lock()
 		producerIDs[p.ProducerID] = true
 		mu.Unlock()
@@ -337,7 +337,7 @@ func TestProducerEvents_Unsubscribe(t *testing.T) {
 	var mu sync.Mutex
 	var msgCount int
 
-	sub, _ := producerEvents.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
+	sub, _ := producer.SubscribeMessagePublished(func(p events.MessagePublishedPayload) {
 		mu.Lock()
 		msgCount++
 		mu.Unlock()

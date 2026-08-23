@@ -8,7 +8,7 @@
  *
  */
 
-package p
+package producer
 
 import "errors"
 
