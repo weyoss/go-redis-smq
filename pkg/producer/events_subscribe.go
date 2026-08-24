@@ -11,24 +11,32 @@
 package producer
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	internalEvents "github.com/weyoss/go-redis-smq/internal/producer/events"
+	"github.com/weyoss/go-redis-smq/pkg/eventbus"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
-// Re-exported payload types. These aliases allow external users to refer to
-// event payload types without importing internal packages.
+// Public event names.
+const (
+	EventUp               = "producer.up"
+	EventDown             = "producer.down"
+	EventGoingUp          = "producer.goingUp"
+	EventGoingDown        = "producer.goingDown"
+	EventMessagePublished = "producer.messagePublished"
+)
 
-// LifecyclePayload is the payload for producer lifecycle events such as
-// producer.up, producer.down, producer.goingUp, and producer.goingDown.
-type LifecyclePayload = internalEvents.LifecyclePayload
+// Public payload types.
+type LifecyclePayload struct {
+	ProducerID string
+}
 
-// MessagePublishedPayload is the payload for the producer.messagePublished
-// event.
-type MessagePublishedPayload = internalEvents.MessagePublishedPayload
+type MessagePublishedPayload struct {
+	MessageID  string
+	Queue      q.QueueParams
+	ProducerID string
+}
 
 func decodeArg(arg interface{}, target interface{}) error {
 	data, err := json.Marshal(arg)
@@ -39,8 +47,11 @@ func decodeArg(arg interface{}, target interface{}) error {
 }
 
 // SubscribeUp registers a handler for the producer.up event.
-func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeUp(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("producer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -51,12 +62,15 @@ func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription
 			return
 		}
 		handler(LifecyclePayload{ProducerID: producerID})
-	}, internalEvents.EventUp)
+	}, EventUp)
 }
 
 // SubscribeDown registers a handler for the producer.down event.
-func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeDown(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("producer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -67,12 +81,15 @@ func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, erro
 			return
 		}
 		handler(LifecyclePayload{ProducerID: producerID})
-	}, internalEvents.EventDown)
+	}, EventDown)
 }
 
 // SubscribeGoingUp registers a handler for the producer.goingUp event.
-func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeGoingUp(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("producer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -83,12 +100,15 @@ func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, e
 			return
 		}
 		handler(LifecyclePayload{ProducerID: producerID})
-	}, internalEvents.EventGoingUp)
+	}, EventGoingUp)
 }
 
 // SubscribeGoingDown registers a handler for the producer.goingDown event.
-func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeGoingDown(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("producer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -99,16 +119,16 @@ func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription,
 			return
 		}
 		handler(LifecyclePayload{ProducerID: producerID})
-	}, internalEvents.EventGoingDown)
+	}, EventGoingDown)
 }
 
 // SubscribeMessagePublished registers a handler for the
 // producer.messagePublished event.
-//
-// The handler receives a MessagePublishedPayload containing the message ID,
-// destination queue, and producer ID.
-func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("producer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 3 {
@@ -134,5 +154,5 @@ func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (*eventbus
 			Queue:      queue,
 			ProducerID: producerID,
 		})
-	}, internalEvents.EventMessagePublished)
+	}, EventMessagePublished)
 }

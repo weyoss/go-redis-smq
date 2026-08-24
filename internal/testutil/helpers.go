@@ -15,7 +15,7 @@ import (
 	"testing"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/producer"
+	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -27,7 +27,7 @@ func CreateQueue(tb testing.TB, ctx context.Context, params *q.QueueParams, queu
 	}
 }
 
-func StartProducer(tb testing.TB, ctx context.Context) *producer.Producer {
+func StartProducer(tb testing.TB, ctx context.Context) publicproducer.Producer {
 	tb.Helper()
 	prod := redissmq.NewProducer()
 	if err := prod.Run(ctx); err != nil {

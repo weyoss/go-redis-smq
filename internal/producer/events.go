@@ -8,11 +8,7 @@
  *
  */
 
-// Package events defines internal producer event names and payload types.
-//
-// These events are published through the event multiplexer to the
-// appropriate bus (system or user) according to the event routing policy.
-package events
+package producer
 
 import (
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"

@@ -17,6 +17,7 @@ import (
 
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	internalproducer "github.com/weyoss/go-redis-smq/internal/producer"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
@@ -24,7 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/producer"
+	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 )
 
 // Config is the Redis connection configuration.
@@ -41,13 +42,13 @@ var (
 
 type trackedInstances struct {
 	mu        sync.Mutex
-	producers []*producer.Producer
+	producers []publicproducer.Producer
 	consumers []publicconsumer.Consumer
 }
 
 var instances trackedInstances
 
-func registerProducer(p *producer.Producer) {
+func registerProducer(p publicproducer.Producer) {
 	instances.mu.Lock()
 	defer instances.mu.Unlock()
 	instances.producers = append(instances.producers, p)
@@ -159,7 +160,7 @@ func Shutdown() {
 	instances.mu.Lock()
 	consumers := make([]publicconsumer.Consumer, len(instances.consumers))
 	copy(consumers, instances.consumers)
-	producers := make([]*producer.Producer, len(instances.producers))
+	producers := make([]publicproducer.Producer, len(instances.producers))
 	copy(producers, instances.producers)
 	instances.consumers = nil
 	instances.producers = nil
@@ -191,10 +192,10 @@ func Shutdown() {
 	initialized = false
 }
 
-// NewProducer creates a new producer and registers it for lifecycle
-// management.
-func NewProducer() *producer.Producer {
-	p := producer.New()
+// NewProducer creates a new producer that implements the public producer
+// interface and registers it for lifecycle management.
+func NewProducer() publicproducer.Producer {
+	p := internalproducer.New()
 	registerProducer(p)
 	return p
 }
