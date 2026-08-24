@@ -42,6 +42,10 @@ func RunTestsWithRedis(m *testing.M) {
 	}
 	//log.Println("testutil: RedisSMQ initialized")
 
+	// Initialise the public user event bus for tests that use public
+	// subscription functions.
+	redissmq.InitUserEventBus(ctx)
+
 	//log.Println("testutil: running tests...")
 	code := m.Run()
 	//log.Printf("testutil: tests finished with code %d\n", code)

@@ -20,13 +20,10 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
-	internalConsumerEvents "github.com/weyoss/go-redis-smq/internal/consumer/events"
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	internalProducerEvents "github.com/weyoss/go-redis-smq/internal/producer/events"
-	internalQueueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	consumerEventsPkg "github.com/weyoss/go-redis-smq/pkg/consumer/events"
+	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
+	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
@@ -41,35 +38,35 @@ func TestComplexEvents_NormalFlow(t *testing.T) {
 	var mu sync.Mutex
 	eventTypes := make(map[string]int)
 
-	sub1, _ := queueEventsPkg.SubscribeCreated(func(p internalQueueEvents.CreatedPayload) {
+	sub1, _ := queueEventsPkg.SubscribeCreated(func(p queueEventsPkg.CreatedPayload) {
 		mu.Lock()
 		eventTypes["queue.created"]++
 		mu.Unlock()
 	})
 	defer sub1.Unsubscribe()
 
-	sub2, _ := producer.SubscribeUp(func(p internalProducerEvents.LifecyclePayload) {
+	sub2, _ := producer.SubscribeUp(func(p producer.LifecyclePayload) {
 		mu.Lock()
 		eventTypes["producer.up"]++
 		mu.Unlock()
 	})
 	defer sub2.Unsubscribe()
 
-	sub3, _ := producer.SubscribeMessagePublished(func(p internalProducerEvents.MessagePublishedPayload) {
+	sub3, _ := producer.SubscribeMessagePublished(func(p producer.MessagePublishedPayload) {
 		mu.Lock()
 		eventTypes["producer.messagePublished"]++
 		mu.Unlock()
 	})
 	defer sub3.Unsubscribe()
 
-	sub4, _ := consumerEventsPkg.SubscribeUp(func(p internalConsumerEvents.LifecyclePayload) {
+	sub4, _ := publicConsumer.SubscribeUp(func(p publicConsumer.LifecyclePayload) {
 		mu.Lock()
 		eventTypes["consumer.up"]++
 		mu.Unlock()
 	})
 	defer sub4.Unsubscribe()
 
-	sub5, _ := consumerEventsPkg.SubscribeMessageAcknowledged(func(p internalConsumerEvents.MessagePayload) {
+	sub5, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		eventTypes["consumer.acknowledged"]++
 		mu.Unlock()
@@ -122,28 +119,28 @@ func TestComplexEvents_ErrorFlow(t *testing.T) {
 	var mu sync.Mutex
 	eventTypes := make(map[string]int)
 
-	sub1, _ := consumerEventsPkg.SubscribeMessageUnacknowledged(func(p internalConsumerEvents.MessageUnacknowledgedPayload) {
+	sub1, _ := publicConsumer.SubscribeMessageUnacknowledged(func(p publicConsumer.MessageUnacknowledgedPayload) {
 		mu.Lock()
 		eventTypes["consumer.unacknowledged"]++
 		mu.Unlock()
 	})
 	defer sub1.Unsubscribe()
 
-	sub2, _ := consumerEventsPkg.SubscribeMessageRequeued(func(p internalConsumerEvents.MessagePayload) {
+	sub2, _ := publicConsumer.SubscribeMessageRequeued(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		eventTypes["consumer.requeued"]++
 		mu.Unlock()
 	})
 	defer sub2.Unsubscribe()
 
-	sub3, _ := consumerEventsPkg.SubscribeMessageDeadLettered(func(p internalConsumerEvents.MessageDeadLetteredPayload) {
+	sub3, _ := publicConsumer.SubscribeMessageDeadLettered(func(p publicConsumer.MessageDeadLetteredPayload) {
 		mu.Lock()
 		eventTypes["consumer.deadLettered"]++
 		mu.Unlock()
 	})
 	defer sub3.Unsubscribe()
 
-	sub4, _ := consumerEventsPkg.SubscribeMessageAcknowledged(func(p internalConsumerEvents.MessagePayload) {
+	sub4, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		eventTypes["consumer.acknowledged"]++
 		mu.Unlock()
@@ -196,7 +193,7 @@ func TestComplexEvents_QueueStateChanges(t *testing.T) {
 	var mu sync.Mutex
 	stateChanges := make([]string, 0)
 
-	sub, _ := queueEventsPkg.SubscribeStateChanged(func(p internalQueueEvents.StateChangedPayload) {
+	sub, _ := queueEventsPkg.SubscribeStateChanged(func(p queueEventsPkg.StateChangedPayload) {
 		mu.Lock()
 		stateChanges = append(stateChanges, p.Transition.To.String())
 		mu.Unlock()
@@ -265,8 +262,7 @@ func TestComplexEvents_ConfigUpdateDuringProcessing(t *testing.T) {
 	configUpdated := false
 	messageAcknowledged := false
 
-	// Subscribe to configuration updates on the system bus using the
-	// internal subscription helper.
+	// Subscribe to configuration updates on the system bus using the internal helper.
 	sub1, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		mu.Lock()
 		configUpdated = true
@@ -277,7 +273,7 @@ func TestComplexEvents_ConfigUpdateDuringProcessing(t *testing.T) {
 	}
 	defer sub1.Unsubscribe()
 
-	sub2, _ := consumerEventsPkg.SubscribeMessageAcknowledged(func(p internalConsumerEvents.MessagePayload) {
+	sub2, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		messageAcknowledged = true
 		mu.Unlock()
@@ -323,28 +319,28 @@ func TestComplexEvents_CrossDomainOrdering(t *testing.T) {
 	var mu sync.Mutex
 	var eventOrder []string
 
-	sub1, _ := producer.SubscribeUp(func(p internalProducerEvents.LifecyclePayload) {
+	sub1, _ := producer.SubscribeUp(func(p producer.LifecyclePayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "producer.up")
 		mu.Unlock()
 	})
 	defer sub1.Unsubscribe()
 
-	sub2, _ := producer.SubscribeMessagePublished(func(p internalProducerEvents.MessagePublishedPayload) {
+	sub2, _ := producer.SubscribeMessagePublished(func(p producer.MessagePublishedPayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "producer.published")
 		mu.Unlock()
 	})
 	defer sub2.Unsubscribe()
 
-	sub3, _ := consumerEventsPkg.SubscribeUp(func(p internalConsumerEvents.LifecyclePayload) {
+	sub3, _ := publicConsumer.SubscribeUp(func(p publicConsumer.LifecyclePayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "consumer.up")
 		mu.Unlock()
 	})
 	defer sub3.Unsubscribe()
 
-	sub4, _ := consumerEventsPkg.SubscribeMessageAcknowledged(func(p internalConsumerEvents.MessagePayload) {
+	sub4, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "consumer.acknowledged")
 		mu.Unlock()
@@ -401,17 +397,18 @@ func TestComplexEvents_ManySubscribers(t *testing.T) {
 	var mu sync.Mutex
 	var totalEvents int
 
-	var subs []*eventbus.Subscription
+	var subscriptions []publicEventBus.Subscription
+
 	for i := 0; i < subscriberCount; i++ {
-		sub, _ := consumerEventsPkg.SubscribeMessageAcknowledged(func(p internalConsumerEvents.MessagePayload) {
+		sub, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 			mu.Lock()
 			totalEvents++
 			mu.Unlock()
 		})
-		subs = append(subs, sub)
+		subscriptions = append(subscriptions, sub)
 	}
 	defer func() {
-		for _, sub := range subs {
+		for _, sub := range subscriptions {
 			sub.Unsubscribe()
 		}
 	}()

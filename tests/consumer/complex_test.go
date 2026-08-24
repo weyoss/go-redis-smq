@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/consumer"
+	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
@@ -194,7 +194,7 @@ func TestComplex_HighVolume(t *testing.T) {
 
 	// Start multiple consumers
 	var totalConsumed atomic.Int64
-	var consumers []*consumer.Consumer
+	var consumers []publicconsumer.Consumer
 
 	for i := 0; i < consumerCount; i++ {
 		cons := redissmq.NewConsumer()

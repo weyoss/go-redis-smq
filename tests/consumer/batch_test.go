@@ -19,7 +19,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -40,7 +40,7 @@ func TestBatchAck_FullBuffer(t *testing.T) {
 	// Consumer with batch acks: flush every 3 messages
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer(
-		c.WithBatchAcks(c.BatchConfig{
+		consumer.WithBatchAcks(consumer.BatchConfig{
 			Enabled:      true,
 			BatchSize:    3,
 			BatchTimeout: 30 * time.Second,
@@ -74,7 +74,7 @@ func TestBatchAck_Timeout(t *testing.T) {
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer(
-		c.WithBatchAcks(c.BatchConfig{
+		consumer.WithBatchAcks(consumer.BatchConfig{
 			Enabled:      true,
 			BatchSize:    100, // Larger than message count
 			BatchTimeout: 1 * time.Second,
@@ -109,7 +109,7 @@ func TestBatchAck_FlushOnShutdown(t *testing.T) {
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer(
-		c.WithBatchAcks(c.BatchConfig{
+		consumer.WithBatchAcks(consumer.BatchConfig{
 			Enabled:      true,
 			BatchSize:    100,
 			BatchTimeout: 30 * time.Second,
@@ -173,7 +173,7 @@ func TestBatchUnack_FlushOnShutdown(t *testing.T) {
 
 	var attempts atomic.Int64
 	cons := redissmq.NewConsumer(
-		c.WithBatchUnacks(c.BatchConfig{
+		consumer.WithBatchUnacks(consumer.BatchConfig{
 			Enabled:      true,
 			BatchSize:    100,
 			BatchTimeout: 30 * time.Second,

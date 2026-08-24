@@ -26,7 +26,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -36,7 +36,7 @@ type BatchAcker struct {
 	mu             sync.Mutex
 	queue          *q.QueueParams
 	consumerID     string
-	cfg            c.BatchConfig
+	cfg            consumer.BatchConfig
 	buffer         []string
 	timer          *time.Timer
 	ctx            context.Context
@@ -47,7 +47,7 @@ type BatchAcker struct {
 }
 
 // NewBatchAcker creates a new batch acker.
-func NewBatchAcker(queue *q.QueueParams, consumerID string, cfg c.BatchConfig) *BatchAcker {
+func NewBatchAcker(queue *q.QueueParams, consumerID string, cfg consumer.BatchConfig) *BatchAcker {
 	return &BatchAcker{
 		queue:          queue,
 		consumerID:     consumerID,

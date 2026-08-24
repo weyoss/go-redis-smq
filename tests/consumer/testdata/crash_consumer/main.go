@@ -19,7 +19,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -48,7 +48,7 @@ func main() {
 
 	params := q.MustQueueParamsWithNS(queueName, queueNS)
 
-	cons := redissmq.NewConsumer(c.WithHeartbeatTTL(hbTTL))
+	cons := redissmq.NewConsumer(consumer.WithHeartbeatTTL(hbTTL))
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		log.Printf("crash consumer: received %s", m.ID)
 		// Block until externally killed to simulate a crash.

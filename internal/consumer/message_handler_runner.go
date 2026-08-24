@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	pubQueue "github.com/weyoss/go-redis-smq/pkg/queue"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -26,7 +26,7 @@ import (
 type MessageHandlerRunner struct {
 	mu           sync.RWMutex
 	consumerID   string
-	options      *c.Options
+	options      *consumer.Options
 	handlers     []*handlerConfig
 	instances    []*MessageHandler
 	stateTracker *QueueStateTracker
@@ -41,7 +41,7 @@ type handlerConfig struct {
 	handler Handler
 }
 
-func NewMessageHandlerRunner(consumerID string, options *c.Options) *MessageHandlerRunner {
+func NewMessageHandlerRunner(consumerID string, options *consumer.Options) *MessageHandlerRunner {
 	return &MessageHandlerRunner{
 		consumerID: consumerID,
 		options:    options,

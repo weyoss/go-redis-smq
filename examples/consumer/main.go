@@ -21,7 +21,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
@@ -46,7 +46,7 @@ func main() {
 
 	// Start consumer
 	c := redissmq.NewConsumer(
-		c.WithHeartbeatTTL(30 * time.Second),
+		consumer.WithHeartbeatTTL(30 * time.Second),
 	)
 
 	c.Consume(ordersQueue, func(ctx context.Context, m *msg.Transferable) error {

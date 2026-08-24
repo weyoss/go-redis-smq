@@ -8,9 +8,7 @@
  *
  */
 
-// Package c defines configuration-related types and sentinel errors for
-// RedisSMQ consumers.
-package c
+package consumer
 
 import "errors"
 

@@ -8,11 +8,7 @@
  *
  */
 
-// Package c provides configuration options and types for RedisSMQ consumers.
-//
-// This file contains batch configuration types for acknowledgments and
-// unacknowledgments.
-package c
+package consumer
 
 import "time"
 

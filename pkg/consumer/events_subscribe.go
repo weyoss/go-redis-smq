@@ -8,44 +8,54 @@
  *
  */
 
-// Package events provides public subscription functions for RedisSMQ consumer events.
-//
-// These functions automatically start the public user event bus on first use.
-// No explicit initialisation is required.
-package events
+package consumer
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 
-	internalEvents "github.com/weyoss/go-redis-smq/internal/consumer/events"
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	"github.com/weyoss/go-redis-smq/pkg/eventbus"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
-// Re-exported payload types. These aliases allow external users to refer to
-// event payload types without importing internal packages.
+const (
+	EventUp                    = "consumer.up"
+	EventDown                  = "consumer.down"
+	EventGoingUp               = "consumer.goingUp"
+	EventGoingDown             = "consumer.goingDown"
+	EventMessageReceived       = "consumer.messageReceived"
+	EventMessageAcknowledged   = "consumer.messageAcknowledged"
+	EventMessageUnacknowledged = "consumer.messageUnacknowledged"
+	EventMessageDeadLettered   = "consumer.messageDeadLettered"
+	EventMessageRequeued       = "consumer.messageRequeued"
+	EventMessageDelayed        = "consumer.messageDelayed"
+)
 
-// LifecyclePayload is the payload for consumer lifecycle events such as
-// consumer.up, consumer.down, consumer.goingUp, and consumer.goingDown.
-type LifecyclePayload = internalEvents.LifecyclePayload
+type LifecyclePayload struct {
+	ConsumerID string
+}
 
-// MessagePayload is the base payload for consumer message events like
-// consumer.messageAcknowledged, consumer.messageRequeued, and
-// consumer.messageDelayed.
-type MessagePayload = internalEvents.MessagePayload
+type MessagePayload struct {
+	MessageID  string
+	Queue      q.QueueParams
+	ConsumerID string
+}
 
-// MessageUnacknowledgedPayload is the payload for the
-// consumer.messageUnacknowledged event.
-type MessageUnacknowledgedPayload = internalEvents.MessageUnacknowledgedPayload
+type MessageUnacknowledgedPayload struct {
+	MessagePayload
+	Cause int
+}
 
-// MessageDeadLetteredPayload is the payload for the
-// consumer.messageDeadLettered event.
-type MessageDeadLetteredPayload = internalEvents.MessageDeadLetteredPayload
+type MessageDeadLetteredPayload struct {
+	MessagePayload
+	Cause int
+}
 
-// MessageReceivedPayload is the payload for the consumer.messageReceived
-// event.
-type MessageReceivedPayload = internalEvents.MessageReceivedPayload
+type MessageReceivedPayload struct {
+	MessageID  string
+	Queue      q.QueueParams
+	ConsumerID string
+}
 
 func decodeArg(arg interface{}, target interface{}) error {
 	data, err := json.Marshal(arg)
@@ -56,8 +66,11 @@ func decodeArg(arg interface{}, target interface{}) error {
 }
 
 // SubscribeUp registers a handler for the consumer.up event.
-func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeUp(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -68,12 +81,15 @@ func SubscribeUp(handler func(payload LifecyclePayload)) (*eventbus.Subscription
 			return
 		}
 		handler(LifecyclePayload{ConsumerID: consumerID})
-	}, internalEvents.EventUp)
+	}, EventUp)
 }
 
 // SubscribeDown registers a handler for the consumer.down event.
-func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeDown(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -84,12 +100,15 @@ func SubscribeDown(handler func(LifecyclePayload)) (*eventbus.Subscription, erro
 			return
 		}
 		handler(LifecyclePayload{ConsumerID: consumerID})
-	}, internalEvents.EventDown)
+	}, EventDown)
 }
 
 // SubscribeGoingUp registers a handler for the consumer.goingUp event.
-func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeGoingUp(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -100,12 +119,15 @@ func SubscribeGoingUp(handler func(LifecyclePayload)) (*eventbus.Subscription, e
 			return
 		}
 		handler(LifecyclePayload{ConsumerID: consumerID})
-	}, internalEvents.EventGoingUp)
+	}, EventGoingUp)
 }
 
 // SubscribeGoingDown registers a handler for the consumer.goingDown event.
-func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeGoingDown(handler func(LifecyclePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
@@ -116,13 +138,16 @@ func SubscribeGoingDown(handler func(LifecyclePayload)) (*eventbus.Subscription,
 			return
 		}
 		handler(LifecyclePayload{ConsumerID: consumerID})
-	}, internalEvents.EventGoingDown)
+	}, EventGoingDown)
 }
 
 // SubscribeMessageReceived registers a handler for the
 // consumer.messageReceived event.
-func SubscribeMessageReceived(handler func(MessageReceivedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessageReceived(handler func(MessageReceivedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 3 {
@@ -144,16 +169,16 @@ func SubscribeMessageReceived(handler func(MessageReceivedPayload)) (*eventbus.S
 		}
 
 		handler(MessageReceivedPayload{MessageID: messageID, Queue: queue, ConsumerID: consumerID})
-	}, internalEvents.EventMessageReceived)
+	}, EventMessageReceived)
 }
 
 // SubscribeMessageAcknowledged registers a handler for the
 // consumer.messageAcknowledged event.
-//
-// The event payload contains three positional arguments:
-// messageId, queue, consumerId.
-func SubscribeMessageAcknowledged(handler func(MessagePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessageAcknowledged(handler func(MessagePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 3 {
@@ -179,16 +204,16 @@ func SubscribeMessageAcknowledged(handler func(MessagePayload)) (*eventbus.Subsc
 			Queue:      queue,
 			ConsumerID: consumerID,
 		})
-	}, internalEvents.EventMessageAcknowledged)
+	}, EventMessageAcknowledged)
 }
 
 // SubscribeMessageUnacknowledged registers a handler for the
 // consumer.messageUnacknowledged event.
-//
-// The event payload contains four positional arguments:
-// messageId, queue, consumerId, cause.
-func SubscribeMessageUnacknowledged(handler func(MessageUnacknowledgedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessageUnacknowledged(handler func(MessageUnacknowledgedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 4 {
@@ -221,16 +246,16 @@ func SubscribeMessageUnacknowledged(handler func(MessageUnacknowledgedPayload)) 
 			},
 			Cause: cause,
 		})
-	}, internalEvents.EventMessageUnacknowledged)
+	}, EventMessageUnacknowledged)
 }
 
 // SubscribeMessageDeadLettered registers a handler for the
 // consumer.messageDeadLettered event.
-//
-// The event payload contains four positional arguments:
-// messageId, queue, consumerId, cause.
-func SubscribeMessageDeadLettered(handler func(MessageDeadLetteredPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessageDeadLettered(handler func(MessageDeadLetteredPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 4 {
@@ -263,16 +288,16 @@ func SubscribeMessageDeadLettered(handler func(MessageDeadLetteredPayload)) (*ev
 			},
 			Cause: cause,
 		})
-	}, internalEvents.EventMessageDeadLettered)
+	}, EventMessageDeadLettered)
 }
 
 // SubscribeMessageRequeued registers a handler for the
 // consumer.messageRequeued event.
-//
-// The event payload contains three positional arguments:
-// messageId, queue, consumerId.
-func SubscribeMessageRequeued(handler func(MessagePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessageRequeued(handler func(MessagePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 3 {
@@ -298,16 +323,16 @@ func SubscribeMessageRequeued(handler func(MessagePayload)) (*eventbus.Subscript
 			Queue:      queue,
 			ConsumerID: consumerID,
 		})
-	}, internalEvents.EventMessageRequeued)
+	}, EventMessageRequeued)
 }
 
 // SubscribeMessageDelayed registers a handler for the
 // consumer.messageDelayed event.
-//
-// The event payload contains three positional arguments:
-// messageId, queue, consumerId.
-func SubscribeMessageDelayed(handler func(MessagePayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeMessageDelayed(handler func(MessagePayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("consumer events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 3 {
@@ -333,5 +358,5 @@ func SubscribeMessageDelayed(handler func(MessagePayload)) (*eventbus.Subscripti
 			Queue:      queue,
 			ConsumerID: consumerID,
 		})
-	}, internalEvents.EventMessageDelayed)
+	}, EventMessageDelayed)
 }

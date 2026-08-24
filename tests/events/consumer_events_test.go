@@ -20,9 +20,8 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/consumer"
-	"github.com/weyoss/go-redis-smq/internal/consumer/events"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	consumerEvents "github.com/weyoss/go-redis-smq/pkg/consumer/events"
+	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -37,28 +36,28 @@ func TestConsumerEvents_Lifecycle(t *testing.T) {
 	var mu sync.Mutex
 	var lifecycle []string
 
-	subUp, _ := consumerEvents.SubscribeUp(func(p events.LifecyclePayload) {
+	subUp, _ := publicConsumer.SubscribeUp(func(p publicConsumer.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "up:"+p.ConsumerID)
 		mu.Unlock()
 	})
 	defer subUp.Unsubscribe()
 
-	subDown, _ := consumerEvents.SubscribeDown(func(p events.LifecyclePayload) {
+	subDown, _ := publicConsumer.SubscribeDown(func(p publicConsumer.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "down:"+p.ConsumerID)
 		mu.Unlock()
 	})
 	defer subDown.Unsubscribe()
 
-	subGoingUp, _ := consumerEvents.SubscribeGoingUp(func(p events.LifecyclePayload) {
+	subGoingUp, _ := publicConsumer.SubscribeGoingUp(func(p publicConsumer.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "goingUp:"+p.ConsumerID)
 		mu.Unlock()
 	})
 	defer subGoingUp.Unsubscribe()
 
-	subGoingDown, _ := consumerEvents.SubscribeGoingDown(func(p events.LifecyclePayload) {
+	subGoingDown, _ := publicConsumer.SubscribeGoingDown(func(p publicConsumer.LifecyclePayload) {
 		mu.Lock()
 		lifecycle = append(lifecycle, "goingDown:"+p.ConsumerID)
 		mu.Unlock()
@@ -96,8 +95,8 @@ func TestConsumerEvents_MessageAcknowledged(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessagePayload
-	sub, _ := consumerEvents.SubscribeMessageAcknowledged(func(p events.MessagePayload) {
+	var received publicConsumer.MessagePayload
+	sub, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		received = p
 		wg.Done()
 	})
@@ -146,8 +145,8 @@ func TestConsumerEvents_MessageUnacknowledged(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessageUnacknowledgedPayload
-	sub, _ := consumerEvents.SubscribeMessageUnacknowledged(func(p events.MessageUnacknowledgedPayload) {
+	var received publicConsumer.MessageUnacknowledgedPayload
+	sub, _ := publicConsumer.SubscribeMessageUnacknowledged(func(p publicConsumer.MessageUnacknowledgedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -196,8 +195,8 @@ func TestConsumerEvents_MessageDeadLettered(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessageDeadLetteredPayload
-	sub, _ := consumerEvents.SubscribeMessageDeadLettered(func(p events.MessageDeadLetteredPayload) {
+	var received publicConsumer.MessageDeadLetteredPayload
+	sub, _ := publicConsumer.SubscribeMessageDeadLettered(func(p publicConsumer.MessageDeadLetteredPayload) {
 		received = p
 		wg.Done()
 	})
@@ -245,8 +244,8 @@ func TestConsumerEvents_MessageRequeued(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessagePayload
-	sub, _ := consumerEvents.SubscribeMessageRequeued(func(p events.MessagePayload) {
+	var received publicConsumer.MessagePayload
+	sub, _ := publicConsumer.SubscribeMessageRequeued(func(p publicConsumer.MessagePayload) {
 		received = p
 		wg.Done()
 	})
@@ -291,8 +290,8 @@ func TestConsumerEvents_MessageDelayed(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessagePayload
-	sub, _ := consumerEvents.SubscribeMessageDelayed(func(p events.MessagePayload) {
+	var received publicConsumer.MessagePayload
+	sub, _ := publicConsumer.SubscribeMessageDelayed(func(p publicConsumer.MessagePayload) {
 		received = p
 		wg.Done()
 	})
@@ -338,18 +337,18 @@ func TestConsumerEvents_MultipleSubscribers(t *testing.T) {
 	wg.Add(3)
 
 	var mu sync.Mutex
-	var received []events.MessagePayload
+	var received []publicConsumer.MessagePayload
 
-	handler := func(p events.MessagePayload) {
+	handler := func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		received = append(received, p)
 		mu.Unlock()
 		wg.Done()
 	}
 
-	sub1, _ := consumerEvents.SubscribeMessageAcknowledged(handler)
-	sub2, _ := consumerEvents.SubscribeMessageAcknowledged(handler)
-	sub3, _ := consumerEvents.SubscribeMessageAcknowledged(handler)
+	sub1, _ := publicConsumer.SubscribeMessageAcknowledged(handler)
+	sub2, _ := publicConsumer.SubscribeMessageAcknowledged(handler)
+	sub3, _ := publicConsumer.SubscribeMessageAcknowledged(handler)
 	defer sub1.Unsubscribe()
 	defer sub2.Unsubscribe()
 	defer sub3.Unsubscribe()
@@ -395,7 +394,7 @@ func TestConsumerEvents_Unsubscribe(t *testing.T) {
 	var mu sync.Mutex
 	var ackCount int
 
-	sub, _ := consumerEvents.SubscribeMessageAcknowledged(func(p events.MessagePayload) {
+	sub, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		ackCount++
 		mu.Unlock()
@@ -455,7 +454,7 @@ func TestConsumerEvents_NormalFlow(t *testing.T) {
 	var mu sync.Mutex
 	var eventOrder []string
 
-	consumerEvents.SubscribeMessageAcknowledged(func(p events.MessagePayload) {
+	publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "acknowledged")
 		mu.Unlock()
@@ -495,8 +494,8 @@ func TestConsumerEvents_EventPayloadInfo(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessagePayload
-	sub, _ := consumerEvents.SubscribeMessageAcknowledged(func(p events.MessagePayload) {
+	var received publicConsumer.MessagePayload
+	sub, _ := publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		received = p
 		wg.Done()
 	})
@@ -546,8 +545,8 @@ func TestConsumerEvents_MessageReceived(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.MessageReceivedPayload
-	sub, err := consumerEvents.SubscribeMessageReceived(func(p events.MessageReceivedPayload) {
+	var received publicConsumer.MessageReceivedPayload
+	sub, err := publicConsumer.SubscribeMessageReceived(func(p publicConsumer.MessageReceivedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -600,12 +599,12 @@ func TestConsumerEvents_MessageReceivedOrdering(t *testing.T) {
 	var mu sync.Mutex
 	var eventOrder []string
 
-	consumerEvents.SubscribeMessageReceived(func(p events.MessageReceivedPayload) {
+	publicConsumer.SubscribeMessageReceived(func(p publicConsumer.MessageReceivedPayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "received")
 		mu.Unlock()
 	})
-	consumerEvents.SubscribeMessageAcknowledged(func(p events.MessagePayload) {
+	publicConsumer.SubscribeMessageAcknowledged(func(p publicConsumer.MessagePayload) {
 		mu.Lock()
 		eventOrder = append(eventOrder, "acknowledged")
 		mu.Unlock()

@@ -25,7 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -158,15 +158,15 @@ func (d *DequeueMessage) unacknowledgePoppedMessage(ctx context.Context, message
 }
 
 func (d *DequeueMessage) causeFromCheckoutError(err error) *UnacknowledgeCause {
-	if errors.Is(err, c.ErrQueueStopped) {
+	if errors.Is(err, consumer.ErrQueueStopped) {
 		c := CauseQueueStopped
 		return &c
 	}
-	if errors.Is(err, c.ErrQueueLocked) {
+	if errors.Is(err, consumer.ErrQueueLocked) {
 		c := CauseQueueLocked
 		return &c
 	}
-	if errors.Is(err, c.ErrQueueInvalidState) {
+	if errors.Is(err, consumer.ErrQueueInvalidState) {
 		c := CauseQueueInvalidState
 		return &c
 	}
@@ -263,13 +263,13 @@ func (d *DequeueMessage) checkout(ctx context.Context, messageID string) (*inter
 		switch replyStr {
 		case "QUEUE_STOPPED":
 			d.log.Warn("queue stopped — cannot checkout", "messageID", messageID)
-			return nil, c.ErrQueueStopped
+			return nil, consumer.ErrQueueStopped
 		case "QUEUE_LOCKED":
 			d.log.Warn("queue locked — cannot checkout", "messageID", messageID)
-			return nil, c.ErrQueueLocked
+			return nil, consumer.ErrQueueLocked
 		case "QUEUE_INVALID_STATE":
 			d.log.Warn("queue in invalid state — cannot checkout", "messageID", messageID)
-			return nil, c.ErrQueueInvalidState
+			return nil, consumer.ErrQueueInvalidState
 		case "MESSAGE_NOT_FOUND":
 			d.log.Debug("message not found in queue", "messageID", messageID)
 			return nil, nil

@@ -15,14 +15,15 @@ import (
 	"fmt"
 	"sync"
 
+	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	loggercfg "github.com/weyoss/go-redis-smq/internal/util/logger/cfg"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
+	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
 	"github.com/weyoss/go-redis-smq/pkg/producer"
 )
 
@@ -41,7 +42,7 @@ var (
 type trackedInstances struct {
 	mu        sync.Mutex
 	producers []*producer.Producer
-	consumers []*consumer.Consumer
+	consumers []publicconsumer.Consumer
 }
 
 var instances trackedInstances
@@ -52,13 +53,30 @@ func registerProducer(p *producer.Producer) {
 	instances.producers = append(instances.producers, p)
 }
 
-func registerConsumer(c *consumer.Consumer) {
+func registerConsumer(c publicconsumer.Consumer) {
 	instances.mu.Lock()
 	defer instances.mu.Unlock()
 	instances.consumers = append(instances.consumers, c)
 }
 
-// Init initialises RedisSMQ
+// userBusAdapter adapts the internal event bus to the public event bus interface.
+type userBusAdapter struct {
+	bus *eventbus.EventBus
+}
+
+func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interface{}), eventName string) (publicEventBus.Subscription, error) {
+	sub, err := a.bus.Subscribe(handler, eventName)
+	if err != nil {
+		return nil, err
+	}
+	return sub, nil
+}
+
+// Init initialises RedisSMQ and starts the internal system event bus.
+//
+// The public user event bus is not started automatically. Applications that
+// want to expose events to external subscribers must call
+// InitUserEventBus(ctx) separately.
 func Init(ctx context.Context, cfg Config) error {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
@@ -95,6 +113,20 @@ func Init(ctx context.Context, cfg Config) error {
 	return nil
 }
 
+// InitUserEventBus starts the public user event bus and makes it available to
+// public subscription packages.
+func InitUserEventBus(ctx context.Context) {
+	bus := eventbus.InitUser(ctx)
+	publicEventBus.SetUserBus(&userBusAdapter{bus: bus})
+}
+
+// ShutdownUserEventBus clears the public user event bus and shuts down the
+// underlying internal user bus.
+func ShutdownUserEventBus() {
+	publicEventBus.SetUserBus(nil)
+	eventbus.ShutdownUser()
+}
+
 // Shutdown gracefully stops RedisSMQ.
 //
 // It stops the purge worker, consumers, producers, event buses, logger,
@@ -111,8 +143,7 @@ func Shutdown() {
 	l := logger.New("redissmq")
 	l.Info("RedisSMQ shutting down...")
 
-	// Stop the purge worker first. This cancels its context and waits
-	// briefly for it to exit cleanly.
+	// Stop the purge worker first.
 	if purgeWorkerStop != nil {
 		purgeWorkerStop()
 		purgeWorkerStop = nil
@@ -126,7 +157,7 @@ func Shutdown() {
 	}
 
 	instances.mu.Lock()
-	consumers := make([]*consumer.Consumer, len(instances.consumers))
+	consumers := make([]publicconsumer.Consumer, len(instances.consumers))
 	copy(consumers, instances.consumers)
 	producers := make([]*producer.Producer, len(instances.producers))
 	copy(producers, instances.producers)
@@ -145,8 +176,8 @@ func Shutdown() {
 	}
 	l.Info("producers shut down", "count", len(producers))
 
-	// Shut down the public user bus if it was initialised.
-	eventbus.ShutdownUser()
+	// Shut down the public user event bus if it was initialised.
+	ShutdownUserEventBus()
 
 	// Shut down the internal system bus.
 	eventbus.ShutdownSystem()
@@ -168,10 +199,10 @@ func NewProducer() *producer.Producer {
 	return p
 }
 
-// NewConsumer creates a new consumer and registers it for lifecycle
-// management.
-func NewConsumer(opts ...c.Option) *consumer.Consumer {
-	cons := consumer.New(opts...)
+// NewConsumer creates a new consumer that implements the public consumer
+// interface and registers it for lifecycle management.
+func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
+	cons := internalconsumer.New(opts...)
 	registerConsumer(cons)
 	return cons
 }

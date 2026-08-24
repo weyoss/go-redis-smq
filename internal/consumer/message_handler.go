@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/lock"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -35,7 +35,7 @@ type MessageHandler struct {
 	queue          *q.QueueParams
 	groupID        string
 	handler        Handler
-	options        *c.Options
+	options        *consumer.Options
 	ctx            context.Context
 	cancel         context.CancelFunc
 	dequeuer       *DequeueMessage
@@ -56,7 +56,7 @@ type MessageHandler struct {
 	log        *slog.Logger
 }
 
-func NewMessageHandler(consumerID string, queue *q.QueueParams, groupID string, handler Handler, options *c.Options) *MessageHandler {
+func NewMessageHandler(consumerID string, queue *q.QueueParams, groupID string, handler Handler, options *consumer.Options) *MessageHandler {
 	return &MessageHandler{
 		consumerID:  consumerID,
 		queue:       queue,
@@ -257,7 +257,7 @@ func (mh *MessageHandler) loop() {
 
 		envelope, err := mh.dequeuer.Dequeue(mh.ctx)
 		if err != nil {
-			if errors.Is(err, c.ErrQueueStopped) || errors.Is(err, c.ErrQueueLocked) || errors.Is(err, c.ErrQueueInvalidState) {
+			if errors.Is(err, consumer.ErrQueueStopped) || errors.Is(err, consumer.ErrQueueLocked) || errors.Is(err, consumer.ErrQueueInvalidState) {
 				mh.log.Warn("queue state changed — stopping handler", "error", err)
 				mh.errCh <- fmt.Errorf("handler stopped: %w", err)
 				mh.Shutdown()

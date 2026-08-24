@@ -19,7 +19,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
@@ -32,7 +32,7 @@ func TestHeartbeat_Running(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer(
-		c.WithHeartbeatTTL(10 * time.Second),
+		consumer.WithHeartbeatTTL(10 * time.Second),
 	)
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		return nil
@@ -59,7 +59,7 @@ func TestHeartbeat_ExpiresAfterShutdown(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer(
-		c.WithHeartbeatTTL(1 * time.Second),
+		consumer.WithHeartbeatTTL(1 * time.Second),
 	)
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		return nil
@@ -88,7 +88,7 @@ func TestHeartbeat_TTLRefresh(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer(
-		c.WithHeartbeatTTL(3 * time.Second),
+		consumer.WithHeartbeatTTL(3 * time.Second),
 	)
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		return nil

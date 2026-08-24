@@ -19,7 +19,7 @@ import (
 	consumerEvents "github.com/weyoss/go-redis-smq/internal/consumer/events"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
@@ -38,7 +38,7 @@ type BatchUnacker struct {
 	queue          *q.QueueParams
 	groupID        string
 	consumerID     string
-	cfg            c.BatchConfig
+	cfg            consumer.BatchConfig
 	buffer         []unackEntry
 	timer          *time.Timer
 	ctx            context.Context
@@ -49,7 +49,7 @@ type BatchUnacker struct {
 }
 
 // NewBatchUnacker creates a new batch unacknowledger.
-func NewBatchUnacker(queue *q.QueueParams, groupID, consumerID string, cfg c.BatchConfig) *BatchUnacker {
+func NewBatchUnacker(queue *q.QueueParams, groupID, consumerID string, cfg consumer.BatchConfig) *BatchUnacker {
 	return &BatchUnacker{
 		queue:          queue,
 		groupID:        groupID,

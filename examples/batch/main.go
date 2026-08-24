@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/consumer/c"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 	"github.com/weyoss/go-redis-smq/pkg/queue/q"
@@ -43,7 +43,7 @@ func main() {
 	// Flush every 50 messages or 2 seconds
 	consumed := make(chan string, 100)
 	c := redissmq.NewConsumer(
-		c.WithBatchAcks(c.BatchConfig{
+		consumer.WithBatchAcks(consumer.BatchConfig{
 			Enabled:      true,
 			BatchSize:    50,
 			BatchTimeout: 2 * time.Second,

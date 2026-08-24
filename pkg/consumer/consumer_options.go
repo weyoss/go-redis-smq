@@ -8,13 +8,11 @@
  *
  */
 
-// Package c provides configuration options and types for RedisSMQ consumers.
-//
-// It includes the Options struct, functional options, and batch configuration
-// types used when creating consumers via consumer.New.
-package c
+package consumer
 
-import "time"
+import (
+	"time"
+)
 
 // Options holds consumer configuration.
 type Options struct {
