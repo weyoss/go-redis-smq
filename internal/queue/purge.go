@@ -24,7 +24,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 const (
@@ -32,7 +32,7 @@ const (
 	defaultPurgeBatchDelay  = 5 * time.Second
 	workerHeartbeatInterval = 10 * time.Second
 	workerHeartbeatTTL      = 30 * time.Second
-	pollInterval            = 1 * time.Second
+	popTimeout              = 1 * time.Second // short timeout for BRPopLPush
 )
 
 type PurgeManager struct {
@@ -61,15 +61,14 @@ func NewPurgeManager(state *State, messageStore *internalMessage.Store) *PurgeMa
 var (
 	purgeWorkerMu      sync.Mutex
 	purgeWorkerCancel  context.CancelFunc
+	purgeWorkerClient  *rdb.Client
 	purgeWorkerDone    chan struct{}
 	purgeWorkerStarted bool
 )
 
-// StartPurgeWorker starts the background purge worker.
-//
-// It uses a non‑blocking RPOPLPUSH polling loop instead of a blocking
-// BRPOPLPUSH. This avoids go‑redis blocking‑command deadlocks during
-// shutdown and allows RedisSMQ.Shutdown to wait for the worker cleanly.
+// StartPurgeWorker creates a dedicated Redis client for the purge worker.
+// On shutdown, the worker uses a short blocking timeout, so cancellation
+// works reliably and cleanup is synchronous.
 func StartPurgeWorker(ctx context.Context) func() {
 	purgeWorkerMu.Lock()
 	defer purgeWorkerMu.Unlock()
@@ -84,13 +83,16 @@ func StartPurgeWorker(ctx context.Context) func() {
 
 	pm := NewManager().Purge()
 
+	opts := redisClient.Client().Options()
+	purgeWorkerClient = rdb.NewClient(opts)
+
 	workerCtx, cancel := context.WithCancel(ctx)
 	purgeWorkerCancel = cancel
 	purgeWorkerDone = make(chan struct{})
 
 	go func() {
 		defer close(purgeWorkerDone)
-		pm.work(workerCtx)
+		pm.work(workerCtx, purgeWorkerClient)
 	}()
 
 	purgeWorkerStarted = true
@@ -102,74 +104,79 @@ func StartPurgeWorker(ctx context.Context) func() {
 	}
 }
 
-// stopPurgeWorker cancels the worker context and waits for the worker
-// goroutine to exit. Because the worker no longer uses a blocking Redis
-// command, this returns quickly and never hangs.
 func stopPurgeWorker() {
+	// Cancel the worker context.
 	if purgeWorkerCancel != nil {
 		purgeWorkerCancel()
 		purgeWorkerCancel = nil
 	}
 
+	// Wait for the worker goroutine to exit.
 	if purgeWorkerDone != nil {
 		select {
 		case <-purgeWorkerDone:
 		case <-time.After(5 * time.Second):
-			// Safety timeout; should never be reached.
+			// Safety timeout; should not be reached.
 		}
 		purgeWorkerDone = nil
+	}
+
+	// Close the dedicated client.
+	if purgeWorkerClient != nil {
+		_ = purgeWorkerClient.Close()
+		purgeWorkerClient = nil
 	}
 
 	purgeWorkerStarted = false
 }
 
-func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *q.QueueParams, filter q.BrowseFilter) (string, error) {
+func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *publicqueue.QueueParams, filter publicqueue.BrowseFilter) (string, error) {
 	if err := pm.validateFilter(filter); err != nil {
 		return "", err
 	}
 
 	jobID := uuid.New().String()
 
-	reason := q.QueueStateTransitionReason(q.ReasonPurgeStart)
-	lockOpts := &q.StateTransitionOptions{
+	reason := publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeStart)
+	lockOpts := &publicqueue.StateTransitionOptions{
 		Description: ptr("Queue is being purged"),
 	}
-	if _, err := pm.state.acquireLock(ctx, queueParams, q.LockOwnerPurgeJob, jobID, reason, lockOpts); err != nil {
+	if _, err := pm.state.acquireLock(ctx, queueParams, publicqueue.LockOwnerPurgeJob, jobID, reason, lockOpts); err != nil {
 		return "", fmt.Errorf("purge: lock queue: %w", err)
 	}
 
 	job := newPurgeJob(jobID, queueParams, filter)
 
 	if err := create(ctx, job); err != nil {
-		pm.unlockQueue(ctx, queueParams, jobID, q.PurgeJobFailed, err.Error())
+		pm.unlockQueue(ctx, queueParams, jobID, publicqueue.PurgeJobFailed, err.Error())
 		return "", fmt.Errorf("purge: enqueue job: %w", err)
 	}
 
 	return jobID, nil
 }
 
-func (pm *PurgeManager) Get(ctx context.Context, jobID string) (*q.PurgeJob, error) {
+func (pm *PurgeManager) Get(ctx context.Context, jobID string) (*publicqueue.PurgeJob, error) {
 	return getJob(ctx, jobID)
 }
 
-func (pm *PurgeManager) Cancel(ctx context.Context, queueParams *q.QueueParams, jobID string) error {
+func (pm *PurgeManager) Cancel(ctx context.Context, queueParams *publicqueue.QueueParams, jobID string) error {
 	job, err := getJob(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("purge: get job: %w", err)
 	}
 
-	job.Status = q.PurgeJobCanceled
+	job.Status = publicqueue.PurgeJobCanceled
 	job.CompletedAt = time.Now().UnixMilli()
 
 	if err := cancel(ctx, jobID, job); err != nil {
 		return fmt.Errorf("purge: cancel job: %w", err)
 	}
 
-	pm.unlockQueue(ctx, queueParams, jobID, q.PurgeJobCanceled, "Purge job cancelled")
+	pm.unlockQueue(ctx, queueParams, jobID, publicqueue.PurgeJobCanceled, "Purge job cancelled")
 	return nil
 }
 
-func (pm *PurgeManager) work(ctx context.Context) {
+func (pm *PurgeManager) work(ctx context.Context, client *rdb.Client) {
 	pm.recoverStuckJobs(ctx)
 	go pm.heartbeatLoop(ctx)
 
@@ -183,24 +190,17 @@ func (pm *PurgeManager) work(ctx context.Context) {
 		default:
 		}
 
-		jobID, err := acquire(ctx)
+		jobID, err := acquire(ctx, client)
 		if err != nil {
-			if err == rdb.Nil {
-				// No job available. Wait a bit or stop on cancel.
-				select {
-				case <-ctx.Done():
-					return
-				case <-time.After(pollInterval):
-				}
-				continue
-			}
-
 			pm.log.Debug("acquire job failed", "error", err)
 			select {
 			case <-ctx.Done():
 				return
 			case <-time.After(time.Second):
 			}
+			continue
+		}
+		if jobID == "" {
 			continue
 		}
 
@@ -217,7 +217,7 @@ func (pm *PurgeManager) execute(ctx context.Context, jobID string) {
 
 	queueParams := job.Payload.Queue
 
-	job.Status = q.PurgeJobProcessing
+	job.Status = publicqueue.PurgeJobProcessing
 	job.StartedAt = time.Now().UnixMilli()
 
 	if err := start(ctx, jobID, pm.workerID, job); err != nil {
@@ -233,19 +233,19 @@ func (pm *PurgeManager) execute(ctx context.Context, jobID string) {
 		return
 	}
 
-	job.Status = q.PurgeJobCompleted
+	job.Status = publicqueue.PurgeJobCompleted
 	if job.Meta == nil {
-		job.Meta = &q.PurgeJobMeta{}
+		job.Meta = &publicqueue.PurgeJobMeta{}
 	}
 	job.Meta.Purged = purged
 	job.CompletedAt = time.Now().UnixMilli()
 	if err := complete(ctx, jobID, job); err != nil {
 		pm.log.Error("complete job failed", "jobID", jobID, "error", err)
 	}
-	pm.unlockQueue(ctx, queueParams, jobID, q.PurgeJobCompleted, "Purge completed")
+	pm.unlockQueue(ctx, queueParams, jobID, publicqueue.PurgeJobCompleted, "Purge completed")
 }
 
-func (pm *PurgeManager) purgeMessages(ctx context.Context, job *q.PurgeJob) (int64, error) {
+func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.PurgeJob) (int64, error) {
 	qKey := keys.Queue{Namespace: job.Payload.Queue.NS(), Name: job.Payload.Queue.Name()}
 	categoryKey := resolveCategoryKey(job.Payload.MessageType, qKey)
 
@@ -286,7 +286,7 @@ func (pm *PurgeManager) purgeMessages(ctx context.Context, job *q.PurgeJob) (int
 		}
 
 		if job.Meta == nil {
-			job.Meta = &q.PurgeJobMeta{}
+			job.Meta = &publicqueue.PurgeJobMeta{}
 		}
 		job.Meta.Purged = purged
 		if err := save(ctx, job); err != nil {
@@ -320,12 +320,12 @@ func (pm *PurgeManager) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-func (pm *PurgeManager) failJob(ctx context.Context, job *q.PurgeJob, queueParams *q.QueueParams, errMsg string) {
-	job.Status = q.PurgeJobFailed
+func (pm *PurgeManager) failJob(ctx context.Context, job *publicqueue.PurgeJob, queueParams *publicqueue.QueueParams, errMsg string) {
+	job.Status = publicqueue.PurgeJobFailed
 	job.Error = errMsg
 	job.CompletedAt = time.Now().UnixMilli()
 	fail(ctx, job.ID, job)
-	pm.unlockQueue(ctx, queueParams, job.ID, q.PurgeJobFailed, errMsg)
+	pm.unlockQueue(ctx, queueParams, job.ID, publicqueue.PurgeJobFailed, errMsg)
 }
 
 func (pm *PurgeManager) recoverStuckJobs(ctx context.Context) {
@@ -347,7 +347,7 @@ func (pm *PurgeManager) recoverStuckJobs(ctx context.Context) {
 
 		pm.log.Warn("recovering stuck job", "jobID", jobID)
 
-		job.Status = q.PurgeJobPending
+		job.Status = publicqueue.PurgeJobPending
 		job.Error = "Recovered from worker crash"
 		job.UpdatedAt = time.Now().UnixMilli()
 
@@ -371,80 +371,84 @@ func (pm *PurgeManager) isWorkerAlive(ctx context.Context, jobID string) bool {
 	return exists > 0
 }
 
-func (pm *PurgeManager) validateFilter(filter q.BrowseFilter) error {
+func (pm *PurgeManager) validateFilter(filter publicqueue.BrowseFilter) error {
 	cfg := config.Get()
 	switch filter {
-	case q.BrowseAcknowledged:
+	case publicqueue.BrowseAcknowledged:
 		if !cfg.MessageAudit.AcknowledgedMessages.Enabled {
-			return fmt.Errorf("purge: %w", q.ErrAuditDisabled)
+			return fmt.Errorf("purge: %w", publicqueue.ErrAuditDisabled)
 		}
-	case q.BrowseDeadLettered:
+	case publicqueue.BrowseDeadLettered:
 		if !cfg.MessageAudit.DeadLetteredMessages.Enabled {
-			return fmt.Errorf("purge: %w", q.ErrAuditDisabled)
+			return fmt.Errorf("purge: %w", publicqueue.ErrAuditDisabled)
 		}
 	}
 	return nil
 }
 
-func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *q.QueueParams, jobID string, status q.PurgeJobStatus, description string) {
-	var reason q.QueueStateTransitionReason
+func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *publicqueue.QueueParams, jobID string, status publicqueue.PurgeJobStatus, description string) {
+	var reason publicqueue.QueueStateTransitionReason
 	switch status {
-	case q.PurgeJobCompleted:
-		reason = q.QueueStateTransitionReason(q.ReasonPurgeComplete)
-	case q.PurgeJobFailed:
-		reason = q.QueueStateTransitionReason(q.ReasonPurgeFail)
-	case q.PurgeJobCanceled:
-		reason = q.QueueStateTransitionReason(q.ReasonPurgeCancel)
+	case publicqueue.PurgeJobCompleted:
+		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeComplete)
+	case publicqueue.PurgeJobFailed:
+		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeFail)
+	case publicqueue.PurgeJobCanceled:
+		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeCancel)
 	default:
-		reason = q.QueueStateTransitionReason(q.ReasonPurgeComplete)
+		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeComplete)
 	}
 
-	opts := &q.StateTransitionOptions{
+	opts := &publicqueue.StateTransitionOptions{
 		Description: &description,
 	}
 
-	_, err := pm.state.releaseLock(ctx, queueParams, q.LockOwnerPurgeJob, jobID, reason, opts)
+	_, err := pm.state.releaseLock(ctx, queueParams, publicqueue.LockOwnerPurgeJob, jobID, reason, opts)
 	if err != nil {
 		pm.log.Error("unlock queue failed", "jobID", jobID, "error", err)
 	}
 }
 
-func newPurgeJob(jobID string, queueParams *q.QueueParams, filter q.BrowseFilter) *q.PurgeJob {
-	return &q.PurgeJob{
+func newPurgeJob(jobID string, queueParams *publicqueue.QueueParams, filter publicqueue.BrowseFilter) *publicqueue.PurgeJob {
+	return &publicqueue.PurgeJob{
 		ID: jobID,
-		Payload: q.PurgeJobPayload{
+		Payload: publicqueue.PurgeJobPayload{
 			Queue:       queueParams.Clone(),
 			MessageType: filter,
 		},
-		Status:    q.PurgeJobPending,
+		Status:    publicqueue.PurgeJobPending,
 		BatchSize: defaultPurgeBatchSize,
 		DelayMs:   defaultPurgeBatchDelay.Milliseconds(),
 		CreatedAt: time.Now().UnixMilli(),
-		Meta:      &q.PurgeJobMeta{Purged: 0},
+		Meta:      &publicqueue.PurgeJobMeta{Purged: 0},
 	}
 }
 
-func resolveCategoryKey(filter q.BrowseFilter, qKey keys.Queue) string {
+func resolveCategoryKey(filter publicqueue.BrowseFilter, qKey keys.Queue) string {
 	switch filter {
-	case q.BrowsePending:
+	case publicqueue.BrowsePending:
 		return qKey.Pending()
-	case q.BrowseScheduled:
+	case publicqueue.BrowseScheduled:
 		return qKey.Scheduled()
-	case q.BrowseAcknowledged:
+	case publicqueue.BrowseAcknowledged:
 		return qKey.Acknowledged()
-	case q.BrowseDeadLettered:
+	case publicqueue.BrowseDeadLettered:
 		return qKey.DeadLetter()
 	default:
 		return ""
 	}
 }
 
-// acquire uses a non‑blocking atomic pop‑push. It returns redis.Nil when
-// no job is available.
-func acquire(ctx context.Context) (string, error) {
-	return redisClient.Client().RPopLPush(
+func acquire(ctx context.Context, client *rdb.Client) (string, error) {
+	val, err := client.BRPopLPush(
 		ctx,
 		keys.System{}.PendingPurgeJobs(),
 		keys.System{}.ActivePurgeJobs(),
+		popTimeout,
 	).Result()
+
+	if err == rdb.Nil {
+		return "", nil
+	}
+	return val, err
 }

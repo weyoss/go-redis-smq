@@ -18,31 +18,31 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalQueueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type QueueStateTracker struct {
 	mu      sync.RWMutex
-	paused  map[string]*q.QueueParams
-	stopped map[string]*q.QueueParams
-	locked  map[string]*q.QueueParams
+	paused  map[string]*queue.QueueParams
+	stopped map[string]*queue.QueueParams
+	locked  map[string]*queue.QueueParams
 	sub     *eventbus.Subscription
 
-	onStopped func(queue *q.QueueParams)
-	onPaused  func(queue *q.QueueParams)
-	onLocked  func(queue *q.QueueParams)
-	onActive  func(queue *q.QueueParams)
+	onStopped func(queue *queue.QueueParams)
+	onPaused  func(queue *queue.QueueParams)
+	onLocked  func(queue *queue.QueueParams)
+	onActive  func(queue *queue.QueueParams)
 
 	log *slog.Logger
 }
 
 func NewQueueStateTracker(
-	onStopped, onPaused, onLocked, onActive func(*q.QueueParams),
+	onStopped, onPaused, onLocked, onActive func(*queue.QueueParams),
 ) *QueueStateTracker {
 	t := &QueueStateTracker{
-		paused:    make(map[string]*q.QueueParams),
-		stopped:   make(map[string]*q.QueueParams),
-		locked:    make(map[string]*q.QueueParams),
+		paused:    make(map[string]*queue.QueueParams),
+		stopped:   make(map[string]*queue.QueueParams),
+		locked:    make(map[string]*queue.QueueParams),
 		onStopped: onStopped,
 		onPaused:  onPaused,
 		onLocked:  onLocked,
@@ -74,8 +74,8 @@ func decodeEventArg(arg interface{}, target interface{}) error {
 }
 
 func (t *QueueStateTracker) handleStateChange(p internalQueueEvents.StateChangedPayload) {
-	queue := &p.Queue
-	key := queue.String()
+	q := &p.Queue
+	key := q.String()
 	to := p.Transition.To
 	from := "initial"
 	if p.Transition.From != nil {
@@ -95,61 +95,61 @@ func (t *QueueStateTracker) handleStateChange(p internalQueueEvents.StateChanged
 	delete(t.locked, key)
 
 	switch to {
-	case q.StateStopped:
-		t.stopped[key] = queue
-	case q.StatePaused:
-		t.paused[key] = queue
-	case q.StateLocked:
-		t.locked[key] = queue
+	case queue.StateStopped:
+		t.stopped[key] = q
+	case queue.StatePaused:
+		t.paused[key] = q
+	case queue.StateLocked:
+		t.locked[key] = q
 	}
 	t.mu.Unlock()
 
 	switch to {
-	case q.StateStopped:
+	case queue.StateStopped:
 		t.log.Debug("triggering onStopped callback", "queue", key)
 		if t.onStopped != nil {
-			t.onStopped(queue)
+			t.onStopped(q)
 		}
-	case q.StatePaused:
+	case queue.StatePaused:
 		t.log.Debug("triggering onPaused callback", "queue", key)
 		if t.onPaused != nil {
-			t.onPaused(queue)
+			t.onPaused(q)
 		}
-	case q.StateLocked:
+	case queue.StateLocked:
 		t.log.Debug("triggering onLocked callback", "queue", key)
 		if t.onLocked != nil {
-			t.onLocked(queue)
+			t.onLocked(q)
 		}
-	case q.StateActive:
+	case queue.StateActive:
 		t.log.Debug("triggering onActive callback", "queue", key)
 		if t.onActive != nil {
-			t.onActive(queue)
+			t.onActive(q)
 		}
 	}
 }
 
-func (t *QueueStateTracker) IsStopped(queue *q.QueueParams) bool {
+func (t *QueueStateTracker) IsStopped(queue *queue.QueueParams) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	_, ok := t.stopped[queue.String()]
 	return ok
 }
 
-func (t *QueueStateTracker) IsPaused(queue *q.QueueParams) bool {
+func (t *QueueStateTracker) IsPaused(queue *queue.QueueParams) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	_, ok := t.paused[queue.String()]
 	return ok
 }
 
-func (t *QueueStateTracker) IsLocked(queue *q.QueueParams) bool {
+func (t *QueueStateTracker) IsLocked(queue *queue.QueueParams) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	_, ok := t.locked[queue.String()]
 	return ok
 }
 
-func (t *QueueStateTracker) IsActive(queue *q.QueueParams) bool {
+func (t *QueueStateTracker) IsActive(queue *queue.QueueParams) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	key := queue.String()

@@ -21,15 +21,15 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Batch acknowledgments with full buffer
 func TestBatchAck_FullBuffer(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-batch-ack-full")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-batch-ack-full")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Producer
 	prod := testutil.StartProducer(t, ctx)
@@ -65,8 +65,8 @@ func TestBatchAck_FullBuffer(t *testing.T) {
 func TestBatchAck_Timeout(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-batch-ack-timeout")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-batch-ack-timeout")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
@@ -99,8 +99,8 @@ func TestBatchAck_Timeout(t *testing.T) {
 func TestBatchAck_FlushOnShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-batch-ack-shutdown")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-batch-ack-shutdown")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
@@ -136,8 +136,8 @@ func TestBatchAck_FlushOnShutdown(t *testing.T) {
 func TestBatchAck_Disabled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-batch-ack-disabled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-batch-ack-disabled")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
@@ -165,8 +165,8 @@ func TestBatchAck_Disabled(t *testing.T) {
 func TestBatchUnack_FlushOnShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-batch-unack")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-batch-unack")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))

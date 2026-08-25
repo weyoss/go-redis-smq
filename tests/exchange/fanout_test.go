@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create a fanout exchange
@@ -41,8 +41,8 @@ func TestFanout_Create(t *testing.T) {
 func TestFanout_BindQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-fanout-bind-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-fanout-bind-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-bind-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -58,12 +58,12 @@ func TestFanout_BroadcastsToAll(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	q1 := q.MustQueueParams("test-fanout-broadcast-q1")
-	q2 := q.MustQueueParams("test-fanout-broadcast-q2")
-	q3 := q.MustQueueParams("test-fanout-broadcast-q3")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q3, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-fanout-broadcast-q1")
+	q2 := queue.MustQueueParams("test-fanout-broadcast-q2")
+	q3 := queue.MustQueueParams("test-fanout-broadcast-q3")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q3, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-broadcast-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -107,10 +107,10 @@ func TestFanout_IgnoresRoutingKey(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	q1 := q.MustQueueParams("test-fanout-ignore-rk-q1")
-	q2 := q.MustQueueParams("test-fanout-ignore-rk-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-fanout-ignore-rk-q1")
+	q2 := queue.MustQueueParams("test-fanout-ignore-rk-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-ignore-rk-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -149,8 +149,8 @@ func TestFanout_NoRoutingKeyNeeded(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	queueParams := q.MustQueueParams("test-fanout-no-rk-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-fanout-no-rk-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-no-rk-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -183,8 +183,8 @@ func TestFanout_NoRoutingKeyNeeded(t *testing.T) {
 func TestFanout_Unbind(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-fanout-unbind-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-fanout-unbind-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-unbind-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -202,10 +202,10 @@ func TestFanout_Unbind(t *testing.T) {
 func TestFanout_BoundQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParams("test-fanout-bound-q1")
-	q2 := q.MustQueueParams("test-fanout-bound-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-fanout-bound-q1")
+	q2 := queue.MustQueueParams("test-fanout-bound-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-bound-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -225,8 +225,8 @@ func TestFanout_BoundQueues(t *testing.T) {
 func TestFanout_DeleteWithBoundQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-fanout-delete-bound-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-fanout-delete-bound-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-delete-bound-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -242,8 +242,8 @@ func TestFanout_DeleteWithBoundQueues(t *testing.T) {
 func TestFanout_DeleteAfterUnbind(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-fanout-delete-unbind-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-fanout-delete-unbind-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-fanout-delete-unbind-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
@@ -257,7 +257,7 @@ func TestFanout_DeleteAfterUnbind(t *testing.T) {
 }
 
 // Helper
-func startConsumer(t *testing.T, ctx context.Context, params *q.QueueParams, counter *atomic.Int64) {
+func startConsumer(t *testing.T, ctx context.Context, params *queue.QueueParams, counter *atomic.Int64) {
 	t.Helper()
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {

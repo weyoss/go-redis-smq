@@ -16,15 +16,15 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Type mismatch — direct operation on topic exchange
 func TestError_TypeMismatch(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-error-type-mismatch-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-error-type-mismatch-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create as topic
 	topicParams := x.MustExchangeParams("test-error-type-mismatch-ex", x.TypeTopic)
@@ -59,8 +59,8 @@ func TestError_ExchangeNotFound(t *testing.T) {
 func TestError_UnbindNotBound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-error-unbind-not-bound-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-error-unbind-not-bound-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-error-unbind-not-bound-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -94,10 +94,10 @@ func TestError_DuplicateExchange(t *testing.T) {
 func TestError_CrossNamespaceBinding(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParamsWithNS("test-error-cross-ns-q", "ns1")
+	queueParams := queue.MustQueueParamsWithNS("test-error-cross-ns-q", "ns1")
 	exchangeParams := x.MustExchangeParamsWithNS("test-error-cross-ns-ex", "ns2", x.TypeDirect)
 
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	dx := exchange.NewDirectExchange()
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
@@ -123,8 +123,8 @@ func TestError_DeleteNonExistent(t *testing.T) {
 func TestError_EmptyRoutingKey(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-error-empty-rk-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-error-empty-rk-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-error-empty-rk-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()

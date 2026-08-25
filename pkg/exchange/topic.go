@@ -15,7 +15,7 @@ import (
 
 	internalExchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // TopicExchange manages topic exchanges with pattern-based routing.
@@ -76,7 +76,7 @@ func (tx *TopicExchange) Delete(ctx context.Context, params *x.ExchangeParams) e
 //	err := tx.BindQueue(ctx, queueParams, exchangeParams, "order.#")
 func (tx *TopicExchange) BindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	pattern string,
 ) error {
@@ -90,7 +90,7 @@ func (tx *TopicExchange) BindQueue(
 // The queue and exchange must be in the same namespace.
 func (tx *TopicExchange) UnbindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	pattern string,
 ) error {
@@ -111,7 +111,7 @@ func (tx *TopicExchange) MatchQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	return tx.topicStore.MatchQueues(ctx, exchangeParams, routingKey)
 }
 
@@ -137,7 +137,7 @@ func (tx *TopicExchange) BoundQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	pattern string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	return tx.topicStore.BoundQueues(ctx, exchangeParams, pattern)
 }
 
@@ -152,6 +152,6 @@ func (tx *TopicExchange) BoundQueues(
 func (tx *TopicExchange) Bindings(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) (map[string][]q.QueueParams, error) {
+) (map[string][]queue.QueueParams, error) {
 	return tx.topicStore.Bindings(ctx, exchangeParams)
 }

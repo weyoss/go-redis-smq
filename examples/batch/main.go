@@ -21,7 +21,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -34,8 +33,8 @@ func main() {
 	defer redissmq.Shutdown()
 
 	// Create queue
-	batchQueue := q.MustQueueParams(fmt.Sprintf("batch-test-%d", time.Now().UnixMilli()))
-	if err := queue.Create(ctx, batchQueue, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	batchQueue := queue.MustQueueParams(fmt.Sprintf("batch-test-%d", time.Now().UnixMilli()))
+	if err := redissmq.NewQueueManager().Create(ctx, batchQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
 		log.Fatalf("create queue: %v", err)
 	}
 

@@ -12,7 +12,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type PubSubTargetResolver struct {
@@ -31,7 +31,7 @@ func NewPubSubTargetResolver(producerID string) *PubSubTargetResolver {
 }
 
 func (r *PubSubTargetResolver) onQueueCreated(p internalQueueEvents.CreatedPayload) {
-	if p.Properties.DeliveryModel == q.DeliveryPubSub {
+	if p.Properties.DeliveryModel == queue.DeliveryPubSub {
 		key := p.Queue.String()
 		r.mu.Lock()
 		if _, exists := r.targets[key]; !exists {
@@ -77,7 +77,7 @@ func (r *PubSubTargetResolver) Load(ctx context.Context) error {
 
 	pubSubCount := 0
 	for _, member := range queues {
-		var qp q.QueueParams
+		var qp queue.QueueParams
 		if err := json.Unmarshal([]byte(member), &qp); err != nil {
 			continue
 		}
@@ -98,7 +98,7 @@ func (r *PubSubTargetResolver) Load(ctx context.Context) error {
 		}
 
 		deliveryModel, _ := strconv.Atoi(deliveryModelStr)
-		if q.DeliveryModel(deliveryModel) != q.DeliveryPubSub {
+		if queue.DeliveryModel(deliveryModel) != queue.DeliveryPubSub {
 			continue
 		}
 
@@ -190,13 +190,13 @@ func (r *PubSubTargetResolver) Clear() {
 	r.log.Debug("pub/sub targets cleared")
 }
 
-func (r *PubSubTargetResolver) Resolve(queueParams *q.QueueParams) []string {
+func (r *PubSubTargetResolver) Resolve(queueParams *queue.QueueParams) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.targets[queueParams.String()]
 }
 
-func (r *PubSubTargetResolver) Add(queueParams *q.QueueParams, groupID string) {
+func (r *PubSubTargetResolver) Add(queueParams *queue.QueueParams, groupID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := queueParams.String()
@@ -208,7 +208,7 @@ func (r *PubSubTargetResolver) Add(queueParams *q.QueueParams, groupID string) {
 	r.targets[key] = append(r.targets[key], groupID)
 }
 
-func (r *PubSubTargetResolver) Remove(queueParams *q.QueueParams, groupID string) {
+func (r *PubSubTargetResolver) Remove(queueParams *queue.QueueParams, groupID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := queueParams.String()

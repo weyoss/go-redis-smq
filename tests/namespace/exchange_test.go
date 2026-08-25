@@ -17,7 +17,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create exchange in namespace
@@ -106,8 +106,8 @@ func TestExchange_SameNameDifferentNamespaces(t *testing.T) {
 func TestExchange_BindInNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParamsWithNS("test-ns-bind-q", "bind-ns")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParamsWithNS("test-ns-bind-q", "bind-ns")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exParams := x.MustExchangeParamsWithNS("test-ns-bind-ex", "bind-ns", x.TypeDirect)
 	dx := exchange.NewDirectExchange()

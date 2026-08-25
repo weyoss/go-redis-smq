@@ -13,22 +13,22 @@ package namespace_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Delete namespace with queues
 func TestDelete_WithQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("test-del-q1", "deletable-ns")
-	q2 := q.MustQueueParamsWithNS("test-del-q2", "deletable-ns")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("test-del-q1", "deletable-ns")
+	q2 := publicqueue.MustQueueParamsWithNS("test-del-q2", "deletable-ns")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	err := nm.Delete(ctx, "deletable-ns")
@@ -37,7 +37,7 @@ func TestDelete_WithQueues(t *testing.T) {
 	}
 
 	// Queues should be gone
-	queues, err := queue.ListByNamespace(ctx, "deletable-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "deletable-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -78,8 +78,8 @@ func TestDelete_WithExchanges(t *testing.T) {
 func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParamsWithNS("test-del-mixed-q", "mixed-ns")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParamsWithNS("test-del-mixed-q", "mixed-ns")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	exParams := x.MustExchangeParamsWithNS("test-del-mixed-ex", "mixed-ns", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -92,7 +92,7 @@ func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 	}
 
 	// Both should be gone
-	queues, _ := queue.ListByNamespace(ctx, "mixed-ns")
+	queues, _ := redissmq.NewQueueManager().ListByNamespace(ctx, "mixed-ns")
 	exchanges, _ := exchange.NewManager().ListByNamespace(ctx, "mixed-ns")
 
 	if len(queues) != 0 {
@@ -130,8 +130,8 @@ func TestDelete_DefaultNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	// Create a queue in default namespace
-	params := q.MustQueueParams("test-del-default")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-del-default")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	err := nm.Delete(ctx, "default")
@@ -140,7 +140,7 @@ func TestDelete_DefaultNamespace(t *testing.T) {
 	}
 
 	// Queue should be gone
-	exists, _ := queue.Exists(ctx, params)
+	exists, _ := redissmq.NewQueueManager().Exists(ctx, params)
 	if exists {
 		t.Error("queue in default namespace should be deleted")
 	}

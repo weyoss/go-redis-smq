@@ -17,7 +17,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Package-level Create and Properties
@@ -107,11 +107,11 @@ func TestPackage_ValidateType(t *testing.T) {
 func TestPackage_ValidateBinding(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	fifoQueue := q.MustQueueParams("test-package-binding-fifo")
-	testutil.CreateQueue(t, ctx, fifoQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	fifoQueue := queue.MustQueueParams("test-package-binding-fifo")
+	testutil.CreateQueue(t, ctx, fifoQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	prioQueue := q.MustQueueParams("test-package-binding-prio")
-	testutil.CreateQueue(t, ctx, prioQueue, q.TypePriority, q.DeliveryPointToPoint)
+	prioQueue := queue.MustQueueParams("test-package-binding-prio")
+	testutil.CreateQueue(t, ctx, prioQueue, queue.TypePriority, queue.DeliveryPointToPoint)
 
 	directParams := x.MustExchangeParams("test-package-binding-ex", x.TypeDirect)
 
@@ -172,8 +172,8 @@ func TestPackage_Delete(t *testing.T) {
 func TestPackage_ListByQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-package-list-by-queue")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-package-list-by-queue")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-package-list-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()

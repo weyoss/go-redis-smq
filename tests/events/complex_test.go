@@ -27,8 +27,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	queueEventsPkg "github.com/weyoss/go-redis-smq/pkg/queue/events"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Scenario: All event types during normal produce→consume→ack flow
@@ -38,7 +36,7 @@ func TestComplexEvents_NormalFlow(t *testing.T) {
 	var mu sync.Mutex
 	eventTypes := make(map[string]int)
 
-	sub1, _ := queueEventsPkg.SubscribeCreated(func(p queueEventsPkg.CreatedPayload) {
+	sub1, _ := queue.SubscribeCreated(func(p queue.CreatedPayload) {
 		mu.Lock()
 		eventTypes["queue.created"]++
 		mu.Unlock()
@@ -73,8 +71,8 @@ func TestComplexEvents_NormalFlow(t *testing.T) {
 	})
 	defer sub5.Unsubscribe()
 
-	params := q.MustQueueParams("test-complex-normal")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-complex-normal")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("normal").SetQueue(params))
@@ -113,8 +111,8 @@ func TestComplexEvents_ErrorFlow(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-error")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-complex-error")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	eventTypes := make(map[string]int)
@@ -187,13 +185,13 @@ func TestComplexEvents_QueueStateChanges(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-state")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-complex-state")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	stateChanges := make([]string, 0)
 
-	sub, _ := queueEventsPkg.SubscribeStateChanged(func(p queueEventsPkg.StateChangedPayload) {
+	sub, _ := queue.SubscribeStateChanged(func(p queue.StateChangedPayload) {
 		mu.Lock()
 		stateChanges = append(stateChanges, p.Transition.To.String())
 		mu.Unlock()
@@ -214,10 +212,12 @@ func TestComplexEvents_QueueStateChanges(t *testing.T) {
 	prod.Produce(ctx, msg.New().SetBody("before-pause").SetQueue(params))
 	time.Sleep(2 * time.Second)
 
-	queue.Pause(ctx, params, nil)
+	sm := redissmq.NewStateManager()
+
+	sm.Pause(ctx, params, nil)
 	time.Sleep(2 * time.Second)
 
-	queue.Resume(ctx, params, nil)
+	sm.Resume(ctx, params, nil)
 	time.Sleep(2 * time.Second)
 
 	prod.Produce(ctx, msg.New().SetBody("after-pause").SetQueue(params))
@@ -255,8 +255,8 @@ func TestComplexEvents_QueueStateChanges(t *testing.T) {
 func TestComplexEvents_ConfigUpdateDuringProcessing(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-config")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-complex-config")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	configUpdated := false
@@ -313,8 +313,8 @@ func TestComplexEvents_ConfigUpdateDuringProcessing(t *testing.T) {
 func TestComplexEvents_CrossDomainOrdering(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-ordering")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-complex-ordering")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var eventOrder []string
@@ -390,8 +390,8 @@ func TestComplexEvents_CrossDomainOrdering(t *testing.T) {
 func TestComplexEvents_ManySubscribers(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-many-subs")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-complex-many-subs")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	subscriberCount := 5
 	var mu sync.Mutex

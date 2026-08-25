@@ -8,7 +8,7 @@
  *
  */
 
-package q
+package queue
 
 import (
 	"encoding/json"

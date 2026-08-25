@@ -21,15 +21,15 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Consumer heartbeat key exists while running
 func TestHeartbeat_Running(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-hb-running")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-hb-running")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer(
 		consumer.WithHeartbeatTTL(10 * time.Second),
@@ -55,8 +55,8 @@ func TestHeartbeat_Running(t *testing.T) {
 func TestHeartbeat_ExpiresAfterShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-hb-shutdown")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-hb-shutdown")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer(
 		consumer.WithHeartbeatTTL(1 * time.Second),
@@ -84,8 +84,8 @@ func TestHeartbeat_ExpiresAfterShutdown(t *testing.T) {
 func TestHeartbeat_TTLRefresh(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-hb-refresh")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-hb-refresh")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer(
 		consumer.WithHeartbeatTTL(3 * time.Second),

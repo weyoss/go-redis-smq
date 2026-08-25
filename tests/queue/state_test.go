@@ -13,43 +13,47 @@ package queue_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Pause and resume a queue
 func TestQueueState_PauseAndResume(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-pause-resume")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-pause-resume")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	sm := redissmq.NewStateManager()
 
 	// Pause
-	_, err := queue.Pause(ctx, params, nil)
+	_, err := sm.Pause(ctx, params, nil)
 	if err != nil {
 		t.Fatalf("pause: %v", err)
 	}
 
-	props, err := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+
+	props, err := qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.OperationalState != q.StatePaused {
+	if props.OperationalState != publicqueue.StatePaused {
 		t.Fatalf("state = %v, want PAUSED", props.OperationalState)
 	}
 
 	// Resume
-	_, err = queue.Resume(ctx, params, nil)
+	_, err = sm.Resume(ctx, params, nil)
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 
-	props, err = queue.Properties(ctx, params)
+	props, err = qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.OperationalState != q.StateActive {
+	if props.OperationalState != publicqueue.StateActive {
 		t.Fatalf("state = %v, want ACTIVE", props.OperationalState)
 	}
 }
@@ -58,34 +62,38 @@ func TestQueueState_PauseAndResume(t *testing.T) {
 func TestQueueState_StopAndResume(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-stop-resume")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-stop-resume")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	sm := redissmq.NewStateManager()
 
 	// Stop
-	_, err := queue.Stop(ctx, params, nil)
+	_, err := sm.Stop(ctx, params, nil)
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
 
-	props, err := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+
+	props, err := qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.OperationalState != q.StateStopped {
+	if props.OperationalState != publicqueue.StateStopped {
 		t.Fatalf("state = %v, want STOPPED", props.OperationalState)
 	}
 
 	// Resume from stopped
-	_, err = queue.Resume(ctx, params, nil)
+	_, err = sm.Resume(ctx, params, nil)
 	if err != nil {
 		t.Fatalf("resume: %v", err)
 	}
 
-	props, err = queue.Properties(ctx, params)
+	props, err = qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.OperationalState != q.StateActive {
+	if props.OperationalState != publicqueue.StateActive {
 		t.Fatalf("state = %v, want ACTIVE", props.OperationalState)
 	}
 }
@@ -94,17 +102,19 @@ func TestQueueState_StopAndResume(t *testing.T) {
 func TestQueueState_InvalidTransition(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-invalid-transition")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-invalid-transition")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	sm := redissmq.NewStateManager()
 
 	// Stop the queue
-	_, err := queue.Stop(ctx, params, nil)
+	_, err := sm.Stop(ctx, params, nil)
 	if err != nil {
 		t.Fatalf("stop: %v", err)
 	}
 
 	// Try to pause a stopped queue (invalid)
-	_, err = queue.Pause(ctx, params, nil)
+	_, err = sm.Pause(ctx, params, nil)
 	if err == nil {
 		t.Fatal("expected error: cannot pause a stopped queue")
 	}
@@ -114,17 +124,19 @@ func TestQueueState_InvalidTransition(t *testing.T) {
 func TestQueueState_History(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-history")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-history")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	sm := redissmq.NewStateManager()
 
 	// Pause
-	queue.Pause(ctx, params, nil)
+	sm.Pause(ctx, params, nil)
 	// Resume
-	queue.Resume(ctx, params, nil)
+	sm.Resume(ctx, params, nil)
 	// Stop
-	queue.Stop(ctx, params, nil)
+	sm.Stop(ctx, params, nil)
 
-	history, err := queue.History(ctx, params)
+	history, err := sm.History(ctx, params)
 	if err != nil {
 		t.Fatalf("history: %v", err)
 	}
@@ -135,7 +147,7 @@ func TestQueueState_History(t *testing.T) {
 	}
 
 	// Most recent first: STOPPED
-	if history[0].To != q.StateStopped {
+	if history[0].To != publicqueue.StateStopped {
 		t.Errorf("most recent state = %v, want STOPPED", history[0].To)
 	}
 }
@@ -144,24 +156,26 @@ func TestQueueState_History(t *testing.T) {
 func TestQueueState_Current(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-current")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-current")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	transition, err := queue.Current(ctx, params)
+	sm := redissmq.NewStateManager()
+
+	transition, err := sm.Current(ctx, params)
 	if err != nil {
 		t.Fatalf("current: %v", err)
 	}
-	if transition.To != q.StateActive {
+	if transition.To != publicqueue.StateActive {
 		t.Fatalf("state = %v, want ACTIVE", transition.To)
 	}
 
-	queue.Pause(ctx, params, nil)
+	sm.Pause(ctx, params, nil)
 
-	transition, err = queue.Current(ctx, params)
+	transition, err = sm.Current(ctx, params)
 	if err != nil {
 		t.Fatalf("current: %v", err)
 	}
-	if transition.To != q.StatePaused {
+	if transition.To != publicqueue.StatePaused {
 		t.Fatalf("state = %v, want PAUSED", transition.To)
 	}
 }

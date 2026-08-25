@@ -21,7 +21,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // FanoutStore handles fanout exchange operations.
@@ -30,7 +30,7 @@ type FanoutStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*q.QueueParams]
+	queueCodec codec.SetCodec[*queue.QueueParams]
 }
 
 // NewFanoutStore creates a new fanout exchange store.
@@ -47,7 +47,7 @@ func NewFanoutStore(store *Store, validator *Validator, codecs *Codecs) *FanoutS
 // The queue will receive all messages published to this exchange.
 func (fs *FanoutStore) BindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 ) error {
 	exKey := keys.Exchange{
@@ -113,7 +113,7 @@ func (fs *FanoutStore) BindQueue(
 // UnbindQueue removes a queue binding from a fanout exchange.
 func (fs *FanoutStore) UnbindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 ) error {
 	exKey := keys.Exchange{
@@ -169,7 +169,7 @@ func (fs *FanoutStore) UnbindQueue(
 func (fs *FanoutStore) BoundQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),

@@ -21,8 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Rapid start/stop cycles
@@ -30,8 +29,8 @@ func TestEdge_RapidStartStop(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-edge-rapid")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-rapid")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	for i := 0; i < 10; i++ {
 		cons := redissmq.NewConsumer()
@@ -52,8 +51,8 @@ func TestEdge_ManyConsumers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-edge-many-consumers")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-many-consumers")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 50; i++ {
@@ -95,11 +94,11 @@ func TestEdge_SlowHandlerDoesNotBlockOthers(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	fastQueue := q.MustQueueParams("test-edge-fast")
-	slowQueue := q.MustQueueParams("test-edge-slow")
+	fastQueue := publicqueue.MustQueueParams("test-edge-fast")
+	slowQueue := publicqueue.MustQueueParams("test-edge-slow")
 
-	testutil.CreateQueue(t, ctx, fastQueue, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, slowQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, fastQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, slowQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("fast").SetQueue(fastQueue))
@@ -133,8 +132,8 @@ func TestEdge_AlwaysFailingHandler(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-edge-always-fail")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-always-fail")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("fail").
@@ -160,7 +159,7 @@ func TestEdge_AlwaysFailingHandler(t *testing.T) {
 	t.Logf("attempts: %d (expected multiple retries then dead-letter)", attempts.Load())
 
 	// Check queue properties — should have dead-lettered messages if audit enabled
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	t.Logf("pending: %d, dead: %d, requeued: %d",
 		props.PendingMessagesCount,
 		props.DeadLetteredMessagesCount,
@@ -173,8 +172,8 @@ func TestEdge_ShutdownDuringProcessing(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-edge-shutdown-during")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-shutdown-during")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
@@ -201,7 +200,7 @@ func TestEdge_ShutdownDuringProcessing(t *testing.T) {
 
 	// Remaining messages should be returned to pending
 	time.Sleep(1 * time.Second)
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	t.Logf("after shutdown: pending=%d, processing=%d",
 		props.PendingMessagesCount,
 		props.ProcessingMessagesCount,
@@ -212,8 +211,8 @@ func TestEdge_ShutdownDuringProcessing(t *testing.T) {
 func TestEdge_EmptyMessageBody(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-empty-body")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-empty-body")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("").SetQueue(params))
@@ -238,8 +237,8 @@ func TestEdge_EmptyMessageBody(t *testing.T) {
 func TestEdge_LargeMessageBody(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-large-body")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-large-body")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// 10KB message
 	largeBody := make([]byte, 10000)
@@ -277,8 +276,8 @@ func TestEdge_QueueDeletedDuringConsume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-edge-delete-during")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-delete-during")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
@@ -291,8 +290,10 @@ func TestEdge_QueueDeletedDuringConsume(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
+	qm := redissmq.NewQueueManager()
+
 	// Delete the queue while consumer is running
-	err := queue.Delete(ctx, params)
+	err := qm.Delete(ctx, params)
 	if err != nil {
 		t.Logf("delete queue while consuming: %v (expected: error about active consumers)", err)
 	}
@@ -300,7 +301,7 @@ func TestEdge_QueueDeletedDuringConsume(t *testing.T) {
 	cons.Shutdown()
 
 	// Now delete should succeed
-	err = queue.Delete(ctx, params)
+	err = qm.Delete(ctx, params)
 	if err != nil {
 		t.Logf("delete after shutdown: %v", err)
 	}
@@ -310,8 +311,8 @@ func TestEdge_QueueDeletedDuringConsume(t *testing.T) {
 func TestEdge_HandlerPanicDoesNotCrashConsumer(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-handler-panic")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-handler-panic")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	// First message triggers a panic

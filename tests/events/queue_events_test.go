@@ -15,11 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weyoss/go-redis-smq/internal/queue/events"
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	queueEvents "github.com/weyoss/go-redis-smq/pkg/queue/events"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Subscribe to queue created event
@@ -29,8 +28,8 @@ func TestQueueEvents_SubscribeCreated(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.CreatedPayload
-	sub, err := queueEvents.SubscribeCreated(func(p events.CreatedPayload) {
+	var received queue.CreatedPayload
+	sub, err := queue.SubscribeCreated(func(p queue.CreatedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -39,8 +38,8 @@ func TestQueueEvents_SubscribeCreated(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
-	params := q.MustQueueParams("test-events-created")
-	if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	params := publicqueue.MustQueueParams("test-events-created")
+	if err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -59,7 +58,7 @@ func TestQueueEvents_SubscribeCreated(t *testing.T) {
 	if received.Queue.Name() != "test-events-created" {
 		t.Errorf("queue name = %s, want test-events-created", received.Queue.Name())
 	}
-	if received.Properties.Type != q.TypeFIFO {
+	if received.Properties.Type != publicqueue.TypeFIFO {
 		t.Errorf("type = %v, want FIFO", received.Properties.Type)
 	}
 }
@@ -68,14 +67,14 @@ func TestQueueEvents_SubscribeCreated(t *testing.T) {
 func TestQueueEvents_SubscribeDeleted(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-deleted")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-events-deleted")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.DeletedPayload
-	sub, err := queueEvents.SubscribeDeleted(func(p events.DeletedPayload) {
+	var received queue.DeletedPayload
+	sub, err := queue.SubscribeDeleted(func(p queue.DeletedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -84,7 +83,7 @@ func TestQueueEvents_SubscribeDeleted(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
-	if err := queue.Delete(ctx, params); err != nil {
+	if err := redissmq.NewQueueManager().Delete(ctx, params); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
@@ -109,13 +108,13 @@ func TestQueueEvents_SubscribeDeleted(t *testing.T) {
 func TestQueueEvents_SubscribeStateChanged(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-state")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-events-state")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
-	var transitions []events.StateChangedPayload
+	var transitions []queue.StateChangedPayload
 
-	sub, err := queueEvents.SubscribeStateChanged(func(p events.StateChangedPayload) {
+	sub, err := queue.SubscribeStateChanged(func(p queue.StateChangedPayload) {
 		mu.Lock()
 		transitions = append(transitions, p)
 		mu.Unlock()
@@ -125,16 +124,18 @@ func TestQueueEvents_SubscribeStateChanged(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
+	sm := redissmq.NewStateManager()
+
 	// Pause
-	queue.Pause(ctx, params, nil)
+	sm.Pause(ctx, params, nil)
 	time.Sleep(200 * time.Millisecond)
 
 	// Resume
-	queue.Resume(ctx, params, nil)
+	sm.Resume(ctx, params, nil)
 	time.Sleep(200 * time.Millisecond)
 
 	// Stop
-	queue.Stop(ctx, params, nil)
+	sm.Stop(ctx, params, nil)
 	time.Sleep(200 * time.Millisecond)
 
 	mu.Lock()
@@ -151,11 +152,11 @@ func TestQueueEvents_SubscribeStateChanged(t *testing.T) {
 	foundStopped := false
 	for _, tr := range transitions {
 		switch tr.Transition.To {
-		case q.StatePaused:
+		case publicqueue.StatePaused:
 			foundPaused = true
-		case q.StateActive:
+		case publicqueue.StateActive:
 			foundActive = true
-		case q.StateStopped:
+		case publicqueue.StateStopped:
 			foundStopped = true
 		}
 	}
@@ -175,14 +176,14 @@ func TestQueueEvents_SubscribeStateChanged(t *testing.T) {
 func TestQueueEvents_SubscribeConsumerGroupCreated(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-cg-created")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-events-cg-created")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.ConsumerGroupCreatedPayload
-	sub, err := queueEvents.SubscribeConsumerGroupCreated(func(p events.ConsumerGroupCreatedPayload) {
+	var received queue.ConsumerGroupCreatedPayload
+	sub, err := queue.SubscribeConsumerGroupCreated(func(p queue.ConsumerGroupCreatedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -191,7 +192,7 @@ func TestQueueEvents_SubscribeConsumerGroupCreated(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
-	result, err := queue.SaveConsumerGroup(ctx, params, "email-service")
+	result, err := redissmq.NewConsumerGroupManager().Save(ctx, params, "email-service")
 	if err != nil {
 		t.Fatalf("save group: %v", err)
 	}
@@ -223,16 +224,17 @@ func TestQueueEvents_SubscribeConsumerGroupCreated(t *testing.T) {
 func TestQueueEvents_SubscribeConsumerGroupDeleted(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-cg-deleted")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-events-cg-deleted")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "sms-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, "sms-service")
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.ConsumerGroupDeletedPayload
-	sub, err := queueEvents.SubscribeConsumerGroupDeleted(func(p events.ConsumerGroupDeletedPayload) {
+	var received queue.ConsumerGroupDeletedPayload
+	sub, err := queue.SubscribeConsumerGroupDeleted(func(p queue.ConsumerGroupDeletedPayload) {
 		received = p
 		wg.Done()
 	})
@@ -241,7 +243,7 @@ func TestQueueEvents_SubscribeConsumerGroupDeleted(t *testing.T) {
 	}
 	defer sub.Unsubscribe()
 
-	if err := queue.DeleteConsumerGroup(ctx, params, "sms-service"); err != nil {
+	if err := cgm.Delete(ctx, params, "sms-service"); err != nil {
 		t.Fatalf("delete group: %v", err)
 	}
 
@@ -273,24 +275,24 @@ func TestQueueEvents_MultipleSubscribers(t *testing.T) {
 	wg.Add(3)
 
 	var mu sync.Mutex
-	var received []events.CreatedPayload
+	var received []queue.CreatedPayload
 
-	handler := func(p events.CreatedPayload) {
+	handler := func(p queue.CreatedPayload) {
 		mu.Lock()
 		received = append(received, p)
 		mu.Unlock()
 		wg.Done()
 	}
 
-	sub1, _ := queueEvents.SubscribeCreated(handler)
-	sub2, _ := queueEvents.SubscribeCreated(handler)
-	sub3, _ := queueEvents.SubscribeCreated(handler)
+	sub1, _ := queue.SubscribeCreated(handler)
+	sub2, _ := queue.SubscribeCreated(handler)
+	sub3, _ := queue.SubscribeCreated(handler)
 	defer sub1.Unsubscribe()
 	defer sub2.Unsubscribe()
 	defer sub3.Unsubscribe()
 
-	params := q.MustQueueParams("test-events-multi-sub")
-	queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-events-multi-sub")
+	redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	done := make(chan struct{})
 	go func() {
@@ -320,15 +322,17 @@ func TestQueueEvents_Unsubscribe(t *testing.T) {
 	var mu sync.Mutex
 	var count int
 
-	sub, _ := queueEvents.SubscribeCreated(func(p events.CreatedPayload) {
+	sub, _ := queue.SubscribeCreated(func(p queue.CreatedPayload) {
 		mu.Lock()
 		count++
 		mu.Unlock()
 	})
 
+	qm := redissmq.NewQueueManager()
+
 	// Create first queue — should receive event
-	params1 := q.MustQueueParams("test-events-unsub-1")
-	queue.Create(ctx, params1, q.TypeFIFO, q.DeliveryPointToPoint)
+	params1 := publicqueue.MustQueueParams("test-events-unsub-1")
+	qm.Create(ctx, params1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	time.Sleep(200 * time.Millisecond)
 
 	mu.Lock()
@@ -343,8 +347,8 @@ func TestQueueEvents_Unsubscribe(t *testing.T) {
 	sub.Unsubscribe()
 
 	// Create second queue — should NOT receive event
-	params2 := q.MustQueueParams("test-events-unsub-2")
-	queue.Create(ctx, params2, q.TypeFIFO, q.DeliveryPointToPoint)
+	params2 := publicqueue.MustQueueParams("test-events-unsub-2")
+	qm.Create(ctx, params2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	time.Sleep(200 * time.Millisecond)
 
 	mu.Lock()
@@ -363,15 +367,17 @@ func TestQueueEvents_PropertiesInEvent(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.CreatedPayload
-	sub, _ := queueEvents.SubscribeCreated(func(p events.CreatedPayload) {
+	var received queue.CreatedPayload
+	sub, _ := queue.SubscribeCreated(func(p queue.CreatedPayload) {
 		received = p
 		wg.Done()
 	})
 	defer sub.Unsubscribe()
 
-	params := q.MustQueueParams("test-events-props")
-	queue.Create(ctx, params, q.TypeLIFO, q.DeliveryPubSub)
+	qm := redissmq.NewQueueManager()
+
+	params := publicqueue.MustQueueParams("test-events-props")
+	qm.Create(ctx, params, publicqueue.TypeLIFO, publicqueue.DeliveryPubSub)
 
 	done := make(chan struct{})
 	go func() {
@@ -385,10 +391,10 @@ func TestQueueEvents_PropertiesInEvent(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	if received.Properties.Type != q.TypeLIFO {
+	if received.Properties.Type != publicqueue.TypeLIFO {
 		t.Errorf("type = %v, want LIFO", received.Properties.Type)
 	}
-	if received.Properties.DeliveryModel != q.DeliveryPubSub {
+	if received.Properties.DeliveryModel != publicqueue.DeliveryPubSub {
 		t.Errorf("deliveryModel = %v, want PubSub", received.Properties.DeliveryModel)
 	}
 }
@@ -397,24 +403,26 @@ func TestQueueEvents_PropertiesInEvent(t *testing.T) {
 func TestQueueEvents_StateChangedTransitionDetails(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-transition")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-events-transition")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
-	var received events.StateChangedPayload
-	sub, _ := queueEvents.SubscribeStateChanged(func(p events.StateChangedPayload) {
+	var received queue.StateChangedPayload
+	sub, _ := queue.SubscribeStateChanged(func(p queue.StateChangedPayload) {
 		// Capture only the pause transition
-		if p.Transition.To == q.StatePaused {
+		if p.Transition.To == publicqueue.StatePaused {
 			received = p
 			wg.Done()
 		}
 	})
 	defer sub.Unsubscribe()
 
-	queue.Pause(ctx, params, &q.StateTransitionOptions{
-		Reason:      ptr(q.ReasonTesting),
+	sm := redissmq.NewStateManager()
+
+	sm.Pause(ctx, params, &publicqueue.StateTransitionOptions{
+		Reason:      ptr(publicqueue.ReasonTesting),
 		Description: ptr("Testing state change events"),
 	})
 
@@ -430,7 +438,7 @@ func TestQueueEvents_StateChangedTransitionDetails(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	if received.Transition.To != q.StatePaused {
+	if received.Transition.To != publicqueue.StatePaused {
 		t.Errorf("to = %v, want PAUSED", received.Transition.To)
 	}
 	if received.Queue.Name() != "test-events-transition" {

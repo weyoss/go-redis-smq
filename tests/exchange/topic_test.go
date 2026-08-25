@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create a topic exchange
@@ -41,8 +41,8 @@ func TestTopic_Create(t *testing.T) {
 func TestTopic_BindQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-bind-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-bind-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-bind-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -57,8 +57,8 @@ func TestTopic_BindQueue(t *testing.T) {
 func TestTopic_SingleWildcard(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-star-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-star-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-star-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -87,8 +87,8 @@ func TestTopic_SingleWildcard(t *testing.T) {
 func TestTopic_HashWildcard(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-hash-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-hash-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-hash-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -117,8 +117,8 @@ func TestTopic_HashWildcard(t *testing.T) {
 func TestTopic_HashAtBeginning(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-hash-begin-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-hash-begin-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-hash-begin-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -134,10 +134,10 @@ func TestTopic_HashAtBeginning(t *testing.T) {
 func TestTopic_MultipleMatches(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParams("test-topic-multi-q1")
-	q2 := q.MustQueueParams("test-topic-multi-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-topic-multi-q1")
+	q2 := queue.MustQueueParams("test-topic-multi-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-multi-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -156,8 +156,8 @@ func TestTopic_MultipleMatches(t *testing.T) {
 func TestTopic_InvalidPattern(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-invalid-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-invalid-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-invalid-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -172,8 +172,8 @@ func TestTopic_InvalidPattern(t *testing.T) {
 func TestTopic_Patterns(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-patterns-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-patterns-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-patterns-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -195,10 +195,10 @@ func TestTopic_ProduceConsume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	userQueue := q.MustQueueParams("test-topic-prod-user-q")
-	orderQueue := q.MustQueueParams("test-topic-prod-order-q")
-	testutil.CreateQueue(t, ctx, userQueue, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, orderQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	userQueue := queue.MustQueueParams("test-topic-prod-user-q")
+	orderQueue := queue.MustQueueParams("test-topic-prod-order-q")
+	testutil.CreateQueue(t, ctx, userQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, orderQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-prod-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -253,8 +253,8 @@ func TestTopic_ProduceConsume(t *testing.T) {
 func TestTopic_Unbind(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-unbind-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-unbind-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-unbind-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
@@ -272,8 +272,8 @@ func TestTopic_Unbind(t *testing.T) {
 func TestTopic_Bindings(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-topic-bindings-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-topic-bindings-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-topic-bindings-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()

@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Benchmark: Create 1,000 queues
@@ -28,10 +28,12 @@ func BenchmarkQueue_Create(b *testing.B) {
 	b.ResetTimer()
 	start := time.Now()
 
+	qm := redissmq.NewQueueManager()
+
 	count := 1000
 	for i := 0; i < count; i++ {
-		params := q.MustQueueParams(fmt.Sprintf("bench-queue-create-%d-%d", time.Now().UnixNano(), i))
-		if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+		params := queue.MustQueueParams(fmt.Sprintf("bench-queue-create-%d-%d", time.Now().UnixNano(), i))
+		if err := qm.Create(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
 			b.Fatalf("create queue %d: %v", i, err)
 		}
 	}
@@ -46,8 +48,8 @@ func BenchmarkQueue_Create(b *testing.B) {
 // Benchmark: Browse 10,000 messages
 func BenchmarkQueue_Browse(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-browse-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-browse-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 10_000
@@ -60,10 +62,12 @@ func BenchmarkQueue_Browse(b *testing.B) {
 	b.ResetTimer()
 	start := time.Now()
 
+	qm := redissmq.NewQueueManager()
+
 	iterations := 100
 	for i := 0; i < iterations; i++ {
-		_, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-			Filter: q.BrowsePublished,
+		_, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+			Filter: queue.BrowsePublished,
 			Offset: 0,
 			Count:  100,
 		})
@@ -82,18 +86,20 @@ func BenchmarkQueue_Browse(b *testing.B) {
 // Benchmark: Queue state transitions
 func BenchmarkQueue_StateTransitions(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-state-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-state-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	b.ResetTimer()
 	start := time.Now()
 
+	sm := redissmq.NewStateManager()
+
 	iterations := 100
 	for i := 0; i < iterations; i++ {
-		if _, err := queue.Pause(ctx, params, nil); err != nil {
+		if _, err := sm.Pause(ctx, params, nil); err != nil {
 			b.Fatalf("pause %d: %v", i, err)
 		}
-		if _, err := queue.Resume(ctx, params, nil); err != nil {
+		if _, err := sm.Resume(ctx, params, nil); err != nil {
 			b.Fatalf("resume %d: %v", i, err)
 		}
 	}
@@ -109,15 +115,17 @@ func BenchmarkQueue_StateTransitions(b *testing.B) {
 // Benchmark: Queue properties read
 func BenchmarkQueue_Properties(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-props-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-props-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	b.ResetTimer()
 	start := time.Now()
 
+	qm := redissmq.NewQueueManager()
+
 	iterations := 1000
 	for i := 0; i < iterations; i++ {
-		if _, err := queue.Properties(ctx, params); err != nil {
+		if _, err := qm.Properties(ctx, params); err != nil {
 			b.Fatalf("properties %d: %v", i, err)
 		}
 	}

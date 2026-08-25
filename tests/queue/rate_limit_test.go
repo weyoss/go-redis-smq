@@ -20,7 +20,6 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Scenario: Rate limit throttles message consumption
@@ -28,12 +27,14 @@ func TestQueueRateLimit_ThrottlesConsumption(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-rate-throttle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-rate-throttle")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
 
 	// Set rate limit: 3 messages per 2 seconds
-	rl := q.MustRateLimitParams(3, 2*time.Second)
-	if err := queue.SetRateLimit(ctx, params, rl); err != nil {
+	rl := queue.MustRateLimitParams(3, 2*time.Second)
+	if err := qm.SetRateLimit(ctx, params, rl); err != nil {
 		t.Fatalf("set rate limit: %v", err)
 	}
 
@@ -75,14 +76,14 @@ func TestQueueRateLimit_PerQueueIsolation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
-	fastQueue := q.MustQueueParams("test-rate-fast")
-	slowQueue := q.MustQueueParams("test-rate-slow")
-	testutil.CreateQueue(t, ctx, fastQueue, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, slowQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	fastQueue := queue.MustQueueParams("test-rate-fast")
+	slowQueue := queue.MustQueueParams("test-rate-slow")
+	testutil.CreateQueue(t, ctx, fastQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, slowQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Slow queue: 2 messages per 5 seconds
-	rl := q.MustRateLimitParams(2, 5*time.Second)
-	if err := queue.SetRateLimit(ctx, slowQueue, rl); err != nil {
+	rl := queue.MustRateLimitParams(2, 5*time.Second)
+	if err := redissmq.NewQueueManager().SetRateLimit(ctx, slowQueue, rl); err != nil {
 		t.Fatalf("set rate limit: %v", err)
 	}
 
@@ -129,12 +130,14 @@ func TestQueueRateLimit_ClearResumesConsumption(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-rate-clear-resume")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-rate-clear-resume")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
 
 	// Very restrictive rate limit
-	rl := q.MustRateLimitParams(1, 30*time.Second)
-	if err := queue.SetRateLimit(ctx, params, rl); err != nil {
+	rl := queue.MustRateLimitParams(1, 30*time.Second)
+	if err := qm.SetRateLimit(ctx, params, rl); err != nil {
 		t.Fatalf("set rate limit: %v", err)
 	}
 
@@ -157,7 +160,7 @@ func TestQueueRateLimit_ClearResumesConsumption(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Clear the rate limit
-	if err := queue.ClearRateLimit(ctx, params); err != nil {
+	if err := qm.ClearRateLimit(ctx, params); err != nil {
 		t.Fatalf("clear rate limit: %v", err)
 	}
 
@@ -174,11 +177,13 @@ func TestQueueRateLimit_ClearResumesConsumption(t *testing.T) {
 func TestQueueRateLimit_CRUD(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-rate-crud")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-rate-crud")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
 
 	// No rate limit initially
-	got, err := queue.RateLimit(ctx, params)
+	got, err := qm.RateLimit(ctx, params)
 	if err != nil {
 		t.Fatalf("get rate limit: %v", err)
 	}
@@ -187,14 +192,14 @@ func TestQueueRateLimit_CRUD(t *testing.T) {
 	}
 
 	// Set rate limit
-	rl := q.MustRateLimitParams(100, time.Minute)
-	err = queue.SetRateLimit(ctx, params, rl)
+	rl := queue.MustRateLimitParams(100, time.Minute)
+	err = qm.SetRateLimit(ctx, params, rl)
 	if err != nil {
 		t.Fatalf("set rate limit: %v", err)
 	}
 
 	// Verify
-	got, err = queue.RateLimit(ctx, params)
+	got, err = qm.RateLimit(ctx, params)
 	if err != nil {
 		t.Fatalf("get rate limit after set: %v", err)
 	}
@@ -206,13 +211,13 @@ func TestQueueRateLimit_CRUD(t *testing.T) {
 	}
 
 	// Clear
-	err = queue.ClearRateLimit(ctx, params)
+	err = qm.ClearRateLimit(ctx, params)
 	if err != nil {
 		t.Fatalf("clear rate limit: %v", err)
 	}
 
 	// Verify cleared
-	got, err = queue.RateLimit(ctx, params)
+	got, err = qm.RateLimit(ctx, params)
 	if err != nil {
 		t.Fatalf("get rate limit after clear: %v", err)
 	}
@@ -223,12 +228,12 @@ func TestQueueRateLimit_CRUD(t *testing.T) {
 
 // Scenario: Invalid rate limit parameters
 func TestQueueRateLimit_InvalidParams(t *testing.T) {
-	_, err := q.NewRateLimitParams(0, time.Minute)
+	_, err := queue.NewRateLimitParams(0, time.Minute)
 	if err == nil {
 		t.Fatal("expected error for limit <= 0")
 	}
 
-	_, err = q.NewRateLimitParams(100, 500*time.Millisecond)
+	_, err = queue.NewRateLimitParams(100, 500*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected error for interval < 1s")
 	}

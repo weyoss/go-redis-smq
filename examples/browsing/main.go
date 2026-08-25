@@ -21,7 +21,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -43,9 +42,12 @@ func main() {
 		log.Fatalf("save config: %v", err)
 	}
 
+	//
+	qm := redissmq.NewQueueManager()
+
 	// Create queue
-	browseQueue := q.MustQueueParams(fmt.Sprintf("browse-test-%d", time.Now().UnixMilli()))
-	if err := queue.Create(ctx, browseQueue, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	browseQueue := queue.MustQueueParams(fmt.Sprintf("browse-test-%d", time.Now().UnixMilli()))
+	if err := qm.Create(ctx, browseQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
 		log.Fatalf("create queue: %v", err)
 	}
 
@@ -104,19 +106,19 @@ func main() {
 	// ── Browse Messages ──
 
 	// Published: All messages in the queue
-	printBrowseResult(ctx, "Published", browseQueue, q.BrowsePublished)
+	printBrowseResult(ctx, "Published", browseQueue, queue.BrowsePublished)
 
 	// Pending: Messages waiting to be consumed
-	printBrowseResult(ctx, "Pending", browseQueue, q.BrowsePending)
+	printBrowseResult(ctx, "Pending", browseQueue, queue.BrowsePending)
 
 	// Scheduled: Messages waiting for future delivery
-	printBrowseResult(ctx, "Scheduled", browseQueue, q.BrowseScheduled)
+	printBrowseResult(ctx, "Scheduled", browseQueue, queue.BrowseScheduled)
 
 	// Acknowledged: Successfully processed messages (requires audit)
-	printBrowseResult(ctx, "Acknowledged", browseQueue, q.BrowseAcknowledged)
+	printBrowseResult(ctx, "Acknowledged", browseQueue, queue.BrowseAcknowledged)
 
 	// Dead-Lettered: Failed messages (requires audit)
-	printBrowseResult(ctx, "Dead-Lettered", browseQueue, q.BrowseDeadLettered)
+	printBrowseResult(ctx, "Dead-Lettered", browseQueue, queue.BrowseDeadLettered)
 
 	// ── Pagination ──
 
@@ -125,8 +127,8 @@ func main() {
 	pageSize := int64(3)
 	page := 1
 	for {
-		result, err := queue.BrowseMessages(ctx, browseQueue, &q.BrowseParams{
-			Filter: q.BrowsePublished,
+		result, err := qm.BrowseMessages(ctx, browseQueue, &queue.BrowseParams{
+			Filter: queue.BrowsePublished,
 			Offset: offset,
 			Count:  pageSize,
 		})
@@ -149,8 +151,9 @@ func main() {
 	log.Println("Browsing example complete")
 }
 
-func printBrowseResult(ctx context.Context, label string, queueParams *q.QueueParams, filter q.BrowseFilter) {
-	result, err := queue.BrowseMessages(ctx, queueParams, &q.BrowseParams{
+func printBrowseResult(ctx context.Context, label string, queueParams *queue.QueueParams, filter queue.BrowseFilter) {
+	qm := redissmq.NewQueueManager()
+	result, err := qm.BrowseMessages(ctx, queueParams, &queue.BrowseParams{
 		Filter: filter,
 		Offset: 0,
 		Count:  100,

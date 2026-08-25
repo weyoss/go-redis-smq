@@ -24,14 +24,17 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// Store provides Redis-backed message persistence and lifecycle operations.
 type Store struct {
 	envelopeCodec *EnvelopeCodec
 	stateCodec    *StateCodec
 }
 
+// NewStore creates a new Store with the given codecs.
+// Passing nil will use default codecs.
 func NewStore(envelopeCodec *EnvelopeCodec, stateCodec *StateCodec) *Store {
 	if envelopeCodec == nil {
 		envelopeCodec = NewEnvelopeCodec()
@@ -45,6 +48,7 @@ func NewStore(envelopeCodec *EnvelopeCodec, stateCodec *StateCodec) *Store {
 	}
 }
 
+// GetStatus returns the current status of a message.
 func (s *Store) GetStatus(ctx context.Context, messageID string) (msg.MessageStatus, error) {
 	statusStr, err := redis.LoadHashField(ctx,
 		keys.System{}.Message(messageID),
@@ -63,6 +67,7 @@ func (s *Store) GetStatus(ctx context.Context, messageID string) (msg.MessageSta
 	return msg.MessageStatus(status), nil
 }
 
+// GetState returns the lifecycle state of a message.
 func (s *Store) GetState(ctx context.Context, messageID string) (*msg.MessageState, error) {
 	hash, err := redis.LoadHash(ctx, keys.System{}.Message(messageID), "message state")
 	if err != nil {
@@ -71,6 +76,7 @@ func (s *Store) GetState(ctx context.Context, messageID string) (*msg.MessageSta
 	return s.stateCodec.DecodeHash(ctx, hash)
 }
 
+// GetMessage returns a single message envelope by its ID.
 func (s *Store) GetMessage(ctx context.Context, messageID string) (*Envelope, error) {
 	hash, err := redis.LoadHash(ctx, keys.System{}.Message(messageID), "message")
 	if err != nil {
@@ -79,6 +85,7 @@ func (s *Store) GetMessage(ctx context.Context, messageID string) (*Envelope, er
 	return s.envelopeCodec.DecodeHash(ctx, hash)
 }
 
+// GetMessages returns multiple message envelopes. Missing messages are skipped.
 func (s *Store) GetMessages(ctx context.Context, messageIDs []string) ([]*Envelope, error) {
 	envelopes := make([]*Envelope, 0, len(messageIDs))
 	for _, id := range messageIDs {
@@ -94,6 +101,7 @@ func (s *Store) GetMessages(ctx context.Context, messageIDs []string) ([]*Envelo
 	return envelopes, nil
 }
 
+// DeleteMessages deletes one or more messages. Returns summary statistics.
 func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID string) (*msg.DeleteResponse, error) {
 	response := &msg.DeleteResponse{Status: msg.DeleteStatusNotDeleted}
 
@@ -115,7 +123,7 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 	}
 
 	type messageGroup struct {
-		queue    *q.QueueParams
+		queue    *publicqueue.QueueParams
 		messages []*Envelope
 	}
 
@@ -161,9 +169,10 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 	return response, nil
 }
 
+// deleteMessageGroup deletes messages for a specific queue/group.
 func (s *Store) deleteMessageGroup(
 	ctx context.Context,
-	queue *q.QueueParams,
+	queue *publicqueue.QueueParams,
 	messages []*Envelope,
 	lockID string,
 ) (*msg.DeleteStats, error) {
@@ -190,9 +199,9 @@ func (s *Store) deleteMessageGroup(
 		qSchema.QueueFieldScheduledMessagesCount.Key(),
 		qSchema.QueueFieldDelayedMessagesCount.Key(),
 		qSchema.QueueFieldRequeuedMessagesCount.Key(),
-		q.TypePriority.Int(),
-		q.TypeLIFO.Int(),
-		q.TypeFIFO.Int(),
+		publicqueue.TypePriority.Int(),
+		publicqueue.TypeLIFO.Int(),
+		publicqueue.TypeFIFO.Int(),
 		mSchema.MessageFieldStatus.Key(),
 		msg.StatusProcessing.Int(),
 		msg.StatusAcknowledged.Int(),
@@ -202,7 +211,7 @@ func (s *Store) deleteMessageGroup(
 		msg.StatusUnackDelaying.Int(),
 		msg.StatusUnackRequeuing.Int(),
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateLocked.Int(),
+		publicqueue.StateLocked.Int(),
 		qSchema.QueueFieldLockID.Key(),
 		lockID,
 	}
@@ -223,9 +232,9 @@ func (s *Store) deleteMessageGroup(
 	if replyStr, ok := reply.(string); ok {
 		switch replyStr {
 		case "QUEUE_LOCKED":
-			return nil, q.ErrLocked
+			return nil, publicqueue.ErrLocked
 		case "QUEUE_NOT_FOUND":
-			return nil, q.ErrNotFound
+			return nil, publicqueue.ErrNotFound
 		default:
 			return nil, fmt.Errorf("unexpected script reply: %s", replyStr)
 		}
@@ -244,6 +253,8 @@ func (s *Store) deleteMessageGroup(
 	}, nil
 }
 
+// RequeueMessage creates a new message from an acknowledged or dead-lettered
+// message and returns the new message ID.
 func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, error) {
 	original, err := s.GetMessage(ctx, messageID)
 	if err != nil {
@@ -302,15 +313,15 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 		qSchema.QueueFieldMessagesCount.Key(),
 		qSchema.QueueFieldPendingMessagesCount.Key(),
 		qSchema.QueueFieldScheduledMessagesCount.Key(),
-		q.TypePriority.Int(),
-		q.TypeLIFO.Int(),
-		q.TypeFIFO.Int(),
+		publicqueue.TypePriority.Int(),
+		publicqueue.TypeLIFO.Int(),
+		publicqueue.TypeFIFO.Int(),
 		qSchema.QueueFieldOperationalState.Key(),
 		qSchema.QueueFieldLockID.Key(),
-		q.StateActive.Int(),
-		q.StatePaused.Int(),
-		q.StateStopped.Int(),
-		q.StateLocked.Int(),
+		publicqueue.StateActive.Int(),
+		publicqueue.StatePaused.Int(),
+		publicqueue.StateStopped.Int(),
+		publicqueue.StateLocked.Int(),
 
 		// Message Status Constants (ARGV[14-15])
 		msg.StatusScheduled.Int(),
@@ -371,6 +382,7 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 	return newID, nil
 }
 
+// GetUnacknowledgmentHistory returns the unacknowledgment history for a message.
 func (s *Store) GetUnacknowledgmentHistory(ctx context.Context, messageID string) ([]string, error) {
 	key := keys.System{}.Message(messageID)
 	exists, err := redis.Client().Exists(ctx, key).Result()
@@ -390,6 +402,7 @@ func (s *Store) GetUnacknowledgmentHistory(ctx context.Context, messageID string
 	return records, nil
 }
 
+// toInt converts an interface{} (typically int64) to int.
 func toInt(v interface{}) int {
 	if n, ok := v.(int64); ok {
 		return int(n)

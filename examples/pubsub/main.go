@@ -20,7 +20,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -33,13 +32,13 @@ func main() {
 	defer redissmq.Shutdown()
 
 	// Create Pub/Sub queue
-	notifQueue := q.MustQueueParams(fmt.Sprintf("notifications-%d", time.Now().UnixMilli()))
-	if err := queue.Create(ctx, notifQueue, q.TypeFIFO, q.DeliveryPubSub); err != nil {
+	notifQueue := queue.MustQueueParams(fmt.Sprintf("notifications-%d", time.Now().UnixMilli()))
+	if err := redissmq.NewQueueManager().Create(ctx, notifQueue, queue.TypeFIFO, queue.DeliveryPubSub); err != nil {
 		log.Fatalf("create queue: %v", err)
 	}
 
 	// Create consumer groups
-	cgm := queue.NewConsumerGroupManager()
+	cgm := redissmq.NewConsumerGroupManager()
 	if _, err := cgm.Save(ctx, notifQueue, "email-service"); err != nil {
 		log.Fatalf("create email group: %v", err)
 	}

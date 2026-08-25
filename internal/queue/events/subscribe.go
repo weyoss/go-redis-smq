@@ -8,20 +8,23 @@
  *
  */
 
-// Package events provides internal subscription functions for RedisSMQ
-// queue events on the system event bus.
+// Package events provides internal subscription functions for RedisSMQ queue
+// events on the system event bus.
 //
 // These functions are intended for use by RedisSMQ components only.
-// External users should use the public subscription functions in pkg/.../events.
+// External users should use the public subscription functions in
+// pkg/queue instead.
 package events
 
 import (
 	"encoding/json"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// decodeArg converts a positional event argument (typically a
+// map[string]interface{}) into the target Go type.
 func decodeArg(arg interface{}, target interface{}) error {
 	data, err := json.Marshal(arg)
 	if err != nil {
@@ -31,13 +34,14 @@ func decodeArg(arg interface{}, target interface{}) error {
 }
 
 // SubscribeCreated subscribes to queue.queueCreated events on the system bus.
+// The handler receives a CreatedPayload.
 func SubscribeCreated(handler func(CreatedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.System().Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-		var queue q.QueueParams
-		var props q.QueueProps
+		var queue publicqueue.QueueParams
+		var props publicqueue.QueueProps
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -49,12 +53,13 @@ func SubscribeCreated(handler func(CreatedPayload)) (*eventbus.Subscription, err
 }
 
 // SubscribeDeleted subscribes to queue.queueDeleted events on the system bus.
+// The handler receives a DeletedPayload.
 func SubscribeDeleted(handler func(DeletedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.System().Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
 			return
 		}
-		var queue q.QueueParams
+		var queue publicqueue.QueueParams
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -63,13 +68,14 @@ func SubscribeDeleted(handler func(DeletedPayload)) (*eventbus.Subscription, err
 }
 
 // SubscribeStateChanged subscribes to queue.stateChanged events on the system bus.
+// The handler receives a StateChangedPayload.
 func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.System().Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-		var queue q.QueueParams
-		var transition q.StateTransition
+		var queue publicqueue.QueueParams
+		var transition publicqueue.StateTransition
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -80,13 +86,14 @@ func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscri
 	}, EventStateChanged)
 }
 
-// SubscribeConsumerGroupCreated subscribes to queue.consumerGroupCreated events on the system bus.
+// SubscribeConsumerGroupCreated subscribes to queue.consumerGroupCreated events
+// on the system bus.
 func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.System().Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-		var queue q.QueueParams
+		var queue publicqueue.QueueParams
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -98,13 +105,14 @@ func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*
 	}, EventConsumerGroupCreated)
 }
 
-// SubscribeConsumerGroupDeleted subscribes to queue.consumerGroupDeleted events on the system bus.
+// SubscribeConsumerGroupDeleted subscribes to queue.consumerGroupDeleted events
+// on the system bus.
 func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.System().Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-		var queue q.QueueParams
+		var queue publicqueue.QueueParams
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return

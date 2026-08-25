@@ -15,7 +15,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/util/cron"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Envelope wraps a ProducibleMessage with state and routing information.
@@ -25,7 +25,7 @@ type Envelope struct {
 	producibleMessage *msg.ProducibleMessage
 	messageState      *msg.MessageState
 	status            msg.MessageStatus
-	destinationQueue  *q.QueueParams
+	destinationQueue  *publicqueue.QueueParams
 	consumerGroupID   string
 }
 
@@ -69,10 +69,10 @@ func (e *Envelope) SetStatus(status msg.MessageStatus) *Envelope {
 }
 
 // DestinationQueue returns the resolved destination queue.
-func (e *Envelope) DestinationQueue() *q.QueueParams { return e.destinationQueue }
+func (e *Envelope) DestinationQueue() *publicqueue.QueueParams { return e.destinationQueue }
 
 // SetDestinationQueue sets the destination queue (called once during routing).
-func (e *Envelope) SetDestinationQueue(q *q.QueueParams) *Envelope {
+func (e *Envelope) SetDestinationQueue(q *publicqueue.QueueParams) *Envelope {
 	e.destinationQueue = q
 	return e
 }
@@ -135,6 +135,7 @@ func (e *Envelope) IsPeriodic() bool {
 // NextScheduledTimestamp calculates the next delivery timestamp in Unix milliseconds.
 // Returns 0 if the message is not schedulable or the schedule has ended.
 //
+// Scheduling priority (matches TypeScript):
 //  1. Delay: now + effectiveScheduledDelay (one-time)
 //  2. CRON + Repeat: CRON triggers repeat cycles; within a cycle, repeats use period
 //  3. CRON only: next CRON time
@@ -232,6 +233,7 @@ func (e *Envelope) ToParams() *msg.Params {
 
 // ToTransferable converts the envelope to a transferable representation
 // suitable for serialization and cross-system transfer.
+// Matches TypeScript IMessageTransferable format.
 func (e *Envelope) ToTransferable() *msg.Transferable {
 	params := e.ToParams()
 

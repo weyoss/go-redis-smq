@@ -11,7 +11,7 @@
 package producer
 
 import (
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Producer event names.
@@ -43,7 +43,7 @@ type LifecyclePayload struct {
 //
 //	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
 type MessagePublishedPayload struct {
-	MessageID  string        `json:"messageId"`
-	Queue      q.QueueParams `json:"queue"`
-	ProducerID string        `json:"producerId"`
+	MessageID  string            `json:"messageId"`
+	Queue      queue.QueueParams `json:"queue"`
+	ProducerID string            `json:"producerId"`
 }

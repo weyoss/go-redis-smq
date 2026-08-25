@@ -23,7 +23,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Scenario: Acknowledged queue respects queueSize limit
@@ -36,8 +35,8 @@ func TestAudit_AcknowledgedQueueSize(t *testing.T) {
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 0
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-audit-ack-queuesize")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-audit-ack-queuesize")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -58,8 +57,8 @@ func TestAudit_AcknowledgedQueueSize(t *testing.T) {
 	}
 
 	// Browse acknowledged — should only have 3 (queueSize)
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -81,8 +80,8 @@ func TestAudit_DeadLetteredQueueSize(t *testing.T) {
 	cfg.MessageAudit.DeadLetteredMessages.Expire = 0
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-audit-dlq-queuesize")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-audit-dlq-queuesize")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -107,8 +106,8 @@ func TestAudit_DeadLetteredQueueSize(t *testing.T) {
 
 	time.Sleep(8 * time.Second)
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseDeadLettered,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseDeadLettered,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -129,8 +128,8 @@ func TestAudit_AcknowledgedExpire(t *testing.T) {
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 10 // 10 seconds
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-audit-ack-expire")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-audit-ack-expire")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("expire-test").SetQueue(params))
@@ -149,8 +148,8 @@ func TestAudit_AcknowledgedExpire(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Verify message is acknowledged now
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -163,8 +162,8 @@ func TestAudit_AcknowledgedExpire(t *testing.T) {
 	time.Sleep(10 * time.Second)
 
 	// Should be expired now
-	result, err = queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	result, err = redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse after expire: %v", err)
@@ -186,8 +185,8 @@ func TestAudit_DeadLetteredExpire(t *testing.T) {
 	cfg.MessageAudit.DeadLetteredMessages.Expire = 10 // 10 seconds
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-audit-dlq-expire")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-audit-dlq-expire")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().
@@ -209,8 +208,8 @@ func TestAudit_DeadLetteredExpire(t *testing.T) {
 	time.Sleep(1 * time.Second)
 
 	// Verify message is dead-lettered now
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseDeadLettered,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseDeadLettered,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -222,8 +221,8 @@ func TestAudit_DeadLetteredExpire(t *testing.T) {
 	// Wait for expire
 	time.Sleep(10 * time.Second)
 
-	result, err = queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseDeadLettered,
+	result, err = redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseDeadLettered,
 	})
 	if err != nil {
 		t.Fatalf("browse after expire: %v", err)
@@ -244,8 +243,8 @@ func TestAudit_UnlimitedQueueSize(t *testing.T) {
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 0
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-audit-unlimited")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-audit-unlimited")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -265,8 +264,8 @@ func TestAudit_UnlimitedQueueSize(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -286,8 +285,8 @@ func TestAudit_NeverExpires(t *testing.T) {
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 0 // Never
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-audit-never-expire")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-audit-never-expire")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("never-expire").SetQueue(params))
@@ -308,8 +307,8 @@ func TestAudit_NeverExpires(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// Should still be there
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &queue.BrowseParams{
+		Filter: queue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -329,8 +328,8 @@ func TestAudit_UnacknowledgmentHistory_WithAudit(t *testing.T) {
 	cfg.MessageAudit.UnacknowledgementHistory.MaxSize = 100
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-edge-unack-hist-audit")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-unack-hist-audit")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().
@@ -366,8 +365,8 @@ func TestAudit_UnacknowledgmentHistory_WithAudit(t *testing.T) {
 func TestAudit_UnacknowledgmentHistory_NoAudit(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-unack-hist-noaudit")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-unack-hist-noaudit")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().SetBody("unack-noaudit").SetQueue(params))
@@ -392,8 +391,8 @@ func TestAudit_UnacknowledgmentHistory_MaxSize(t *testing.T) {
 	cfg.MessageAudit.UnacknowledgementHistory.MaxSize = 3
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-edge-unack-maxsize")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-unack-maxsize")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().

@@ -16,19 +16,19 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Enqueue purge job for pending messages
 func TestEnqueue_PendingMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-enqueue-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-enqueue-pending")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce some pending messages
 	prod := testutil.StartProducer(t, ctx)
@@ -37,7 +37,7 @@ func TestEnqueue_PendingMessages(t *testing.T) {
 	}
 
 	// Enqueue purge
-	jobID, err := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	jobID, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -51,8 +51,8 @@ func TestEnqueue_PendingMessages(t *testing.T) {
 func TestEnqueue_ScheduledMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-enqueue-sched")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-enqueue-sched")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce scheduled messages
 	prod := testutil.StartProducer(t, ctx)
@@ -60,7 +60,7 @@ func TestEnqueue_ScheduledMessages(t *testing.T) {
 		prod.Produce(ctx, msg.New().SetBody("sched").SetQueue(params).SetScheduledDelay(1*time.Hour))
 	}
 
-	jobID, err := queue.PurgeQueue(ctx, params, q.BrowseScheduled)
+	jobID, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseScheduled)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -73,10 +73,10 @@ func TestEnqueue_ScheduledMessages(t *testing.T) {
 func TestEnqueue_AcknowledgedMessages_RequiresAudit(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-enqueue-ack-noaudit")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-enqueue-ack-noaudit")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.PurgeQueue(ctx, params, q.BrowseAcknowledged)
+	_, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
 	if err == nil {
 		t.Fatal("expected error: audit disabled")
 	}
@@ -88,10 +88,12 @@ func TestEnqueue_AcknowledgedMessages_WithAudit(t *testing.T) {
 
 	cfg := config.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
-	config.Save(ctx, cfg)
+	if _, err := config.Save(ctx, cfg); err != nil {
+		t.Fatalf("save config: %v", err)
+	}
 
-	params := q.MustQueueParams("test-purge-enqueue-ack-audit")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-enqueue-ack-audit")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce and consume to generate acknowledged messages
 	prod := testutil.StartProducer(t, ctx)
@@ -100,7 +102,7 @@ func TestEnqueue_AcknowledgedMessages_WithAudit(t *testing.T) {
 		consumeAndAck(t, ctx, params, ids[0])
 	}
 
-	jobID, err := queue.PurgeQueue(ctx, params, q.BrowseAcknowledged)
+	jobID, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -113,10 +115,10 @@ func TestEnqueue_AcknowledgedMessages_WithAudit(t *testing.T) {
 func TestEnqueue_DeadLetteredMessages_RequiresAudit(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-enqueue-dlq-noaudit")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-enqueue-dlq-noaudit")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.PurgeQueue(ctx, params, q.BrowseDeadLettered)
+	_, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseDeadLettered)
 	if err == nil {
 		t.Fatal("expected error: audit disabled")
 	}
@@ -126,29 +128,30 @@ func TestEnqueue_DeadLetteredMessages_RequiresAudit(t *testing.T) {
 func TestEnqueue_QueueLocked(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-enqueue-locked")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-enqueue-locked")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, err := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := internalqueue.NewQueueManager()
+	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	// Check queue state
-	transition, err := queue.Current(ctx, params)
+	sm := internalqueue.NewStateManager()
+	transition, err := sm.Current(ctx, params)
 	if err != nil {
 		t.Fatalf("current: %v", err)
 	}
-	if transition.To != q.StateLocked {
+	if transition.To != publicqueue.StateLocked {
 		t.Errorf("queue state = %s, want LOCKED", transition.To.String())
 	}
 
 	// Try to produce to locked queue — should fail
-	prod2 := testutil.StartProducer(t, ctx)
-	_, err = prod2.Produce(ctx, msg.New().SetBody("should-fail").SetQueue(params))
+	_, err = prod.Produce(ctx, msg.New().SetBody("should-fail").SetQueue(params))
 	if err == nil {
 		t.Error("produce to locked queue should fail")
 	}
@@ -160,31 +163,32 @@ func TestEnqueue_QueueLocked(t *testing.T) {
 func TestEnqueue_GetJob(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-get-job")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-get-job")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := internalqueue.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
-	job, err := queue.GetPurgeJob(ctx, jobID)
+	job, err := qm.GetPurgeJob(ctx, jobID)
 	if err != nil {
 		t.Fatalf("get job: %v", err)
 	}
 	if job.ID != jobID {
 		t.Errorf("job ID = %s, want %s", job.ID, jobID)
 	}
-	if job.Status != q.PurgeJobPending {
+	if job.Status != publicqueue.PurgeJobPending {
 		t.Errorf("status = %s, want PENDING", job.Status.String())
 	}
-	if job.Payload.MessageType != q.BrowsePending {
+	if job.Payload.MessageType != publicqueue.BrowsePending {
 		t.Errorf("message type = %v, want PENDING", job.Payload.MessageType)
 	}
 }
 
 // Helper
-func consumeAndAck(t *testing.T, ctx context.Context, params *q.QueueParams, messageID string) {
+func consumeAndAck(t *testing.T, ctx context.Context, params *publicqueue.QueueParams, messageID string) {
 	t.Helper()
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()

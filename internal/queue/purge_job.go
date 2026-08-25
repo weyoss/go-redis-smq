@@ -19,10 +19,10 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-func create(ctx context.Context, job *q.PurgeJob) error {
+func create(ctx context.Context, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.CreateJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.PendingPurgeJobs()},
 		[]interface{}{job.ID, mustMarshal(job)},
@@ -30,43 +30,43 @@ func create(ctx context.Context, job *q.PurgeJob) error {
 	)
 }
 
-func start(ctx context.Context, jobID, workerID string, job *q.PurgeJob) error {
+func start(ctx context.Context, jobID, workerID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.StartJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
 			jobID, workerID, mustMarshal(job),
-			q.PurgeJobPending.String(), q.PurgeJobProcessing.String(),
-			q.PurgeJobCompleted.String(), q.PurgeJobFailed.String(), q.PurgeJobCanceled.String(),
+			publicqueue.PurgeJobPending.String(), publicqueue.PurgeJobProcessing.String(),
+			publicqueue.PurgeJobCompleted.String(), publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 		},
 		"start",
 	)
 }
 
-func complete(ctx context.Context, jobID string, job *q.PurgeJob) error {
+func complete(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.CompleteJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
 			jobID, mustMarshal(job),
-			q.PurgeJobProcessing.String(), q.PurgeJobCompleted.String(),
-			q.PurgeJobFailed.String(), q.PurgeJobCanceled.String(),
+			publicqueue.PurgeJobProcessing.String(), publicqueue.PurgeJobCompleted.String(),
+			publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 		},
 		"complete",
 	)
 }
 
-func fail(ctx context.Context, jobID string, job *q.PurgeJob) error {
+func fail(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.FailJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
 			jobID, mustMarshal(job),
-			q.PurgeJobProcessing.String(), q.PurgeJobCompleted.String(),
-			q.PurgeJobFailed.String(), q.PurgeJobCanceled.String(),
+			publicqueue.PurgeJobProcessing.String(), publicqueue.PurgeJobCompleted.String(),
+			publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 		},
 		"fail",
 	)
 }
 
-func cancel(ctx context.Context, jobID string, job *q.PurgeJob) error {
+func cancel(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.CancelJob,
 		[]string{
 			keys.System{}.PurgeJobs(), keys.System{}.PendingPurgeJobs(),
@@ -74,14 +74,14 @@ func cancel(ctx context.Context, jobID string, job *q.PurgeJob) error {
 		},
 		[]interface{}{
 			jobID, mustMarshal(job),
-			q.PurgeJobPending.String(), q.PurgeJobProcessing.String(),
-			q.PurgeJobCompleted.String(), q.PurgeJobFailed.String(), q.PurgeJobCanceled.String(),
+			publicqueue.PurgeJobPending.String(), publicqueue.PurgeJobProcessing.String(),
+			publicqueue.PurgeJobCompleted.String(), publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 		},
 		"cancel",
 	)
 }
 
-func recoverJob(ctx context.Context, jobID string, job *q.PurgeJob) error {
+func recoverJob(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.RecoverStuckJob,
 		[]string{
 			keys.System{}.PurgeJobs(), keys.System{}.PendingPurgeJobs(),
@@ -89,27 +89,27 @@ func recoverJob(ctx context.Context, jobID string, job *q.PurgeJob) error {
 		},
 		[]interface{}{
 			jobID, mustMarshal(job),
-			q.PurgeJobProcessing.String(), q.PurgeJobCompleted.String(),
-			q.PurgeJobFailed.String(), q.PurgeJobCanceled.String(),
+			publicqueue.PurgeJobProcessing.String(), publicqueue.PurgeJobCompleted.String(),
+			publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 			"Recovered from worker crash",
 		},
 		"recover",
 	)
 }
 
-func getJob(ctx context.Context, jobID string) (*q.PurgeJob, error) {
+func getJob(ctx context.Context, jobID string) (*publicqueue.PurgeJob, error) {
 	data, err := redisClient.Client().HGet(ctx, keys.System{}.PurgeJobs(), jobID).Result()
 	if err != nil {
 		return nil, fmt.Errorf("purge: job not found: %s", jobID)
 	}
-	var job q.PurgeJob
+	var job publicqueue.PurgeJob
 	if err := json.Unmarshal([]byte(data), &job); err != nil {
 		return nil, fmt.Errorf("purge: decode job: %w", err)
 	}
 	return &job, nil
 }
 
-func save(ctx context.Context, job *q.PurgeJob) error {
+func save(ctx context.Context, job *publicqueue.PurgeJob) error {
 	job.UpdatedAt = time.Now().UnixMilli()
 	return redisClient.Client().HSet(ctx, keys.System{}.PurgeJobs(), job.ID, mustMarshal(job)).Err()
 }
@@ -119,7 +119,7 @@ func isCanceled(ctx context.Context, jobID string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	return job.Status == q.PurgeJobCanceled, nil
+	return job.Status == publicqueue.PurgeJobCanceled, nil
 }
 
 func runJobScript(ctx context.Context, id scripts.ID, keys []string, args []interface{}, operation string) error {

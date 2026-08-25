@@ -8,48 +8,35 @@
  *
  */
 
-package q
+package queue
 
 import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/config"
+	"github.com/weyoss/go-redis-smq/pkg/redis"
 )
 
 // QueueParams uniquely identifies a queue within a namespace.
 //
-// The type self-validates on creation using Redis key validation rules.
-//
-// Example:
-//
-//	{
-//	  "name": "orders",
-//	  "ns": "production"
-//	}
+// The type self-validates on creation. Validation rules are the same as
+// Redis key rules: lowercase letters, digits, hyphens, underscores, and
+// dots. The first character must be a letter.
 type QueueParams struct {
 	name string
 	ns   string
 }
 
 // NewQueueParams creates queue params with the default namespace.
-//
-// Example:
-//
-//	params, err := queue.NewQueueParams("orders")
+// It validates the queue name and returns an error if invalid.
 func NewQueueParams(name string) (*QueueParams, error) {
 	return NewQueueParamsWithNS(name, "")
 }
 
 // NewQueueParamsWithNS creates queue params with a custom namespace.
-// It validates the name and namespace using Redis key validation rules.
-//
-// An empty namespace falls back to the configured default namespace.
-//
-// Example:
-//
-//	params, err := queue.NewQueueParamsWithNS("orders", "production")
+// If namespace is empty, the configured default namespace is used.
+// It validates both name and namespace and returns an error if invalid.
 func NewQueueParamsWithNS(name, namespace string) (*QueueParams, error) {
 	if name == "" {
 		return nil, ErrNameRequired
@@ -58,14 +45,14 @@ func NewQueueParamsWithNS(name, namespace string) (*QueueParams, error) {
 		namespace = config.Get().Namespace
 	}
 
-	validName, err := keys.ValidateKey(name)
+	validName, err := redis.ValidateKey(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err.Error())
+		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err)
 	}
 
-	validNS, err := keys.ValidateKey(namespace)
+	validNS, err := redis.ValidateKey(namespace)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err.Error())
+		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err)
 	}
 
 	return &QueueParams{
@@ -75,7 +62,6 @@ func NewQueueParamsWithNS(name, namespace string) (*QueueParams, error) {
 }
 
 // Name returns the queue name.
-// It returns an empty string if the receiver is nil.
 func (p *QueueParams) Name() string {
 	if p == nil {
 		return ""
@@ -84,7 +70,6 @@ func (p *QueueParams) Name() string {
 }
 
 // NS returns the queue namespace.
-// It returns an empty string if the receiver is nil.
 func (p *QueueParams) NS() string {
 	if p == nil {
 		return ""
@@ -93,20 +78,14 @@ func (p *QueueParams) NS() string {
 }
 
 // Clone returns a deep copy of the queue params.
-// It returns nil if the receiver is nil.
 func (p *QueueParams) Clone() *QueueParams {
 	if p == nil {
 		return nil
 	}
-	return &QueueParams{
-		name: p.name,
-		ns:   p.ns,
-	}
+	return &QueueParams{name: p.name, ns: p.ns}
 }
 
-// String returns the fully qualified queue name in the form
-// "name@namespace".
-// It returns an empty string if the receiver is nil.
+// String returns the fully qualified queue name (name@namespace).
 func (p *QueueParams) String() string {
 	if p == nil {
 		return ""
@@ -115,7 +94,6 @@ func (p *QueueParams) String() string {
 }
 
 // MarshalJSON implements custom JSON marshaling for TypeScript compatibility.
-// It produces: {"name":"orders","ns":"production"}.
 func (p QueueParams) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Name string `json:"name"`
@@ -127,7 +105,6 @@ func (p QueueParams) MarshalJSON() ([]byte, error) {
 }
 
 // UnmarshalJSON implements custom JSON unmarshaling for TypeScript compatibility.
-// It expects: {"name":"orders","ns":"production"}.
 func (p *QueueParams) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Name string `json:"name"`
@@ -136,7 +113,6 @@ func (p *QueueParams) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-
 	p.name = aux.Name
 	p.ns = aux.NS
 	return nil
@@ -144,10 +120,6 @@ func (p *QueueParams) UnmarshalJSON(data []byte) error {
 
 // MustQueueParams creates queue params and panics on error.
 // Useful for testing and initialization where params are known to be valid.
-//
-// Example:
-//
-//	params := queue.MustQueueParams("orders")
 func MustQueueParams(name string) *QueueParams {
 	p, err := NewQueueParams(name)
 	if err != nil {
@@ -157,10 +129,6 @@ func MustQueueParams(name string) *QueueParams {
 }
 
 // MustQueueParamsWithNS creates queue params with namespace and panics on error.
-//
-// Example:
-//
-//	params := queue.MustQueueParamsWithNS("orders", "production")
 func MustQueueParamsWithNS(name, ns string) *QueueParams {
 	p, err := NewQueueParamsWithNS(name, ns)
 	if err != nil {

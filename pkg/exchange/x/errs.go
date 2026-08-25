@@ -14,7 +14,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Sentinel errors for exchange operations.
@@ -69,16 +69,16 @@ func (e *TypeMismatchError) Error() string {
 type PolicyViolationError struct {
 	ExchangeType ExchangeType
 	Policy       ExchangePolicy
-	AllowedKinds []q.QueueType
-	ActualKind   q.QueueType
+	AllowedKinds []queue.QueueType
+	ActualKind   queue.QueueType
 }
 
 // NewPolicyViolationError creates a new PolicyViolationError.
 func NewPolicyViolationError(
 	exchangeType ExchangeType,
 	policy ExchangePolicy,
-	allowed []q.QueueType,
-	actual q.QueueType,
+	allowed []queue.QueueType,
+	actual queue.QueueType,
 ) *PolicyViolationError {
 	return &PolicyViolationError{
 		ExchangeType: exchangeType,

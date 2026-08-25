@@ -20,14 +20,14 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Benchmark: Produce 10,000 messages
 func BenchmarkProducer_10K(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-producer-10k-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-producer-10k-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(b, ctx)
 
@@ -53,8 +53,8 @@ func BenchmarkProducer_10K(b *testing.B) {
 // Benchmark: Produce 100,000 messages
 func BenchmarkProducer_100K(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-producer-100k-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-producer-100k-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(b, ctx)
 
@@ -91,8 +91,8 @@ func BenchmarkProducer_BodySizes(b *testing.B) {
 	for _, size := range sizes {
 		b.Run(size.name, func(b *testing.B) {
 			ctx := testutil.Setup(b) // Fresh Redis per sub-benchmark
-			params := q.MustQueueParams(fmt.Sprintf("bench-body-%s-%d", size.name, time.Now().UnixNano()))
-			testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+			params := queue.MustQueueParams(fmt.Sprintf("bench-body-%s-%d", size.name, time.Now().UnixNano()))
+			testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 			prod := testutil.StartProducer(b, ctx)
 
 			messageCount := 5_000
@@ -117,8 +117,8 @@ func BenchmarkProducer_BodySizes(b *testing.B) {
 // Benchmark: Produce via exchange
 func BenchmarkProducer_ViaExchange(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-producer-ex-q-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-producer-ex-q-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams(fmt.Sprintf("bench-ex-%d", time.Now().UnixNano()), x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -153,8 +153,8 @@ func BenchmarkProducer_ViaExchange(b *testing.B) {
 // Benchmark: Multi-producer throughput
 func BenchmarkProducer_MultiProducer(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-multi-prod-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-multi-prod-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	producerCount := 4
 	messagesPerProducer := 25_000

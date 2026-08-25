@@ -26,6 +26,7 @@ import (
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Config is the Redis connection configuration.
@@ -206,4 +207,22 @@ func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
 	cons := internalconsumer.New(opts...)
 	registerConsumer(cons)
 	return cons
+}
+
+// NewQueueManager creates a new queue manager that implements the public
+// queue manager interface.
+func NewQueueManager() publicqueue.QueueManager {
+	return internalQueue.NewQueueManager()
+}
+
+// NewStateManager creates a new state manager that implements the public
+// state manager interface.
+func NewStateManager() publicqueue.StateManager {
+	return internalQueue.NewStateManager()
+}
+
+// NewConsumerGroupManager creates a new consumer group manager that implements
+// the public consumer group manager interface.
+func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
+	return internalQueue.NewConsumerGroupManager()
 }

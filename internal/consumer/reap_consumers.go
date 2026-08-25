@@ -18,11 +18,11 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type ReapConsumers struct {
-	queue      *q.QueueParams
+	queue      *queue.QueueParams
 	groupID    string
 	consumerID string
 	interval   time.Duration
@@ -30,7 +30,7 @@ type ReapConsumers struct {
 	log        *slog.Logger
 }
 
-func NewReapConsumers(queue *q.QueueParams, groupID, consumerID string) *ReapConsumers {
+func NewReapConsumers(queue *queue.QueueParams, groupID, consumerID string) *ReapConsumers {
 	return &ReapConsumers{
 		queue:      queue,
 		groupID:    groupID,

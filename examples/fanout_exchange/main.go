@@ -22,7 +22,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -34,15 +33,18 @@ func main() {
 	}
 	defer redissmq.Shutdown()
 
+	//
+	qm := redissmq.NewQueueManager()
+
 	// Create queues
-	emailQueue := q.MustQueueParams(fmt.Sprintf("email-alerts-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, emailQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	emailQueue := queue.MustQueueParams(fmt.Sprintf("email-alerts-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, emailQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	smsQueue := q.MustQueueParams(fmt.Sprintf("sms-alerts-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, smsQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	smsQueue := queue.MustQueueParams(fmt.Sprintf("sms-alerts-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, smsQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	pushQueue := q.MustQueueParams(fmt.Sprintf("push-alerts-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, pushQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	pushQueue := queue.MustQueueParams(fmt.Sprintf("push-alerts-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, pushQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create fanout exchange
 	fx := exchange.NewFanoutExchange()
@@ -73,7 +75,7 @@ func main() {
 	}
 	ch := make(chan result, 3)
 
-	startConsumer := func(queue *q.QueueParams, label string) {
+	startConsumer := func(queue *queue.QueueParams, label string) {
 		c := redissmq.NewConsumer()
 		c.Consume(queue, func(ctx context.Context, m *msg.Transferable) error {
 			ch <- result{queue: label, body: m.Body}

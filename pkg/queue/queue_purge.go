@@ -8,7 +8,7 @@
  *
  */
 
-package q
+package queue
 
 import (
 	"encoding/json"
@@ -62,7 +62,7 @@ type PurgeJobPayload struct {
 	MessageType BrowseFilter `json:"messageType"`
 }
 
-// PurgeJobMeta holds job‑specific metadata.
+// PurgeJobMeta holds job-specific metadata.
 type PurgeJobMeta struct {
 	// Purged is the number of messages successfully purged so far.
 	Purged int64 `json:"purged"`

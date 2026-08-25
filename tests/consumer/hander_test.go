@@ -20,15 +20,15 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Handler receives message body
 func TestHandler_ReceivesMessage(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-handler-receive")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-handler-receive")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("hello world").SetQueue(params))
@@ -53,8 +53,8 @@ func TestHandler_ReceivesMessage(t *testing.T) {
 func TestHandler_ErrorTriggersRetry(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-handler-retry")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-handler-retry")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().
@@ -87,8 +87,8 @@ func TestHandler_ErrorTriggersRetry(t *testing.T) {
 func TestHandler_MessageTTLExpiry(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-handler-ttl")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-handler-ttl")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create message with short TTL, wait for it to expire before producing
 	m := msg.New().
@@ -122,8 +122,8 @@ func TestHandler_MessageTTLExpiry(t *testing.T) {
 func TestHandler_ContextCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(testutil.Setup(t))
 
-	params := q.MustQueueParams("test-handler-cancel")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-handler-cancel")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
@@ -155,8 +155,8 @@ func TestHandler_ContextCancellation(t *testing.T) {
 func TestHandler_MessageMetadata(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-handler-metadata")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-handler-metadata")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().

@@ -20,16 +20,15 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Consumer receives and acknowledges a single message
 func TestConsume_SingleMessage(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-consume-single")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-consume-single")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().SetBody("hello").SetQueue(params))
@@ -59,8 +58,8 @@ func TestConsume_SingleMessage(t *testing.T) {
 func TestConsume_MultipleMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-consume-multi")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-consume-multi")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
@@ -87,8 +86,8 @@ func TestConsume_MultipleMessages(t *testing.T) {
 func TestConsume_LoadBalance(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-consume-balance")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-consume-balance")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
@@ -129,8 +128,8 @@ func TestConsume_LoadBalance(t *testing.T) {
 func TestConsume_EmptyQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-consume-empty")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-consume-empty")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
@@ -153,8 +152,8 @@ func TestConsume_ResumeAfterPause(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-resume-after-pause")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-resume-after-pause")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -175,8 +174,10 @@ func TestConsume_ResumeAfterPause(t *testing.T) {
 	beforePause := consumed.Load()
 	t.Logf("consumed before pause: %d", beforePause)
 
+	sm := redissmq.NewStateManager()
+
 	// Pause the queue — handler stops, but messages can still be produced
-	queue.Pause(ctx, params, nil)
+	sm.Pause(ctx, params, nil)
 	time.Sleep(2 * time.Second)
 
 	// Produce while paused — messages accumulate
@@ -186,7 +187,7 @@ func TestConsume_ResumeAfterPause(t *testing.T) {
 	t.Logf("consumed during pause: %d", duringPause)
 
 	// Resume the queue — handler should restart and consume accumulated messages
-	queue.Resume(ctx, params, nil)
+	sm.Resume(ctx, params, nil)
 	time.Sleep(7 * time.Second)
 
 	afterResume := consumed.Load()
@@ -202,8 +203,8 @@ func TestConsume_ResumeAfterStop(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 25*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-resume-after-stop")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-resume-after-stop")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -224,15 +225,17 @@ func TestConsume_ResumeAfterStop(t *testing.T) {
 	beforeStop := consumed.Load()
 	t.Logf("consumed before stop: %d", beforeStop)
 
+	sm := redissmq.NewStateManager()
+
 	// Stop the queue — handler stops, producing is blocked
-	queue.Stop(ctx, params, nil)
+	sm.Stop(ctx, params, nil)
 	time.Sleep(2 * time.Second)
 
 	duringStop := consumed.Load()
 	t.Logf("consumed during stop: %d", duringStop)
 
 	// Resume the queue and produce a new message
-	queue.Resume(ctx, params, nil)
+	sm.Resume(ctx, params, nil)
 	time.Sleep(2 * time.Second)
 
 	prod.Produce(ctx, msg.New().SetBody("after-stop").SetQueue(params))

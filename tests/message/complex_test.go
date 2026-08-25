@@ -20,8 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	queue2 "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Full message lifecycle — produce → consume → ack → get → requeue → consume
@@ -29,8 +28,8 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-lifecycle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-complex-lifecycle")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	// Produce
 	prod := testutil.StartProducer(t, ctx)
@@ -99,8 +98,8 @@ func TestComplex_FullLifecycle(t *testing.T) {
 func TestComplex_HighVolumeDelete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-high-vol-del")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-complex-high-vol-del")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -127,8 +126,8 @@ func TestComplex_StateTransitions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-states")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-complex-states")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -163,10 +162,10 @@ func TestComplex_StateTransitions(t *testing.T) {
 func TestComplex_MultiQueueBrowse(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParams("test-complex-browse-q1")
-	q2 := q.MustQueueParams("test-complex-browse-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue2.MustQueueParams("test-complex-browse-q1")
+	q2 := queue2.MustQueueParams("test-complex-browse-q2")
+	testutil.CreateQueue(t, ctx, q1, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -178,9 +177,11 @@ func TestComplex_MultiQueueBrowse(t *testing.T) {
 		prod.Produce(ctx, msg.New().SetBody("q2").SetQueue(q2))
 	}
 
+	qm := redissmq.NewQueueManager()
+
 	// Browse each queue independently
-	r1, _ := queue.BrowseMessages(ctx, q1, &q.BrowseParams{Filter: q.BrowsePublished})
-	r2, _ := queue.BrowseMessages(ctx, q2, &q.BrowseParams{Filter: q.BrowsePublished})
+	r1, _ := qm.BrowseMessages(ctx, q1, &queue2.BrowseParams{Filter: queue2.BrowsePublished})
+	r2, _ := qm.BrowseMessages(ctx, q2, &queue2.BrowseParams{Filter: queue2.BrowsePublished})
 
 	if r1.Total != 3 {
 		t.Errorf("q1 total = %d, want 3", r1.Total)
@@ -194,8 +195,8 @@ func TestComplex_MultiQueueBrowse(t *testing.T) {
 func TestComplex_ScheduledLifecycle(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-sched-life")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-complex-sched-life")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -242,8 +243,8 @@ func TestComplex_ScheduledLifecycle(t *testing.T) {
 func TestComplex_AllProperties(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-all-props")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-complex-all-props")
+	testutil.CreateQueue(t, ctx, params, queue2.TypePriority, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 

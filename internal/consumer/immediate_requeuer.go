@@ -24,18 +24,18 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type ImmediateRequeuer struct {
-	queue      *q.QueueParams
+	queue      *queue.QueueParams
 	groupID    string
 	consumerID string
 	interval   time.Duration
 	log        *slog.Logger
 }
 
-func NewImmediateRequeuer(queue *q.QueueParams, groupID, consumerID string) *ImmediateRequeuer {
+func NewImmediateRequeuer(queue *queue.QueueParams, groupID, consumerID string) *ImmediateRequeuer {
 	return &ImmediateRequeuer{
 		queue:      queue,
 		groupID:    groupID,
@@ -132,13 +132,13 @@ func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 		mSchema.MessageFieldDeadLetteredAt.Key(),
 		msg.StatusUnackDelaying.Int(),
 		mSchema.MessageFieldLastRetriedAttemptAt.Key(),
-		q.TypeLIFO.Int(),
-		q.TypeFIFO.Int(),
+		queue.TypeLIFO.Int(),
+		queue.TypeFIFO.Int(),
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateActive.Int(),
-		q.StatePaused.Int(),
-		q.StateStopped.Int(),
-		q.StateLocked.Int(),
+		queue.StateActive.Int(),
+		queue.StatePaused.Int(),
+		queue.StateStopped.Int(),
+		queue.StateLocked.Int(),
 		timestamp,
 	}
 

@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Job transitions PENDING → PROCESSING → COMPLETED
@@ -26,8 +26,8 @@ func TestLifecycle_PendingToCompleted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-purge-lifecycle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-lifecycle")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce messages
 	prod := testutil.StartProducer(t, ctx)
@@ -35,15 +35,17 @@ func TestLifecycle_PendingToCompleted(t *testing.T) {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
+	qm := redissmq.NewQueueManager()
+
 	// Enqueue purge
-	jobID, err := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
 
 	// Check initial state
-	job, _ := queue.GetPurgeJob(ctx, jobID)
-	if job.Status != q.PurgeJobPending {
+	job, _ := qm.GetPurgeJob(ctx, jobID)
+	if job.Status != publicqueue.PurgeJobPending {
 		t.Errorf("initial status = %s, want PENDING", job.Status.String())
 	}
 
@@ -54,14 +56,14 @@ func TestLifecycle_PendingToCompleted(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, err := queue.GetPurgeJob(ctx, jobID)
+			job, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
 				t.Fatalf("get job: %v", err)
 			}
-			if job.Status == q.PurgeJobCompleted {
+			if job.Status == publicqueue.PurgeJobCompleted {
 				goto done
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -72,14 +74,16 @@ done:
 	t.Logf("job completed: purged=%d", job.Meta.Purged)
 
 	// Verify messages are purged
-	props, _ := queue.Properties(ctx, params)
+	props, _ := qm.Properties(ctx, params)
 	if props.PendingMessagesCount != 0 {
 		t.Errorf("pending = %d, want 0 after purge", props.PendingMessagesCount)
 	}
 
+	sm := redissmq.NewStateManager()
+
 	// Queue should be unlocked
-	transition, _ := queue.Current(ctx, params)
-	if transition.To != q.StateActive {
+	transition, _ := sm.Current(ctx, params)
+	if transition.To != publicqueue.StateActive {
 		t.Errorf("queue state = %s, want ACTIVE", transition.To.String())
 	}
 }
@@ -88,30 +92,34 @@ done:
 func TestLifecycle_PendingToCanceled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-cancel-lifecycle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-cancel-lifecycle")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
+	qm := redissmq.NewQueueManager()
+
 	// Enqueue
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	// Cancel immediately
-	err := queue.CancelPurgeJob(ctx, params, jobID)
+	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 
 	// Check status
-	job, _ := queue.GetPurgeJob(ctx, jobID)
-	if job.Status != q.PurgeJobCanceled {
+	job, _ := qm.GetPurgeJob(ctx, jobID)
+	if job.Status != publicqueue.PurgeJobCanceled {
 		t.Errorf("status = %s, want CANCELED", job.Status.String())
 	}
 
+	sm := redissmq.NewStateManager()
+
 	// Queue should be unlocked
-	transition, _ := queue.Current(ctx, params)
-	if transition.To != q.StateActive {
+	transition, _ := sm.Current(ctx, params)
+	if transition.To != publicqueue.StateActive {
 		t.Errorf("queue state = %s, want ACTIVE", transition.To.String())
 	}
 }
@@ -119,8 +127,7 @@ func TestLifecycle_PendingToCanceled(t *testing.T) {
 // Scenario: Get non-existent job returns error
 func TestLifecycle_GetNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
-
-	_, err := queue.GetPurgeJob(ctx, "nonexistent-job-id")
+	_, err := redissmq.NewQueueManager().GetPurgeJob(ctx, "nonexistent-job-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent job")
 	}
@@ -130,15 +137,17 @@ func TestLifecycle_GetNotFound(t *testing.T) {
 func TestLifecycle_JobMetadata(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-metadata")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-metadata")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
 
-	job, err := queue.GetPurgeJob(ctx, jobID)
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+
+	job, err := qm.GetPurgeJob(ctx, jobID)
 	if err != nil {
 		t.Fatalf("get job: %v", err)
 	}
@@ -149,7 +158,7 @@ func TestLifecycle_JobMetadata(t *testing.T) {
 	if job.Payload.Queue.Name() != params.Name() {
 		t.Errorf("name = %s, want %s", job.Payload.Queue.Name(), params.Name())
 	}
-	if job.Payload.MessageType != q.BrowsePending {
+	if job.Payload.MessageType != publicqueue.BrowsePending {
 		t.Errorf("messageType = %v, want PENDING", job.Payload.MessageType)
 	}
 	if job.CreatedAt == 0 {
@@ -164,41 +173,43 @@ func TestLifecycle_JobMetadata(t *testing.T) {
 func TestLifecycle_MultipleJobs(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-multi-jobs")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-multi-jobs")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
+	qm := redissmq.NewQueueManager()
+
 	// First job — succeeds
-	jobID1, err := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	jobID1, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("first enqueue: %v", err)
 	}
 
 	// Second job while queue is locked — should fail
-	_, err = queue.PurgeQueue(ctx, params, q.BrowseScheduled)
+	_, err = qm.PurgeQueue(ctx, params, publicqueue.BrowseScheduled)
 	if err == nil {
 		t.Fatal("expected error: queue is locked by first job")
 	}
 	t.Logf("second enqueue error (expected): %v", err)
 
 	// Cancel first job to unlock
-	queue.CancelPurgeJob(ctx, params, jobID1)
+	qm.CancelPurgeJob(ctx, params, jobID1)
 
 	// Now second job should succeed
-	jobID2, err := queue.PurgeQueue(ctx, params, q.BrowseScheduled)
+	jobID2, err := qm.PurgeQueue(ctx, params, publicqueue.BrowseScheduled)
 	if err != nil {
 		t.Fatalf("enqueue after unlock: %v", err)
 	}
 
-	job1, _ := queue.GetPurgeJob(ctx, jobID1)
-	job2, _ := queue.GetPurgeJob(ctx, jobID2)
+	job1, _ := qm.GetPurgeJob(ctx, jobID1)
+	job2, _ := qm.GetPurgeJob(ctx, jobID2)
 
-	if job1.Payload.MessageType != q.BrowsePending {
+	if job1.Payload.MessageType != publicqueue.BrowsePending {
 		t.Errorf("job1 type = %v, want PENDING", job1.Payload.MessageType)
 	}
-	if job2.Payload.MessageType != q.BrowseScheduled {
+	if job2.Payload.MessageType != publicqueue.BrowseScheduled {
 		t.Errorf("job2 type = %v, want SCHEDULED", job2.Payload.MessageType)
 	}
 }
@@ -207,20 +218,22 @@ func TestLifecycle_MultipleJobs(t *testing.T) {
 func TestLifecycle_CompleteUnlocksQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-purge-complete-unlock")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-complete-unlock")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	// Cancel to unlock
-	queue.CancelPurgeJob(ctx, params, jobID)
+	qm.CancelPurgeJob(ctx, params, jobID)
 
 	// Queue should be unlocked
-	transition, _ := queue.Current(ctx, params)
-	if transition.To != q.StateActive {
+	sm := redissmq.NewStateManager()
+	transition, _ := sm.Current(ctx, params)
+	if transition.To != publicqueue.StateActive {
 		t.Errorf("queue state = %s, want ACTIVE after cancel", transition.To.String())
 	}
 

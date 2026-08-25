@@ -27,18 +27,18 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type ScheduledPublisher struct {
-	queue      *q.QueueParams
+	queue      *queue.QueueParams
 	groupID    string
 	consumerID string
 	interval   time.Duration
 	log        *slog.Logger
 }
 
-func NewScheduledPublisher(queue *q.QueueParams, groupID, consumerID string) *ScheduledPublisher {
+func NewScheduledPublisher(queue *queue.QueueParams, groupID, consumerID string) *ScheduledPublisher {
 	return &ScheduledPublisher{
 		queue:      queue,
 		groupID:    groupID,
@@ -224,15 +224,15 @@ func buildScheduledArgs() []interface{} {
 		qSchema.QueueFieldPendingMessagesCount.Key(),
 		qSchema.QueueFieldScheduledMessagesCount.Key(),
 		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),
-		q.TypePriority.Int(),
-		q.TypeLIFO.Int(),
-		q.TypeFIFO.Int(),
+		queue.TypePriority.Int(),
+		queue.TypeLIFO.Int(),
+		queue.TypeFIFO.Int(),
 		qSchema.QueueFieldOperationalState.Key(),
 		qSchema.QueueFieldLockID.Key(),
-		q.StateActive.Int(),
-		q.StatePaused.Int(),
-		q.StateStopped.Int(),
-		q.StateLocked.Int(),
+		queue.StateActive.Int(),
+		queue.StatePaused.Int(),
+		queue.StateStopped.Int(),
+		queue.StateLocked.Int(),
 		msg.StatusPending.Int(),
 		msg.StatusScheduled.Int(),
 		msg.StatusDeadLettered.Int(),

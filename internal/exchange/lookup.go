@@ -17,7 +17,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Lookup handles exchange discovery and listing operations.
@@ -59,7 +59,7 @@ func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]x.Exchang
 
 // ByQueue returns all exchanges bound to a specific queue.
 // Reads from the queue's exchange bindings set.
-func (l *Lookup) ByQueue(ctx context.Context, queueParams *q.QueueParams) ([]x.ExchangeParams, error) {
+func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.QueueParams) ([]x.ExchangeParams, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

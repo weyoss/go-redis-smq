@@ -18,8 +18,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	queue2 "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Consumer run with no handlers returns error
@@ -37,7 +36,7 @@ func TestError_NoHandlers(t *testing.T) {
 func TestError_ConsumeNonExistentQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("nonexistent")
+	params := queue2.MustQueueParams("nonexistent")
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
@@ -52,10 +51,10 @@ func TestError_ConsumeNonExistentQueue(t *testing.T) {
 func TestError_ConsumeStoppedQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-stopped")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-error-stopped")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
@@ -72,8 +71,8 @@ func TestError_QueueStoppedDuringConsume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-error-stop-during")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-error-stop-during")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
@@ -92,7 +91,7 @@ func TestError_QueueStoppedDuringConsume(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
 	time.Sleep(2 * time.Second)
 
@@ -105,8 +104,8 @@ func TestError_QueueStoppedDuringConsume(t *testing.T) {
 func TestError_RunTwice(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-run-twice")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-error-run-twice")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {

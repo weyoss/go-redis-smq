@@ -15,7 +15,7 @@ import (
 
 	internalExchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // DirectExchange manages direct exchanges with exact routing key matching.
@@ -50,7 +50,7 @@ func (dx *DirectExchange) Delete(ctx context.Context, params *x.ExchangeParams) 
 // BindQueue binds a queue to a direct exchange with a specific routing key.
 func (dx *DirectExchange) BindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
 ) error {
@@ -63,7 +63,7 @@ func (dx *DirectExchange) BindQueue(
 // UnbindQueue removes a queue binding from a specific routing key.
 func (dx *DirectExchange) UnbindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
 ) error {
@@ -78,7 +78,7 @@ func (dx *DirectExchange) MatchQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	return dx.directStore.MatchQueues(ctx, exchangeParams, routingKey)
 }
 
@@ -95,7 +95,7 @@ func (dx *DirectExchange) BoundQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	return dx.directStore.BoundQueues(ctx, exchangeParams, routingKey)
 }
 
@@ -103,6 +103,6 @@ func (dx *DirectExchange) BoundQueues(
 func (dx *DirectExchange) Bindings(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) (map[string][]q.QueueParams, error) {
+) (map[string][]queue.QueueParams, error) {
 	return dx.directStore.Bindings(ctx, exchangeParams)
 }

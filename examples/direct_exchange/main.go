@@ -22,7 +22,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -34,12 +33,15 @@ func main() {
 	}
 	defer redissmq.Shutdown()
 
-	// Create queues
-	ordersQueue := q.MustQueueParams(fmt.Sprintf("orders-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, ordersQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	//
+	qm := redissmq.NewQueueManager()
 
-	eventsQueue := q.MustQueueParams(fmt.Sprintf("events-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, eventsQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	// Create queues
+	ordersQueue := queue.MustQueueParams(fmt.Sprintf("orders-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, ordersQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	eventsQueue := queue.MustQueueParams(fmt.Sprintf("events-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, eventsQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create direct exchange
 	dx := exchange.NewDirectExchange()

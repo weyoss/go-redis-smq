@@ -17,7 +17,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Manager.Create and Manager.Properties
@@ -111,11 +111,11 @@ func TestManager_ValidateType(t *testing.T) {
 func TestManager_ValidateBinding(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	fifoQueue := q.MustQueueParams("test-manager-binding-fifo")
-	testutil.CreateQueue(t, ctx, fifoQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	fifoQueue := queue.MustQueueParams("test-manager-binding-fifo")
+	testutil.CreateQueue(t, ctx, fifoQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	prioQueue := q.MustQueueParams("test-manager-binding-prio")
-	testutil.CreateQueue(t, ctx, prioQueue, q.TypePriority, q.DeliveryPointToPoint)
+	prioQueue := queue.MustQueueParams("test-manager-binding-prio")
+	testutil.CreateQueue(t, ctx, prioQueue, queue.TypePriority, queue.DeliveryPointToPoint)
 
 	directParams := x.MustExchangeParams("test-manager-binding-ex", x.TypeDirect)
 	em := exchange.NewManager()
@@ -182,8 +182,8 @@ func TestManager_Delete(t *testing.T) {
 func TestManager_ListByQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-manager-list-by-queue")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-manager-list-by-queue")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-manager-list-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()

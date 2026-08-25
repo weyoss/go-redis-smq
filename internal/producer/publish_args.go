@@ -19,7 +19,7 @@ import (
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/util"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // BuildPublishArgs builds the full ARGV array for the publish-message Lua script.
@@ -94,15 +94,15 @@ func buildQueuePropertyArgs() []interface{} {
 		qSchema.QueueFieldMessagesCount.Key(),
 		qSchema.QueueFieldPendingMessagesCount.Key(),
 		qSchema.QueueFieldScheduledMessagesCount.Key(),
-		q.TypePriority.Int(),
-		q.TypeLIFO.Int(),
-		q.TypeFIFO.Int(),
+		queue.TypePriority.Int(),
+		queue.TypeLIFO.Int(),
+		queue.TypeFIFO.Int(),
 		qSchema.QueueFieldOperationalState.Key(),
 		qSchema.QueueFieldLockID.Key(),
-		q.StateActive.Int(),
-		q.StatePaused.Int(),
-		q.StateStopped.Int(),
-		q.StateLocked.Int(),
+		queue.StateActive.Int(),
+		queue.StatePaused.Int(),
+		queue.StateStopped.Int(),
+		queue.StateLocked.Int(),
 	}
 }
 

@@ -15,31 +15,32 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Cancel a pending purge job
 func TestCancel_PendingJob(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cancel-pending")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
-	err := queue.CancelPurgeJob(ctx, params, jobID)
+	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 
-	job, _ := queue.GetPurgeJob(ctx, jobID)
-	if job.Status != q.PurgeJobCanceled {
+	job, _ := qm.GetPurgeJob(ctx, jobID)
+	if job.Status != publicqueue.PurgeJobCanceled {
 		t.Errorf("status = %s, want CANCELED", job.Status.String())
 	}
 }
@@ -49,8 +50,8 @@ func TestCancel_ProcessingJob(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-cancel-processing")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cancel-processing")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce many messages so processing takes time
 	prod := testutil.StartProducer(t, ctx)
@@ -58,19 +59,20 @@ func TestCancel_ProcessingJob(t *testing.T) {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	// Wait for job to start processing
 	time.Sleep(2 * time.Second)
 
 	// Cancel while processing
-	err := queue.CancelPurgeJob(ctx, params, jobID)
+	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 
-	job, _ := queue.GetPurgeJob(ctx, jobID)
-	if job.Status != q.PurgeJobCanceled {
+	job, _ := qm.GetPurgeJob(ctx, jobID)
+	if job.Status != publicqueue.PurgeJobCanceled {
 		t.Errorf("status = %s, want CANCELED", job.Status.String())
 	}
 }
@@ -79,10 +81,11 @@ func TestCancel_ProcessingJob(t *testing.T) {
 func TestCancel_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-notfound")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cancel-notfound")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.CancelPurgeJob(ctx, params, "nonexistent-job")
+	qm := redissmq.NewQueueManager()
+	err := qm.CancelPurgeJob(ctx, params, "nonexistent-job")
 	if err == nil {
 		t.Fatal("expected error for non-existent job")
 	}
@@ -92,20 +95,25 @@ func TestCancel_NotFound(t *testing.T) {
 func TestCancel_UnlocksQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-unlock")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cancel-unlock")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	// Cancel
-	queue.CancelPurgeJob(ctx, params, jobID)
+	qm.CancelPurgeJob(ctx, params, jobID)
 
 	// Queue should be unlocked
-	transition, _ := queue.Current(ctx, params)
-	if transition.To != q.StateActive {
+	sm := redissmq.NewStateManager()
+	transition, err := sm.Current(ctx, params)
+	if err != nil {
+		t.Fatalf("current: %v", err)
+	}
+	if transition.To != publicqueue.StateActive {
 		t.Errorf("queue state = %s, want ACTIVE after cancel", transition.To.String())
 	}
 }
@@ -114,21 +122,22 @@ func TestCancel_UnlocksQueue(t *testing.T) {
 func TestCancel_Idempotent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-idempotent")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cancel-idempotent")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	// Cancel multiple times
-	err := queue.CancelPurgeJob(ctx, params, jobID)
+	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Fatalf("first cancel: %v", err)
 	}
 
-	err = queue.CancelPurgeJob(ctx, params, jobID)
+	err = qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Logf("second cancel (may fail): %v", err)
 	}
@@ -138,18 +147,19 @@ func TestCancel_Idempotent(t *testing.T) {
 func TestCancel_AlreadyCompleted(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-completed")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cancel-completed")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Enqueue and cancel a job (no worker to process it, so it's pending)
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
-	queue.CancelPurgeJob(ctx, params, jobID)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	qm.CancelPurgeJob(ctx, params, jobID)
 
 	// Try to cancel again
-	err := queue.CancelPurgeJob(ctx, params, jobID)
+	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err == nil {
 		t.Log("cancel of already-canceled job succeeded (idempotent)")
 	} else {

@@ -12,7 +12,7 @@ package msg
 
 import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Params holds the full message configuration for serialization.
@@ -67,10 +67,10 @@ type Params struct {
 
 	// Queue is the target queue, if the message was sent directly to a
 	// queue.
-	Queue *q.QueueParams `json:"queue,omitempty"`
+	Queue *queue.QueueParams `json:"queue,omitempty"`
 
 	// DestinationQueue is the resolved destination queue for the message.
-	DestinationQueue *q.QueueParams `json:"destinationQueue"`
+	DestinationQueue *queue.QueueParams `json:"destinationQueue"`
 
 	// ConsumerGroupID is the consumer group the message belongs to for
 	// Pub/Sub queues.

@@ -23,7 +23,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // TopicStore handles topic exchange pattern-based routing operations.
@@ -32,7 +32,7 @@ type TopicStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*q.QueueParams]
+	queueCodec codec.SetCodec[*queue.QueueParams]
 }
 
 // NewTopicStore creates a new topic exchange store.
@@ -49,7 +49,7 @@ func NewTopicStore(store *Store, validator *Validator, codecs *Codecs) *TopicSto
 // The pattern must be a valid AMQP-style topic pattern.
 func (ts *TopicStore) BindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	pattern string,
 ) error {
@@ -122,7 +122,7 @@ func (ts *TopicStore) BindQueue(
 // UnbindQueue removes a queue binding from a topic exchange pattern.
 func (ts *TopicStore) UnbindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	pattern string,
 ) error {
@@ -217,7 +217,7 @@ func (ts *TopicStore) MatchQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	patterns, err := ts.Patterns(ctx, exchangeParams)
 	if err != nil {
 		return nil, err
@@ -235,7 +235,7 @@ func (ts *TopicStore) MatchQueues(
 	}
 
 	seen := make(map[string]bool)
-	var queues []q.QueueParams
+	var queues []queue.QueueParams
 
 	for _, pattern := range matchedPatterns {
 		bound, err := ts.BoundQueues(ctx, exchangeParams, pattern)
@@ -272,7 +272,7 @@ func (ts *TopicStore) BoundQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	pattern string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -292,13 +292,13 @@ func (ts *TopicStore) BoundQueues(
 func (ts *TopicStore) Bindings(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) (map[string][]q.QueueParams, error) {
+) (map[string][]queue.QueueParams, error) {
 	patterns, err := ts.Patterns(ctx, exchangeParams)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings := make(map[string][]q.QueueParams, len(patterns))
+	bindings := make(map[string][]queue.QueueParams, len(patterns))
 	for _, pattern := range patterns {
 		queues, err := ts.BoundQueues(ctx, exchangeParams, pattern)
 		if err != nil {

@@ -20,7 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Mixed exchange types routing simultaneously
@@ -29,24 +29,24 @@ func TestComplex_MixedExchangeTypes(t *testing.T) {
 	defer cancel()
 
 	// Direct exchange
-	directQueue := q.MustQueueParams("test-complex-mixed-direct-q")
-	testutil.CreateQueue(t, ctx, directQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	directQueue := queue.MustQueueParams("test-complex-mixed-direct-q")
+	testutil.CreateQueue(t, ctx, directQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	directEx := x.MustExchangeParams("test-complex-mixed-direct-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, directQueue, directEx, "order.created")
 
 	// Topic exchange
-	topicQueue := q.MustQueueParams("test-complex-mixed-topic-q")
-	testutil.CreateQueue(t, ctx, topicQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	topicQueue := queue.MustQueueParams("test-complex-mixed-topic-q")
+	testutil.CreateQueue(t, ctx, topicQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	topicEx := x.MustExchangeParams("test-complex-mixed-topic-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
 	tx.BindQueue(ctx, topicQueue, topicEx, "user.*")
 
 	// Fanout exchange
-	fanoutQ1 := q.MustQueueParams("test-complex-mixed-fanout-q1")
-	fanoutQ2 := q.MustQueueParams("test-complex-mixed-fanout-q2")
-	testutil.CreateQueue(t, ctx, fanoutQ1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, fanoutQ2, q.TypeFIFO, q.DeliveryPointToPoint)
+	fanoutQ1 := queue.MustQueueParams("test-complex-mixed-fanout-q1")
+	fanoutQ2 := queue.MustQueueParams("test-complex-mixed-fanout-q2")
+	testutil.CreateQueue(t, ctx, fanoutQ1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, fanoutQ2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	fanoutEx := x.MustExchangeParams("test-complex-mixed-fanout-ex", x.TypeFanout)
 	fx := exchange.NewFanoutExchange()
 	fx.BindQueue(ctx, fanoutQ1, fanoutEx)
@@ -102,8 +102,8 @@ func TestComplex_OneQueueMultipleExchanges(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	sharedQueue := q.MustQueueParams("test-complex-shared-q")
-	testutil.CreateQueue(t, ctx, sharedQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	sharedQueue := queue.MustQueueParams("test-complex-shared-q")
+	testutil.CreateQueue(t, ctx, sharedQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	ex1 := x.MustExchangeParams("test-complex-shared-ex1", x.TypeDirect)
 	ex2 := x.MustExchangeParams("test-complex-shared-ex2", x.TypeFanout)
@@ -144,8 +144,8 @@ func TestComplex_MultipleProducersSameExchange(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	queueParams := q.MustQueueParams("test-complex-multi-prod-ex-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-complex-multi-prod-ex-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-complex-multi-prod-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -183,10 +183,10 @@ func TestComplex_DynamicBindUnbind(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	q1 := q.MustQueueParams("test-complex-dynamic-q1")
-	q2 := q.MustQueueParams("test-complex-dynamic-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-complex-dynamic-q1")
+	q2 := queue.MustQueueParams("test-complex-dynamic-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-complex-dynamic-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()

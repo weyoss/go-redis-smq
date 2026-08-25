@@ -19,24 +19,23 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Browse published messages
 func TestBrowse_PublishedMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-msg-browse-pub")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-pub")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -50,16 +49,16 @@ func TestBrowse_PublishedMessages(t *testing.T) {
 func TestBrowse_PendingMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-msg-browse-pend")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-pend")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
 		prod.Produce(ctx, msg.New().SetBody("pending").SetQueue(params))
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePending,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePending,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -73,16 +72,16 @@ func TestBrowse_PendingMessages(t *testing.T) {
 func TestBrowse_ScheduledMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-msg-browse-sched")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-sched")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
 		prod.Produce(ctx, msg.New().SetBody("scheduled").SetQueue(params).SetScheduledDelay(1*time.Hour))
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseScheduled,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -96,11 +95,11 @@ func TestBrowse_ScheduledMessages(t *testing.T) {
 func TestBrowse_AcknowledgedMessages_AuditRequired(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-msg-browse-ack-req")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-ack-req")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	_, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseAcknowledged,
 	})
 	if err == nil {
 		t.Fatal("expected error: audit disabled")
@@ -116,8 +115,8 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 1000
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-msg-browse-ack")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-ack")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
@@ -139,8 +138,8 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 	}
 	time.Sleep(200 * time.Millisecond)
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -154,11 +153,11 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 func TestBrowse_DeadLetteredMessages_AuditRequired(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-msg-browse-dlq-req")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-dlq-req")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseDeadLettered,
+	_, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseDeadLettered,
 	})
 	if err == nil {
 		t.Fatal("expected error: audit disabled")
@@ -169,17 +168,19 @@ func TestBrowse_DeadLetteredMessages_AuditRequired(t *testing.T) {
 func TestBrowse_Pagination(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-msg-browse-pag")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-msg-browse-pag")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
+	qm := redissmq.NewQueueManager()
+
 	// Page 1
-	result1, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	result1, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 0,
 		Count:  3,
 	})
@@ -194,8 +195,8 @@ func TestBrowse_Pagination(t *testing.T) {
 	}
 
 	// Page 2
-	result2, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	result2, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 3,
 		Count:  3,
 	})
@@ -207,8 +208,8 @@ func TestBrowse_Pagination(t *testing.T) {
 	}
 
 	// Last page
-	result3, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	result3, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 9,
 		Count:  3,
 	})

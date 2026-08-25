@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // PublishUp publishes a consumer.up event to the public user bus.
@@ -39,36 +39,36 @@ func PublishGoingDown(ctx context.Context, consumerID string) {
 
 // PublishMessageReceived publishes a consumer.messageReceived event to the
 // public user bus.
-func PublishMessageReceived(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+func PublishMessageReceived(ctx context.Context, messageID string, queue queue.QueueParams, consumerID string) {
 	eventmultiplexer.Publish(ctx, EventMessageReceived, messageID, queue, consumerID)
 }
 
 // PublishMessageAcknowledged publishes a consumer.messageAcknowledged event
 // to the public user bus.
-func PublishMessageAcknowledged(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+func PublishMessageAcknowledged(ctx context.Context, messageID string, queue queue.QueueParams, consumerID string) {
 	eventmultiplexer.Publish(ctx, EventMessageAcknowledged, messageID, queue, consumerID)
 }
 
 // PublishMessageUnacknowledged publishes a consumer.messageUnacknowledged
 // event to the public user bus.
-func PublishMessageUnacknowledged(ctx context.Context, messageID string, queue q.QueueParams, consumerID string, cause int) {
+func PublishMessageUnacknowledged(ctx context.Context, messageID string, queue queue.QueueParams, consumerID string, cause int) {
 	eventmultiplexer.Publish(ctx, EventMessageUnacknowledged, messageID, queue, consumerID, cause)
 }
 
 // PublishMessageDeadLettered publishes a consumer.messageDeadLettered event
 // to the public user bus.
-func PublishMessageDeadLettered(ctx context.Context, messageID string, queue q.QueueParams, consumerID string, cause int) {
+func PublishMessageDeadLettered(ctx context.Context, messageID string, queue queue.QueueParams, consumerID string, cause int) {
 	eventmultiplexer.Publish(ctx, EventMessageDeadLettered, messageID, queue, consumerID, cause)
 }
 
 // PublishMessageRequeued publishes a consumer.messageRequeued event to the
 // public user bus.
-func PublishMessageRequeued(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+func PublishMessageRequeued(ctx context.Context, messageID string, queue queue.QueueParams, consumerID string) {
 	eventmultiplexer.Publish(ctx, EventMessageRequeued, messageID, queue, consumerID)
 }
 
 // PublishMessageDelayed publishes a consumer.messageDelayed event to the
 // public user bus.
-func PublishMessageDelayed(ctx context.Context, messageID string, queue q.QueueParams, consumerID string) {
+func PublishMessageDelayed(ctx context.Context, messageID string, queue queue.QueueParams, consumerID string) {
 	eventmultiplexer.Publish(ctx, EventMessageDelayed, messageID, queue, consumerID)
 }

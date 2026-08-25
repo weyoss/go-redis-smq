@@ -20,7 +20,7 @@ import (
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // unackEntry is a pending unacknowledgment entry.
@@ -35,7 +35,7 @@ type unackEntry struct {
 // into a single Redis Lua script call when batch mode is enabled.
 type BatchUnacker struct {
 	mu             sync.Mutex
-	queue          *q.QueueParams
+	queue          *queue.QueueParams
 	groupID        string
 	consumerID     string
 	cfg            consumer.BatchConfig
@@ -49,7 +49,7 @@ type BatchUnacker struct {
 }
 
 // NewBatchUnacker creates a new batch unacknowledger.
-func NewBatchUnacker(queue *q.QueueParams, groupID, consumerID string, cfg consumer.BatchConfig) *BatchUnacker {
+func NewBatchUnacker(queue *queue.QueueParams, groupID, consumerID string, cfg consumer.BatchConfig) *BatchUnacker {
 	return &BatchUnacker{
 		queue:          queue,
 		groupID:        groupID,

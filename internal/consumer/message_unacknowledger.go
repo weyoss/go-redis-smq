@@ -27,7 +27,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // UnackEntry holds a message and the cause for its unacknowledgment.
@@ -38,13 +38,13 @@ type UnackEntry struct {
 
 // MessageUnacknowledger handles unacknowledging messages for a consumer.
 type MessageUnacknowledger struct {
-	queue      *q.QueueParams
+	queue      *queue.QueueParams
 	consumerID string
 	log        *slog.Logger
 }
 
 // NewMessageUnacknowledger creates a new unacknowledger.
-func NewMessageUnacknowledger(queue *q.QueueParams, consumerID string) *MessageUnacknowledger {
+func NewMessageUnacknowledger(queue *queue.QueueParams, consumerID string) *MessageUnacknowledger {
 	return &MessageUnacknowledger{
 		queue:      queue,
 		consumerID: consumerID,
@@ -162,10 +162,10 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		mSchema.MessageFieldLastUnacknowledgedAt.Key(),    // ARGV[14]
 		mSchema.MessageFieldExpired.Key(),                 // ARGV[15]
 		qSchema.QueueFieldOperationalState.Key(),          // ARGV[16]
-		q.StateActive.Int(),                               // ARGV[17]
-		q.StatePaused.Int(),                               // ARGV[18]
-		q.StateStopped.Int(),                              // ARGV[19]
-		q.StateLocked.Int(),                               // ARGV[20]
+		queue.StateActive.Int(),                           // ARGV[17]
+		queue.StatePaused.Int(),                           // ARGV[18]
+		queue.StateStopped.Int(),                          // ARGV[19]
+		queue.StateLocked.Int(),                           // ARGV[20]
 		strconv.Itoa(maxHistorySize),                      // ARGV[21]
 	}
 

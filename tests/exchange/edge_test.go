@@ -17,7 +17,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Rapid create/delete cycles on exchange
@@ -44,8 +44,8 @@ func TestEdge_RapidCreateDelete(t *testing.T) {
 func TestEdge_BindUnbindCycle(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-edge-bind-cycle-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-edge-bind-cycle-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-bind-cycle-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -67,8 +67,8 @@ func TestEdge_BindUnbindCycle(t *testing.T) {
 func TestEdge_LongRoutingKey(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-edge-long-rk-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-edge-long-rk-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-long-rk-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -97,8 +97,8 @@ func TestEdge_ManyBindings(t *testing.T) {
 
 	queueCount := 20
 	for i := 0; i < queueCount; i++ {
-		queueParams := q.MustQueueParams(fmt.Sprintf("test-edge-many-bindings-q%d", i))
-		testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+		queueParams := queue.MustQueueParams(fmt.Sprintf("test-edge-many-bindings-q%d", i))
+		testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 		routingKey := fmt.Sprintf("key.%d", i)
 		err := dx.BindQueue(ctx, queueParams, exchangeParams, routingKey)
@@ -120,8 +120,8 @@ func TestEdge_ManyBindings(t *testing.T) {
 func TestEdge_RoutingKeySpecialChars(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-edge-special-rk-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-edge-special-rk-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-special-rk-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -151,10 +151,10 @@ func TestEdge_RoutingKeySpecialChars(t *testing.T) {
 func TestEdge_ExchangeWithNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParamsWithNS("test-edge-ns-q", "production")
+	queueParams := queue.MustQueueParamsWithNS("test-edge-ns-q", "production")
 	exchangeParams := x.MustExchangeParamsWithNS("test-edge-ns-ex", "production", x.TypeDirect)
 
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	dx := exchange.NewDirectExchange()
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
@@ -185,8 +185,8 @@ func TestEdge_ExchangeWithNamespace(t *testing.T) {
 func TestEdge_TopicManyTokens(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-edge-many-tokens-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-edge-many-tokens-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-edge-many-tokens-ex", x.TypeTopic)
 	tx := exchange.NewTopicExchange()

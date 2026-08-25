@@ -20,18 +20,18 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Scenario: PubSub delivers to all consumer groups
 func TestPubSub_DeliveryToAllGroups(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-pubsub-delivery")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := queue.MustQueueParams("test-pubsub-delivery")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "email-service")
-	queue.SaveConsumerGroup(ctx, params, "sms-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, "email-service")
+	cgm.Save(ctx, params, "sms-service")
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -76,10 +76,10 @@ func TestPubSub_DeliveryToAllGroups(t *testing.T) {
 func TestPubSub_LoadBalanceWithinGroup(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-pubsub-balance")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := queue.MustQueueParams("test-pubsub-balance")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "workers")
+	redissmq.NewConsumerGroupManager().Save(ctx, params, "workers")
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
@@ -120,8 +120,8 @@ func TestPubSub_LoadBalanceWithinGroup(t *testing.T) {
 func TestPubSub_EphemeralGroup(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-pubsub-ephemeral")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := queue.MustQueueParams("test-pubsub-ephemeral")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -140,8 +140,10 @@ func TestPubSub_EphemeralGroup(t *testing.T) {
 		t.Errorf("consumed: %d, want 1", consumed.Load())
 	}
 
+	cgm := redissmq.NewConsumerGroupManager()
+
 	// Ephemeral group should be auto-created
-	groups, _ := queue.ListConsumerGroups(ctx, params)
+	groups, _ := cgm.List(ctx, params)
 	t.Logf("groups after ephemeral: %v", groups)
 	if len(groups) != 1 {
 		t.Errorf("expected 1 ephemeral group, got %d: %v", len(groups), groups)
@@ -151,7 +153,7 @@ func TestPubSub_EphemeralGroup(t *testing.T) {
 	cons.Shutdown()
 	time.Sleep(500 * time.Millisecond)
 
-	groups, _ = queue.ListConsumerGroups(ctx, params)
+	groups, _ = cgm.List(ctx, params)
 	t.Logf("groups after shutdown: %v", groups)
 	if len(groups) != 0 {
 		t.Errorf("ephemeral group should be deleted on shutdown, got %v", groups)
@@ -162,10 +164,10 @@ func TestPubSub_EphemeralGroup(t *testing.T) {
 func TestPubSub_CancelGroup(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-pubsub-cancel")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := queue.MustQueueParams("test-pubsub-cancel")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "email-service")
+	redissmq.NewConsumerGroupManager().Save(ctx, params, "email-service")
 
 	prod := testutil.StartProducer(t, ctx)
 

@@ -13,20 +13,20 @@ package producer_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Producer fails to publish to stopped queue
 func TestError_ProduceToStoppedQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-produce-stopped")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-produce-stopped")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
 	prod := testutil.StartProducer(t, ctx)
 	_, err := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
@@ -39,10 +39,10 @@ func TestError_ProduceToStoppedQueue(t *testing.T) {
 func TestError_ProduceToLockedQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-produce-locked")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-produce-locked")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Lock(ctx, params, q.LockOwnerPurgeJob, "lock-123", nil)
+	redissmq.NewStateManager().Lock(ctx, params, publicqueue.LockOwnerPurgeJob, "lock-123", nil)
 
 	prod := testutil.StartProducer(t, ctx)
 	_, err := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))

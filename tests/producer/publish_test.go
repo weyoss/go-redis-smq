@@ -17,16 +17,15 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Produce a single message to a queue
 func TestProduce_SingleMessage(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-single")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-single")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -47,8 +46,8 @@ func TestProduce_SingleMessage(t *testing.T) {
 func TestProduce_MultipleMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-multi")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-multi")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -67,7 +66,7 @@ func TestProduce_MultipleMessages(t *testing.T) {
 	}
 
 	// Verify queue has 10 messages
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -83,7 +82,7 @@ func TestProduce_MultipleMessages(t *testing.T) {
 func TestProduce_NonExistentQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("nonexistent")
+	params := publicqueue.MustQueueParams("nonexistent")
 	prod := testutil.StartProducer(t, ctx)
 
 	m := msg.New().SetBody("msg").SetQueue(params)
@@ -97,8 +96,8 @@ func TestProduce_NonExistentQueue(t *testing.T) {
 func TestProduce_NotRunning(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-not-running")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-not-running")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := redissmq.NewProducer()
 
@@ -113,8 +112,8 @@ func TestProduce_NotRunning(t *testing.T) {
 func TestProduce_WithTTL(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-ttl")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-ttl")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -138,8 +137,8 @@ func TestProduce_WithTTL(t *testing.T) {
 func TestProduce_Scheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-scheduled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-scheduled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -158,7 +157,7 @@ func TestProduce_Scheduled(t *testing.T) {
 	}
 
 	// Verify it appears in scheduled, not pending
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -174,10 +173,10 @@ func TestProduce_Scheduled(t *testing.T) {
 func TestProduce_StoppedQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-stopped")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-stopped")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -192,10 +191,10 @@ func TestProduce_StoppedQueue(t *testing.T) {
 func TestProduce_PausedQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-produce-paused")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-produce-paused")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Pause(ctx, params, nil)
+	redissmq.NewStateManager().Pause(ctx, params, nil)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -209,7 +208,7 @@ func TestProduce_PausedQueue(t *testing.T) {
 	}
 
 	// Messages accumulate in pending
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.PendingMessagesCount != 1 {
 		t.Errorf("pending = %d, want 1", props.PendingMessagesCount)
 	}

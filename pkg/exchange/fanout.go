@@ -15,7 +15,7 @@ import (
 
 	internalExchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // FanoutExchange manages fanout exchanges that broadcast to all bound queues.
@@ -68,7 +68,7 @@ func (fx *FanoutExchange) Delete(ctx context.Context, params *x.ExchangeParams) 
 //	err := fx.BindQueue(ctx, queueParams, exchangeParams)
 func (fx *FanoutExchange) BindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -81,7 +81,7 @@ func (fx *FanoutExchange) BindQueue(
 // The queue and exchange must be in the same namespace.
 func (fx *FanoutExchange) UnbindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -100,7 +100,7 @@ func (fx *FanoutExchange) UnbindQueue(
 func (fx *FanoutExchange) MatchQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	return fx.fanoutStore.BoundQueues(ctx, exchangeParams)
 }
 
@@ -108,6 +108,6 @@ func (fx *FanoutExchange) MatchQueues(
 func (fx *FanoutExchange) BoundQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	return fx.fanoutStore.BoundQueues(ctx, exchangeParams)
 }

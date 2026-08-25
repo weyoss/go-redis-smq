@@ -20,7 +20,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Manager provides namespace-level operations.
@@ -117,7 +117,7 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 }
 
 // ListQueues returns all queues in a namespace.
-func (m *Manager) ListQueues(ctx context.Context, name string) ([]q.QueueParams, error) {
+func (m *Manager) ListQueues(ctx context.Context, name string) ([]queue.QueueParams, error) {
 	validName, err := validate(name)
 	if err != nil {
 		return nil, err

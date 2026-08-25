@@ -13,18 +13,18 @@ package namespace_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create queue in namespace
 func TestQueue_CreateInNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParamsWithNS("test-ns-queue", "my-ns")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParamsWithNS("test-ns-queue", "my-ns")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	if params.NS() != "my-ns" {
 		t.Errorf("ns = %q, want %q", params.NS(), "my-ns")
@@ -35,12 +35,12 @@ func TestQueue_CreateInNamespace(t *testing.T) {
 func TestQueue_ListByNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("test-ns-list-q1", "list-ns")
-	q2 := q.MustQueueParamsWithNS("test-ns-list-q2", "list-ns")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("test-ns-list-q1", "list-ns")
+	q2 := publicqueue.MustQueueParamsWithNS("test-ns-list-q2", "list-ns")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queues, err := queue.ListByNamespace(ctx, "list-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "list-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}
@@ -53,14 +53,16 @@ func TestQueue_ListByNamespace(t *testing.T) {
 func TestQueue_NamespaceIsolation(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("same-name", "ns-a")
-	q2 := q.MustQueueParamsWithNS("same-name", "ns-b")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("same-name", "ns-a")
+	q2 := publicqueue.MustQueueParamsWithNS("same-name", "ns-b")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
 
 	// Both should exist independently
-	exists1, _ := queue.Exists(ctx, q1)
-	exists2, _ := queue.Exists(ctx, q2)
+	exists1, _ := qm.Exists(ctx, q1)
+	exists2, _ := qm.Exists(ctx, q2)
 
 	if !exists1 {
 		t.Error("queue in ns-a should exist")
@@ -69,9 +71,11 @@ func TestQueue_NamespaceIsolation(t *testing.T) {
 		t.Error("queue in ns-b should exist")
 	}
 
+	qm = redissmq.NewQueueManager()
+
 	// List by namespace should only return the queue in that namespace
-	nsAQueues, _ := queue.ListByNamespace(ctx, "ns-a")
-	nsBQueues, _ := queue.ListByNamespace(ctx, "ns-b")
+	nsAQueues, _ := qm.ListByNamespace(ctx, "ns-a")
+	nsBQueues, _ := qm.ListByNamespace(ctx, "ns-b")
 
 	if len(nsAQueues) != 1 {
 		t.Errorf("ns-a should have 1 queue, got %d", len(nsAQueues))
@@ -85,14 +89,16 @@ func TestQueue_NamespaceIsolation(t *testing.T) {
 func TestQueue_SameNameDifferentNamespaces(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("orders", "production")
-	q2 := q.MustQueueParamsWithNS("orders", "staging")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("orders", "production")
+	q2 := publicqueue.MustQueueParamsWithNS("orders", "staging")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
 
 	// Both should exist
-	props1, _ := queue.Properties(ctx, q1)
-	props2, _ := queue.Properties(ctx, q2)
+	props1, _ := qm.Properties(ctx, q1)
+	props2, _ := qm.Properties(ctx, q2)
 
 	if props1 == nil {
 		t.Error("production/orders should exist")
@@ -102,8 +108,8 @@ func TestQueue_SameNameDifferentNamespaces(t *testing.T) {
 	}
 
 	// Deleting one should not affect the other
-	queue.Delete(ctx, q1)
-	exists2, _ := queue.Exists(ctx, q2)
+	qm.Delete(ctx, q1)
+	exists2, _ := qm.Exists(ctx, q2)
 	if !exists2 {
 		t.Error("staging/orders should still exist after deleting production/orders")
 	}
@@ -113,13 +119,13 @@ func TestQueue_SameNameDifferentNamespaces(t *testing.T) {
 func TestQueue_ListAfterDeletingNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("test-ns-del-q", "temp-queue-ns")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("test-ns-del-q", "temp-queue-ns")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	nm.Delete(ctx, "temp-queue-ns")
 
-	queues, err := queue.ListByNamespace(ctx, "temp-queue-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "temp-queue-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

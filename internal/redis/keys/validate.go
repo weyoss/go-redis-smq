@@ -8,48 +8,22 @@
  *
  */
 
+// Package keys provides Redis key builders and validation for RedisSMQ.
+//
+// Key validation is delegated to the public pkg/redis package to keep a
+// single source of truth and allow public packages to validate keys
+// without importing internal code.
 package keys
 
 import (
-	"errors"
-	"strings"
+	"github.com/weyoss/go-redis-smq/pkg/redis"
 )
 
-var (
-	ErrInvalidKey = errors.New("invalid redis key")
-)
+// ErrInvalidKey is an alias for the public redis key validation error.
+var ErrInvalidKey = redis.ErrInvalidKey
 
-// ValidateKey ensures a Redis key follows the required format
+// ValidateKey validates a Redis key using the public pkg/redis validator.
+// It returns the lowercased valid key or an error.
 func ValidateKey(key string) (string, error) {
-	if key == "" {
-		return "", ErrInvalidKey
-	}
-
-	key = strings.ToLower(key)
-
-	// First character must be a letter
-	if !isLetter(key[0]) {
-		return "", ErrInvalidKey
-	}
-
-	// Remaining characters can be letters, numbers, or special chars
-	for i := 1; i < len(key); i++ {
-		if !isValidKeyChar(key[i]) {
-			return "", ErrInvalidKey
-		}
-	}
-
-	return key, nil
-}
-
-func isLetter(c byte) bool {
-	return c >= 'a' && c <= 'z'
-}
-
-func isDigit(c byte) bool {
-	return c >= '0' && c <= '9'
-}
-
-func isValidKeyChar(c byte) bool {
-	return isLetter(c) || isDigit(c) || c == '-' || c == '_' || c == '.'
+	return redis.ValidateKey(key)
 }

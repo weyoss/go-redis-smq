@@ -20,7 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // PrepareConsumerGroup ensures a consumer group exists for PUB/SUB queues.
@@ -31,11 +31,11 @@ import (
 //   - If PUB/SUB: create consumer group (ephemeral if no groupID provided)
 //   - If POINT_TO_POINT with groupID: error
 //   - If POINT_TO_POINT without groupID: OK, no group needed
-func PrepareConsumerGroup(ctx context.Context, consumerID string, queue *q.QueueParams, groupID string) (string, error) {
-	log := logger.New("consumer", "prepare-group", consumerID, queue.Name())
+func PrepareConsumerGroup(ctx context.Context, consumerID string, q *queue.QueueParams, groupID string) (string, error) {
+	log := logger.New("consumer", "prepare-group", consumerID, q.Name())
 
 	store := internalQueue.NewManager().Store()
-	props, err := store.Load(ctx, queue)
+	props, err := store.Load(ctx, q)
 	if err != nil {
 		log.Error("failed to load queue properties", "error", err)
 		return "", fmt.Errorf("prepare consumer group: %w", err)
@@ -46,14 +46,14 @@ func PrepareConsumerGroup(ctx context.Context, consumerID string, queue *q.Queue
 	)
 
 	// PUB/SUB queues require a consumer group
-	if props.DeliveryModel == q.DeliveryPubSub {
+	if props.DeliveryModel == queue.DeliveryPubSub {
 		effectiveGroupID := groupID
 		if effectiveGroupID == "" {
 			effectiveGroupID = ephemeralGroupID(consumerID)
 			log.Debug("generated ephemeral group ID", "group", effectiveGroupID)
 		}
 
-		if err := createConsumerGroup(ctx, queue, effectiveGroupID); err != nil {
+		if err := createConsumerGroup(ctx, q, effectiveGroupID); err != nil {
 			log.Error("failed to create consumer group", "group", effectiveGroupID, "error", err)
 			return "", fmt.Errorf("prepare consumer group: %w", err)
 		}
@@ -75,8 +75,8 @@ func PrepareConsumerGroup(ctx context.Context, consumerID string, queue *q.Queue
 
 // DeleteEphemeralConsumerGroup removes an ephemeral consumer group.
 // Called during consumer shutdown. If groupID is empty, generates one from consumerID.
-func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, queue *q.QueueParams, groupID string) error {
-	log := logger.New("consumer", "delete-group", consumerID, queue.Name())
+func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, q *queue.QueueParams, groupID string) error {
+	log := logger.New("consumer", "delete-group", consumerID, q.Name())
 
 	effectiveGroupID := groupID
 	if effectiveGroupID == "" {
@@ -86,8 +86,8 @@ func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, queue 
 	log.Debug("deleting ephemeral consumer group", "group", effectiveGroupID)
 
 	qKey := keys.Queue{
-		Namespace: queue.NS(),
-		Name:      queue.Name(),
+		Namespace: q.NS(),
+		Name:      q.Name(),
 	}
 
 	luaKeys := []string{
@@ -100,12 +100,12 @@ func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, queue 
 
 	argv := []interface{}{
 		qSchema.QueueFieldType.Key(),
-		q.TypePriority.Int(),
+		queue.TypePriority.Int(),
 		qSchema.QueueFieldDeliveryModel.Key(),
-		q.DeliveryPubSub.Int(),
+		queue.DeliveryPubSub.Int(),
 		effectiveGroupID,
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateLocked.String(),
+		queue.StateLocked.String(),
 		qSchema.QueueFieldLockID.Key(),
 		"",
 	}
@@ -134,12 +134,12 @@ func ephemeralGroupID(consumerID string) string {
 }
 
 // createConsumerGroup creates a consumer group for a queue.
-func createConsumerGroup(ctx context.Context, queue *q.QueueParams, groupID string) error {
-	log := logger.New("consumer", "create-group", queue.Name())
+func createConsumerGroup(ctx context.Context, q *queue.QueueParams, groupID string) error {
+	log := logger.New("consumer", "create-group", q.Name())
 
 	qKey := keys.Queue{
-		Namespace: queue.NS(),
-		Name:      queue.Name(),
+		Namespace: q.NS(),
+		Name:      q.Name(),
 	}
 
 	result, err := redis.Client().SAdd(ctx, qKey.ConsumerGroups(), groupID).Result()

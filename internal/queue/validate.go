@@ -14,7 +14,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Validator handles queue validation logic.
@@ -30,20 +30,20 @@ func NewValidator(store *Store) *Validator {
 
 // Exists validates that a queue exists in Redis.
 // Returns ErrNotFound if the queue doesn't exist.
-func (v *Validator) Exists(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) Exists(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	exists, err := v.store.Exists(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("validate queue exists: %w", err)
 	}
 	if !exists {
-		return q.ErrNotFound
+		return publicqueue.ErrNotFound
 	}
 	return nil
 }
 
 // IsOperational validates that a queue exists and is in an operational state.
 // Active and Paused states are considered operational.
-func (v *Validator) IsOperational(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) IsOperational(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func (v *Validator) IsOperational(ctx context.Context, queueParams *q.QueueParam
 	}
 
 	if !props.OperationalState.IsOperational() {
-		return q.ErrNotOperational
+		return publicqueue.ErrNotOperational
 	}
 
 	return nil
@@ -63,7 +63,7 @@ func (v *Validator) IsOperational(ctx context.Context, queueParams *q.QueueParam
 // CanEnqueue validates that a queue can accept new messages.
 // Queue must exist and be in an operational state.
 // Also checks rate limit if configured.
-func (v *Validator) CanEnqueue(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) CanEnqueue(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -75,13 +75,13 @@ func (v *Validator) CanEnqueue(ctx context.Context, queueParams *q.QueueParams) 
 
 	// Enqueue allowed in Active and Paused states
 	if !props.OperationalState.IsOperational() {
-		return q.ErrNotOperational
+		return publicqueue.ErrNotOperational
 	}
 
 	// Check rate limit if configured
 	if props.RateLimit != nil {
 		if props.MessagesCount >= int64(props.RateLimit.Limit()) {
-			return q.ErrRateLimitExceeded
+			return publicqueue.ErrRateLimitExceeded
 		}
 	}
 
@@ -90,7 +90,7 @@ func (v *Validator) CanEnqueue(ctx context.Context, queueParams *q.QueueParams) 
 
 // CanDequeue validates that a queue can deliver messages.
 // Only Active state allows dequeue operations.
-func (v *Validator) CanDequeue(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) CanDequeue(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -101,8 +101,8 @@ func (v *Validator) CanDequeue(ctx context.Context, queueParams *q.QueueParams) 
 	}
 
 	// Dequeue only allowed in Active state
-	if props.OperationalState != q.StateActive {
-		return q.ErrNotOperational
+	if props.OperationalState != publicqueue.StateActive {
+		return publicqueue.ErrNotOperational
 	}
 
 	return nil
@@ -110,13 +110,13 @@ func (v *Validator) CanDequeue(ctx context.Context, queueParams *q.QueueParams) 
 
 // CanBindToExchange validates that a queue can be bound to an exchange.
 // Queue must exist to be bound.
-func (v *Validator) CanBindToExchange(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) CanBindToExchange(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	return v.Exists(ctx, queueParams)
 }
 
 // CanDelete validates that a queue can be safely deleted.
 // Checks that no messages are currently being processed or pending.
-func (v *Validator) CanDelete(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) CanDelete(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -126,14 +126,12 @@ func (v *Validator) CanDelete(ctx context.Context, queueParams *q.QueueParams) e
 		return fmt.Errorf("validate queue deletion: %w", err)
 	}
 
-	// Check if messages are currently being processed
 	if props.ProcessingMessagesCount > 0 {
-		return q.ErrHasProcessingMessages
+		return publicqueue.ErrHasProcessingMessages
 	}
 
-	// Check if there are pending messages
 	if props.PendingMessagesCount > 0 {
-		return q.ErrHasPendingMessages
+		return publicqueue.ErrHasPendingMessages
 	}
 
 	return nil
@@ -141,7 +139,7 @@ func (v *Validator) CanDelete(ctx context.Context, queueParams *q.QueueParams) e
 
 // CanPurge validates that a queue can be purged (all messages removed).
 // Purge is allowed even with active consumers.
-func (v *Validator) CanPurge(ctx context.Context, queueParams *q.QueueParams) error {
+func (v *Validator) CanPurge(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	return v.Exists(ctx, queueParams)
 }
 
@@ -149,8 +147,8 @@ func (v *Validator) CanPurge(ctx context.Context, queueParams *q.QueueParams) er
 // the expected delivery model.
 func (v *Validator) DeliveryModelMatches(
 	ctx context.Context,
-	queueParams *q.QueueParams,
-	expected q.DeliveryModel,
+	queueParams *publicqueue.QueueParams,
+	expected publicqueue.DeliveryModel,
 ) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
@@ -162,7 +160,7 @@ func (v *Validator) DeliveryModelMatches(
 	}
 
 	if props.DeliveryModel != expected {
-		return q.ErrDeliveryModelMismatch
+		return publicqueue.ErrDeliveryModelMismatch
 	}
 
 	return nil

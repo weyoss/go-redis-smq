@@ -15,7 +15,7 @@ import (
 
 	internalExchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Manager provides common exchange operations.
@@ -86,7 +86,7 @@ func (m *Manager) ValidateType(ctx context.Context, params *x.ExchangeParams, re
 func (m *Manager) ValidateBinding(
 	ctx context.Context,
 	params *x.ExchangeParams,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 ) (*x.ExchangeProps, error) {
 	return m.validator.ValidateQueueBinding(ctx, params, queueParams)
 }
@@ -102,7 +102,7 @@ func (m *Manager) Delete(ctx context.Context, params *x.ExchangeParams) error {
 }
 
 // ListByQueue returns all exchanges bound to a specific queue.
-func (m *Manager) ListByQueue(ctx context.Context, queueParams *q.QueueParams) ([]x.ExchangeParams, error) {
+func (m *Manager) ListByQueue(ctx context.Context, queueParams *queue.QueueParams) ([]x.ExchangeParams, error) {
 	return m.lookup.ByQueue(ctx, queueParams)
 }
 
@@ -140,7 +140,7 @@ func ValidateType(ctx context.Context, params *x.ExchangeParams, required bool) 
 }
 
 // ValidateBinding checks queue binding using the default manager.
-func ValidateBinding(ctx context.Context, params *x.ExchangeParams, queueParams *q.QueueParams) (*x.ExchangeProps, error) {
+func ValidateBinding(ctx context.Context, params *x.ExchangeParams, queueParams *queue.QueueParams) (*x.ExchangeProps, error) {
 	return defaultManager.ValidateBinding(ctx, params, queueParams)
 }
 
@@ -150,7 +150,7 @@ func Delete(ctx context.Context, params *x.ExchangeParams) error {
 }
 
 // ListByQueue returns queue exchanges using the default manager.
-func ListByQueue(ctx context.Context, queueParams *q.QueueParams) ([]x.ExchangeParams, error) {
+func ListByQueue(ctx context.Context, queueParams *queue.QueueParams) ([]x.ExchangeParams, error) {
 	return defaultManager.ListByQueue(ctx, queueParams)
 }
 

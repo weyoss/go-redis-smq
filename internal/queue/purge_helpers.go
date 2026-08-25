@@ -17,18 +17,18 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-func resolveCategory(filter q.BrowseFilter, qKey keys.Queue) (key string, counter schema.QueueField, updateMessages bool) {
+func resolveCategory(filter publicqueue.BrowseFilter, qKey keys.Queue) (key string, counter schema.QueueField, updateMessages bool) {
 	switch filter {
-	case q.BrowsePending:
+	case publicqueue.BrowsePending:
 		return qKey.Pending(), schema.QueueFieldPendingMessagesCount, true
-	case q.BrowseScheduled:
+	case publicqueue.BrowseScheduled:
 		return qKey.Scheduled(), schema.QueueFieldScheduledMessagesCount, true
-	case q.BrowseAcknowledged:
+	case publicqueue.BrowseAcknowledged:
 		return qKey.Acknowledged(), schema.QueueFieldAcknowledgedMessagesCount, false
-	case q.BrowseDeadLettered:
+	case publicqueue.BrowseDeadLettered:
 		return qKey.DeadLetter(), schema.QueueFieldDeadLetteredMessagesCount, false
 	default:
 		return "", 0, false

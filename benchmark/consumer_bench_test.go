@@ -20,14 +20,14 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Benchmark: Consume 10,000 messages
 func BenchmarkConsumer_10K(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-consumer-10k-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-consumer-10k-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Pre-produce messages
 	prod := testutil.StartProducer(b, ctx)
@@ -79,8 +79,8 @@ done:
 // Benchmark: Consume 100,000 messages
 func BenchmarkConsumer_100K(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-consumer-100k-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-consumer-100k-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 100_000
@@ -129,8 +129,8 @@ done:
 // Benchmark: Multi-consumer throughput
 func BenchmarkConsumer_MultiConsumer(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-multi-cons-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-multi-cons-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 50_000

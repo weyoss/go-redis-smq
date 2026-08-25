@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	pubQueue "github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Validator handles exchange validation logic.
@@ -32,6 +32,12 @@ func NewValidator(store *Store) *Validator {
 
 // ValidateQueueBinding checks whether a queue can be bound to an exchange.
 //
+// Validation order matches TypeScript _validateQueueBinding:
+//  1. Load queue properties
+//  2. Load exchange properties (may not exist yet)
+//  3. Validate exchange type matches expected
+//  4. Validate queue policy compatibility
+//
 // Returns:
 //   - ExchangeProps if the exchange exists and validation passes
 //   - nil, nil if the exchange doesn't exist yet (new binding)
@@ -39,10 +45,10 @@ func NewValidator(store *Store) *Validator {
 func (v *Validator) ValidateQueueBinding(
 	ctx context.Context,
 	params *x.ExchangeParams,
-	queueParams *q.QueueParams,
+	queueParams *publicqueue.QueueParams,
 ) (*x.ExchangeProps, error) {
-	// Load queue properties first
-	queueProps, err := pubQueue.GetQueueProps(ctx, queueParams)
+	// Load queue properties first (matches TypeScript order)
+	queueProps, err := internalqueue.NewManager().Store().Load(ctx, queueParams)
 	if err != nil {
 		return nil, fmt.Errorf("validate binding: load queue: %w", err)
 	}
@@ -74,27 +80,29 @@ func (v *Validator) ValidateQueueBinding(
 
 // checkPolicy verifies a queue type satisfies the exchange's queue policy.
 //
+// Policy rules match TypeScript _validateQueueBinding:
+//
 //	STANDARD policy: only FIFO or LIFO queues allowed
 //	PRIORITY policy: only Priority queues allowed
-func checkPolicy(props *x.ExchangeProps, queueType q.QueueType) error {
+func checkPolicy(props *x.ExchangeProps, queueType publicqueue.QueueType) error {
 	switch props.Policy {
 	case x.PolicyStandard:
 		// Standard exchanges require FIFO or LIFO queues
-		if queueType != q.TypeFIFO && queueType != q.TypeLIFO {
+		if queueType != publicqueue.TypeFIFO && queueType != publicqueue.TypeLIFO {
 			return x.NewPolicyViolationError(
 				props.Type,
 				props.Policy,
-				[]q.QueueType{q.TypeFIFO, q.TypeLIFO},
+				[]publicqueue.QueueType{publicqueue.TypeFIFO, publicqueue.TypeLIFO},
 				queueType,
 			)
 		}
 	case x.PolicyPriority:
 		// Priority exchanges require Priority queues
-		if queueType != q.TypePriority {
+		if queueType != publicqueue.TypePriority {
 			return x.NewPolicyViolationError(
 				props.Type,
 				props.Policy,
-				[]q.QueueType{q.TypePriority},
+				[]publicqueue.QueueType{publicqueue.TypePriority},
 				queueType,
 			)
 		}

@@ -16,7 +16,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/util/cron"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // ProducibleMessage configures a message for production to queues or exchanges.
@@ -44,7 +44,7 @@ type ProducibleMessage struct {
 	scheduledRepeat       int
 	exchange              *x.ExchangeParams
 	exchangeRoutingKey    string
-	queue                 *q.QueueParams
+	queue                 *queue.QueueParams
 }
 
 // defaultOptions holds the default consume options for all instances.
@@ -270,11 +270,11 @@ func (m *ProducibleMessage) SetExchangeRoutingKey(key string) *ProducibleMessage
 }
 
 // Queue returns the target queue, if any.
-func (m *ProducibleMessage) Queue() *q.QueueParams { return m.queue }
+func (m *ProducibleMessage) Queue() *queue.QueueParams { return m.queue }
 
 // SetQueue sets the target queue for direct delivery.
 // It clears any previously set exchange.
-func (m *ProducibleMessage) SetQueue(params *q.QueueParams) *ProducibleMessage {
+func (m *ProducibleMessage) SetQueue(params *queue.QueueParams) *ProducibleMessage {
 	m.queue = params
 	m.exchange = nil
 	m.exchangeRoutingKey = ""
@@ -282,7 +282,7 @@ func (m *ProducibleMessage) SetQueue(params *q.QueueParams) *ProducibleMessage {
 }
 
 // ToParams converts the message to a serializable params struct.
-func (m *ProducibleMessage) ToParams(destinationQueue *q.QueueParams, consumerGroupID string) *Params {
+func (m *ProducibleMessage) ToParams(destinationQueue *queue.QueueParams, consumerGroupID string) *Params {
 	p := &Params{
 		CreatedAt:        m.createdAt.UnixMilli(),
 		TTL:              m.ttl.Milliseconds(),

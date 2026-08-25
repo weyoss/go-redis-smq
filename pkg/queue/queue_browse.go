@@ -8,7 +8,7 @@
  *
  */
 
-package q
+package queue
 
 // BrowseFilter defines which message category to browse.
 type BrowseFilter int

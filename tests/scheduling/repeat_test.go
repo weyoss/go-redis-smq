@@ -14,18 +14,18 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Schedule a repeating message
 func TestRepeat_SingleRepeat(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-single")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-single")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -44,7 +44,7 @@ func TestRepeat_SingleRepeat(t *testing.T) {
 	}
 
 	// First delivery should be immediate (no delay), subsequent are scheduled
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -58,8 +58,8 @@ func TestRepeat_SingleRepeat(t *testing.T) {
 func TestRepeat_WithDelay(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-delay")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-delay")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -79,7 +79,7 @@ func TestRepeat_WithDelay(t *testing.T) {
 	}
 
 	// Should be scheduled (has delay)
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -89,8 +89,8 @@ func TestRepeat_WithDelay(t *testing.T) {
 func TestRepeat_Indefinite(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-indefinite")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-indefinite")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -108,7 +108,7 @@ func TestRepeat_Indefinite(t *testing.T) {
 		t.Fatalf("expected 1 message ID, got %d", len(ids))
 	}
 
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.MessagesCount != 1 {
 		t.Errorf("messages = %d, want 1", props.MessagesCount)
 	}
@@ -118,8 +118,8 @@ func TestRepeat_Indefinite(t *testing.T) {
 func TestRepeat_NoPeriod(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-no-period")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-no-period")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -142,8 +142,8 @@ func TestRepeat_NoPeriod(t *testing.T) {
 func TestRepeat_Browse(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-browse")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-browse")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -157,8 +157,8 @@ func TestRepeat_Browse(t *testing.T) {
 		)
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseScheduled,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -172,8 +172,8 @@ func TestRepeat_Browse(t *testing.T) {
 func TestRepeat_ResetParams(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-reset")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-reset")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -194,7 +194,7 @@ func TestRepeat_ResetParams(t *testing.T) {
 	}
 
 	// Should be pending (immediate), not scheduled
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.PendingMessagesCount != 1 {
 		t.Errorf("pending = %d, want 1", props.PendingMessagesCount)
 	}
@@ -207,8 +207,8 @@ func TestRepeat_ResetParams(t *testing.T) {
 func TestRepeat_CountExhausted(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-repeat-exhausted")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-repeat-exhausted")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -226,7 +226,7 @@ func TestRepeat_CountExhausted(t *testing.T) {
 		t.Fatalf("expected 1 message ID, got %d", len(ids))
 	}
 
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	// First delivery is pending, after repeat count exhausted, no more scheduled
 	t.Logf("messages: %d, scheduled: %d, pending: %d",
 		props.MessagesCount, props.ScheduledMessagesCount, props.PendingMessagesCount)

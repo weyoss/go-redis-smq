@@ -19,16 +19,15 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Schedule a message with delay — appears in scheduled
 func TestDelay_MessageInScheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delay-scheduled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delay-scheduled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -45,7 +44,7 @@ func TestDelay_MessageInScheduled(t *testing.T) {
 		t.Fatalf("expected 1 message ID, got %d", len(ids))
 	}
 
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -62,8 +61,8 @@ func TestDelay_ShortDelay(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-delay-short")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delay-short")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -79,7 +78,7 @@ func TestDelay_ShortDelay(t *testing.T) {
 	t.Logf("produced: %v", ids)
 
 	// Verify in scheduled initially
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	t.Logf("immediately after produce: scheduled=%d, pending=%d", props.ScheduledMessagesCount, props.PendingMessagesCount)
 
 	// Start consumer
@@ -99,7 +98,7 @@ func TestDelay_ShortDelay(t *testing.T) {
 	count := consumed.Load()
 	t.Logf("consumed: %d messages", count)
 
-	props, _ = queue.Properties(ctx, params)
+	props, _ = redissmq.NewQueueManager().Properties(ctx, params)
 	t.Logf("after wait: scheduled=%d, pending=%d", props.ScheduledMessagesCount, props.PendingMessagesCount)
 
 	if count == 0 {
@@ -111,8 +110,8 @@ func TestDelay_ShortDelay(t *testing.T) {
 func TestDelay_ZeroDelay(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delay-zero")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delay-zero")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -130,7 +129,7 @@ func TestDelay_ZeroDelay(t *testing.T) {
 	}
 
 	// Zero delay should be pending immediately
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -146,8 +145,8 @@ func TestDelay_ZeroDelay(t *testing.T) {
 func TestDelay_MultipleDelays(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delay-multi")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delay-multi")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -155,7 +154,7 @@ func TestDelay_MultipleDelays(t *testing.T) {
 	prod.Produce(ctx, msg.New().SetBody("d2").SetQueue(params).SetScheduledDelay(2*time.Hour))
 	prod.Produce(ctx, msg.New().SetBody("d3").SetQueue(params).SetScheduledDelay(30*time.Minute))
 
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -168,8 +167,8 @@ func TestDelay_MultipleDelays(t *testing.T) {
 func TestDelay_BrowseScheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delay-browse")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delay-browse")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -181,8 +180,8 @@ func TestDelay_BrowseScheduled(t *testing.T) {
 		)
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseScheduled,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -196,8 +195,8 @@ func TestDelay_BrowseScheduled(t *testing.T) {
 func TestDelay_MixedImmediateAndDelayed(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delay-mixed")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delay-mixed")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -207,7 +206,7 @@ func TestDelay_MixedImmediateAndDelayed(t *testing.T) {
 	// Delayed
 	prod.Produce(ctx, msg.New().SetBody("delayed").SetQueue(params).SetScheduledDelay(1*time.Hour))
 
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}

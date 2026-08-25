@@ -23,15 +23,15 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Subscribe to consumer lifecycle events
 func TestConsumerEvents_Lifecycle(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-cons-lifecycle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-cons-lifecycle")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var lifecycle []string
@@ -89,8 +89,8 @@ func TestConsumerEvents_Lifecycle(t *testing.T) {
 func TestConsumerEvents_MessageAcknowledged(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-ack")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-ack")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -139,8 +139,8 @@ func TestConsumerEvents_MessageAcknowledged(t *testing.T) {
 func TestConsumerEvents_MessageUnacknowledged(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-unack")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-unack")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -189,8 +189,8 @@ func TestConsumerEvents_MessageDeadLettered(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-events-dlq")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-dlq")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -238,8 +238,8 @@ func TestConsumerEvents_MessageDeadLettered(t *testing.T) {
 func TestConsumerEvents_MessageRequeued(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-requeue")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-requeue")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -284,8 +284,8 @@ func TestConsumerEvents_MessageRequeued(t *testing.T) {
 func TestConsumerEvents_MessageDelayed(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-delayed")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-delayed")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -330,8 +330,8 @@ func TestConsumerEvents_MessageDelayed(t *testing.T) {
 func TestConsumerEvents_MultipleSubscribers(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-cons-multi")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-cons-multi")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -388,8 +388,8 @@ func TestConsumerEvents_MultipleSubscribers(t *testing.T) {
 func TestConsumerEvents_Unsubscribe(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-cons-unsub")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-cons-unsub")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var ackCount int
@@ -448,8 +448,8 @@ func TestConsumerEvents_Unsubscribe(t *testing.T) {
 func TestConsumerEvents_NormalFlow(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-normal-flow")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-normal-flow")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var eventOrder []string
@@ -488,8 +488,8 @@ func TestConsumerEvents_NormalFlow(t *testing.T) {
 func TestConsumerEvents_EventPayloadInfo(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-payload-info")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-payload-info")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -539,8 +539,8 @@ func TestConsumerEvents_EventPayloadInfo(t *testing.T) {
 func TestConsumerEvents_MessageReceived(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-msg-received")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-msg-received")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -593,8 +593,8 @@ func TestConsumerEvents_MessageReceived(t *testing.T) {
 func TestConsumerEvents_MessageReceivedOrdering(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-msg-received-ordering")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-msg-received-ordering")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var eventOrder []string

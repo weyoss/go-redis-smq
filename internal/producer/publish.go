@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // PublishUp publishes a producer.up event to the public user bus.
@@ -43,6 +43,6 @@ func PublishGoingDown(ctx context.Context, producerID string) {
 // The arguments match the TypeScript event signature:
 //
 //	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
-func PublishMessagePublished(ctx context.Context, messageID string, queue q.QueueParams, producerID string) {
+func PublishMessagePublished(ctx context.Context, messageID string, queue queue.QueueParams, producerID string) {
 	eventmultiplexer.Publish(ctx, EventMessagePublished, messageID, queue, producerID)
 }

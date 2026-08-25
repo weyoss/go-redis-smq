@@ -23,8 +23,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Multiple queues with different types simultaneously
@@ -32,13 +31,13 @@ func TestComplex_MultipleQueueTypes(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	fifoQueue := q.MustQueueParams("test-complex-fifo")
-	lifoQueue := q.MustQueueParams("test-complex-lifo")
-	prioQueue := q.MustQueueParams("test-complex-prio")
+	fifoQueue := publicqueue.MustQueueParams("test-complex-fifo")
+	lifoQueue := publicqueue.MustQueueParams("test-complex-lifo")
+	prioQueue := publicqueue.MustQueueParams("test-complex-prio")
 
-	testutil.CreateQueue(t, ctx, fifoQueue, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, lifoQueue, q.TypeLIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, prioQueue, q.TypePriority, q.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, fifoQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, lifoQueue, publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, prioQueue, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -83,13 +82,13 @@ func TestComplex_MixedDeliveryModels(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	p2pQueue := q.MustQueueParams("test-complex-p2p")
-	pubsubQueue := q.MustQueueParams("test-complex-pubsub")
+	p2pQueue := publicqueue.MustQueueParams("test-complex-p2p")
+	pubsubQueue := publicqueue.MustQueueParams("test-complex-pubsub")
 
-	testutil.CreateQueue(t, ctx, p2pQueue, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, pubsubQueue, q.TypeFIFO, q.DeliveryPubSub)
+	testutil.CreateQueue(t, ctx, p2pQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, pubsubQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, pubsubQueue, "notifications")
+	redissmq.NewConsumerGroupManager().Save(ctx, pubsubQueue, "notifications")
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -125,11 +124,11 @@ func TestComplex_PauseOneQueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	activeQueue := q.MustQueueParams("test-complex-active")
-	pausedQueue := q.MustQueueParams("test-complex-paused")
+	activeQueue := publicqueue.MustQueueParams("test-complex-active")
+	pausedQueue := publicqueue.MustQueueParams("test-complex-paused")
 
-	testutil.CreateQueue(t, ctx, activeQueue, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, pausedQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, activeQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, pausedQueue, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -147,8 +146,10 @@ func TestComplex_PauseOneQueue(t *testing.T) {
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
+	sm := redissmq.NewStateManager()
+
 	// Pause one queue
-	queue.Pause(ctx, pausedQueue, nil)
+	sm.Pause(ctx, pausedQueue, nil)
 
 	// Produce to both
 	prod.Produce(ctx, msg.New().SetBody("active").SetQueue(activeQueue))
@@ -163,7 +164,7 @@ func TestComplex_PauseOneQueue(t *testing.T) {
 	}
 
 	// Resume and wait
-	queue.Resume(ctx, pausedQueue, nil)
+	sm.Resume(ctx, pausedQueue, nil)
 	time.Sleep(5 * time.Second)
 
 	afterResume := pausedCount.Load()
@@ -179,8 +180,8 @@ func TestComplex_HighVolume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-high-volume")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-high-volume")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	messageCount := 100
 	consumerCount := 4
@@ -235,8 +236,8 @@ func TestComplex_ProducerConsumerConcurrent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-concurrent")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-concurrent")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	var produced, consumed atomic.Int64
 
@@ -278,8 +279,8 @@ func TestComplex_GracefulShutdownOnContextCancel(t *testing.T) {
 	ctx := testutil.Setup(t)
 	consumerCtx, cancel := context.WithCancel(ctx)
 
-	params := q.MustQueueParams("test-graceful-cancel")
-	testutil.CreateQueue(t, consumerCtx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-graceful-cancel")
+	testutil.CreateQueue(t, consumerCtx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, consumerCtx)
 	for i := 0; i < 5; i++ {

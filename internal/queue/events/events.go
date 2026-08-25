@@ -10,12 +10,15 @@
 
 // Package events defines internal queue event names and payload types.
 //
-// These events are published through the event multiplexer to the system
-// bus, user bus, or both, depending on the event routing policy.
+// These events are published through the event multiplexer to the
+// appropriate bus (system or user) according to the event routing policy.
+// The payload structs here are used by internal subscription functions and
+// internal publishers; they are separate from the public payload types in
+// pkg/queue to avoid leaking internal details.
 package events
 
 import (
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Queue event names.
@@ -27,36 +30,36 @@ const (
 	EventConsumerGroupDeleted = "queue.consumerGroupDeleted"
 )
 
-// CreatedPayload is used by public subscribers to receive the arguments
+// CreatedPayload is used by internal subscribers to receive the arguments
 // of a queue.queueCreated event.
 type CreatedPayload struct {
-	Queue      q.QueueParams `json:"queue"`
-	Properties q.QueueProps  `json:"properties"`
+	Queue      publicqueue.QueueParams
+	Properties publicqueue.QueueProps
 }
 
-// DeletedPayload is used by public subscribers to receive the arguments
+// DeletedPayload is used by internal subscribers to receive the arguments
 // of a queue.queueDeleted event.
 type DeletedPayload struct {
-	Queue q.QueueParams `json:"queue"`
+	Queue publicqueue.QueueParams
 }
 
-// StateChangedPayload is used by public subscribers to receive the
+// StateChangedPayload is used by internal subscribers to receive the
 // arguments of a queue.stateChanged event.
 type StateChangedPayload struct {
-	Queue      q.QueueParams     `json:"queue"`
-	Transition q.StateTransition `json:"transition"`
+	Queue      publicqueue.QueueParams
+	Transition publicqueue.StateTransition
 }
 
-// ConsumerGroupCreatedPayload is used by public subscribers to receive
+// ConsumerGroupCreatedPayload is used by internal subscribers to receive
 // the arguments of a queue.consumerGroupCreated event.
 type ConsumerGroupCreatedPayload struct {
-	Queue   q.QueueParams `json:"queue"`
-	GroupID string        `json:"groupId"`
+	Queue   publicqueue.QueueParams
+	GroupID string
 }
 
-// ConsumerGroupDeletedPayload is used by public subscribers to receive
+// ConsumerGroupDeletedPayload is used by internal subscribers to receive
 // the arguments of a queue.consumerGroupDeleted event.
 type ConsumerGroupDeletedPayload struct {
-	Queue   q.QueueParams `json:"queue"`
-	GroupID string        `json:"groupId"`
+	Queue   publicqueue.QueueParams
+	GroupID string
 }

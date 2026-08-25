@@ -21,14 +21,14 @@ import (
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // ConsumeMessage handles a single dequeued message. It invokes the user
 // handler, enforces expiration and consume timeouts, and routes the result
 // to the batch acker or unacker.
 type ConsumeMessage struct {
-	queue        *q.QueueParams
+	queue        *queue.QueueParams
 	groupID      string
 	consumerID   string
 	handler      Handler
@@ -39,7 +39,7 @@ type ConsumeMessage struct {
 
 // NewConsumeMessage creates a new ConsumeMessage instance.
 func NewConsumeMessage(
-	queue *q.QueueParams,
+	queue *queue.QueueParams,
 	groupID string,
 	consumerID string,
 	handler Handler,

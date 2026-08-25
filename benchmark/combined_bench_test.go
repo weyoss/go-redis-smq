@@ -21,14 +21,13 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 // Benchmark: Produce and consume 10,000 messages end-to-end
 func BenchmarkCombined_10K(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-combined-10k-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-combined-10k-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
@@ -82,8 +81,8 @@ done:
 // Benchmark: Produce and consume 100,000 messages end-to-end
 func BenchmarkCombined_100K(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-combined-100k-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-combined-100k-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
@@ -137,8 +136,8 @@ done:
 // Benchmark: Concurrent producers and consumers
 func BenchmarkCombined_Concurrent(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-concurrent-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-concurrent-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var consumed atomic.Int64
 	consumerCount := 4
@@ -199,11 +198,12 @@ done:
 // Benchmark: PubSub throughput
 func BenchmarkCombined_PubSub(b *testing.B) {
 	ctx := testutil.Setup(b)
-	params := q.MustQueueParams(fmt.Sprintf("bench-pubsub-%d", time.Now().UnixNano()))
-	testutil.CreateQueue(b, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := queue.MustQueueParams(fmt.Sprintf("bench-pubsub-%d", time.Now().UnixNano()))
+	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "group-a")
-	queue.SaveConsumerGroup(ctx, params, "group-b")
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, "group-a")
+	cgm.Save(ctx, params, "group-b")
 
 	var consumedA, consumedB atomic.Int64
 

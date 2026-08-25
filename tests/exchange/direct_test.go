@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create a direct exchange
@@ -41,8 +41,8 @@ func TestDirect_Create(t *testing.T) {
 func TestDirect_BindQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-direct-bind-queue")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-direct-bind-queue")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-bind-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -57,8 +57,8 @@ func TestDirect_BindQueue(t *testing.T) {
 func TestDirect_BindAutoCreatesExchange(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queueParams := q.MustQueueParams("test-direct-auto-create-q")
-	testutil.CreateQueue(t, ctx, queueParams, q.TypeFIFO, q.DeliveryPointToPoint)
+	queueParams := queue.MustQueueParams("test-direct-auto-create-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-auto-create-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -84,10 +84,10 @@ func TestDirect_BindAutoCreatesExchange(t *testing.T) {
 func TestDirect_MatchQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParams("test-direct-match-q1")
-	q2 := q.MustQueueParams("test-direct-match-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-direct-match-q1")
+	q2 := queue.MustQueueParams("test-direct-match-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-match-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -125,15 +125,15 @@ func TestDirect_NoMatch(t *testing.T) {
 func TestDirect_UnbindQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queue := q.MustQueueParams("test-direct-unbind-q")
-	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
+	q := queue.MustQueueParams("test-direct-unbind-q")
+	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-unbind-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
 
-	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
+	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 
-	err := dx.UnbindQueue(ctx, queue, exchangeParams, "order.created")
+	err := dx.UnbindQueue(ctx, q, exchangeParams, "order.created")
 	if err != nil {
 		t.Fatalf("unbind: %v", err)
 	}
@@ -152,11 +152,11 @@ func TestDirect_RoutingKeys(t *testing.T) {
 	dx := exchange.NewDirectExchange()
 	dx.Create(ctx, exchangeParams, x.PolicyStandard)
 
-	queue := q.MustQueueParams("test-direct-keys-q")
-	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
+	q := queue.MustQueueParams("test-direct-keys-q")
+	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
-	dx.BindQueue(ctx, queue, exchangeParams, "order.cancelled")
+	dx.BindQueue(ctx, q, exchangeParams, "order.created")
+	dx.BindQueue(ctx, q, exchangeParams, "order.cancelled")
 
 	keys, err := dx.RoutingKeys(ctx, exchangeParams)
 	if err != nil {
@@ -172,10 +172,10 @@ func TestDirect_ProduceConsume(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	q1 := q.MustQueueParams("test-direct-prod-consume-q1")
-	q2 := q.MustQueueParams("test-direct-prod-consume-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-direct-prod-consume-q1")
+	q2 := queue.MustQueueParams("test-direct-prod-consume-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-prod-consume-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -227,15 +227,15 @@ func TestDirect_ProduceConsume(t *testing.T) {
 func TestDirect_DuplicateBinding(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queue := q.MustQueueParams("test-direct-dup-bind-q")
-	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
+	q := queue.MustQueueParams("test-direct-dup-bind-q")
+	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-dup-bind-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
 
-	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
+	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 
-	err := dx.BindQueue(ctx, queue, exchangeParams, "order.created")
+	err := dx.BindQueue(ctx, q, exchangeParams, "order.created")
 	if err == nil {
 		t.Fatal("expected error for duplicate binding")
 	}
@@ -245,12 +245,12 @@ func TestDirect_DuplicateBinding(t *testing.T) {
 func TestDirect_DeleteWithBoundQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queue := q.MustQueueParams("test-direct-delete-bound-q")
-	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
+	q := queue.MustQueueParams("test-direct-delete-bound-q")
+	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-delete-bound-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
-	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
+	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 
 	err := dx.Delete(ctx, exchangeParams)
 	if err == nil {
@@ -262,13 +262,13 @@ func TestDirect_DeleteWithBoundQueues(t *testing.T) {
 func TestDirect_DeleteAfterUnbind(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queue := q.MustQueueParams("test-direct-delete-unbind-q")
-	testutil.CreateQueue(t, ctx, queue, q.TypeFIFO, q.DeliveryPointToPoint)
+	q := queue.MustQueueParams("test-direct-delete-unbind-q")
+	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-delete-unbind-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
-	dx.BindQueue(ctx, queue, exchangeParams, "order.created")
-	dx.UnbindQueue(ctx, queue, exchangeParams, "order.created")
+	dx.BindQueue(ctx, q, exchangeParams, "order.created")
+	dx.UnbindQueue(ctx, q, exchangeParams, "order.created")
 
 	err := dx.Delete(ctx, exchangeParams)
 	if err != nil {
@@ -286,10 +286,10 @@ func TestDirect_DeleteAfterUnbind(t *testing.T) {
 func TestDirect_MultipleRoutingKeys(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParams("test-direct-multi-rk-q1")
-	q2 := q.MustQueueParams("test-direct-multi-rk-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParams("test-direct-multi-rk-q1")
+	q2 := queue.MustQueueParams("test-direct-multi-rk-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	exchangeParams := x.MustExchangeParams("test-direct-multi-rk-ex", x.TypeDirect)
 	dx := exchange.NewDirectExchange()

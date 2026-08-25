@@ -15,25 +15,27 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Enqueue purge with audit disabled returns error
 func TestError_EnqueueAuditDisabled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-audit-disabled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-audit-disabled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.PurgeQueue(ctx, params, q.BrowseAcknowledged)
+	qm := redissmq.NewQueueManager()
+
+	_, err := qm.PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
 	if err == nil {
 		t.Fatal("expected error: audit disabled for acknowledged")
 	}
 
-	_, err = queue.PurgeQueue(ctx, params, q.BrowseDeadLettered)
+	_, err = qm.PurgeQueue(ctx, params, publicqueue.BrowseDeadLettered)
 	if err == nil {
 		t.Fatal("expected error: audit disabled for dead-lettered")
 	}
@@ -43,10 +45,10 @@ func TestError_EnqueueAuditDisabled(t *testing.T) {
 func TestError_CancelNonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-cancel-notfound")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-cancel-notfound")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.CancelPurgeJob(ctx, params, "nonexistent-job")
+	err := redissmq.NewQueueManager().CancelPurgeJob(ctx, params, "nonexistent-job")
 	if err == nil {
 		t.Fatal("expected error for non-existent job")
 	}
@@ -56,7 +58,7 @@ func TestError_CancelNonExistent(t *testing.T) {
 func TestError_GetNonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := queue.GetPurgeJob(ctx, "nonexistent-job")
+	_, err := redissmq.NewQueueManager().GetPurgeJob(ctx, "nonexistent-job")
 	if err == nil {
 		t.Fatal("expected error for non-existent job")
 	}
@@ -66,18 +68,20 @@ func TestError_GetNonExistent(t *testing.T) {
 func TestError_QueueAlreadyLocked(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-already-locked")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-already-locked")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	_, err := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+
+	_, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("first enqueue: %v", err)
 	}
 
-	_, err = queue.PurgeQueue(ctx, params, q.BrowsePending)
+	_, err = qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err == nil {
 		t.Fatal("expected error: queue is locked")
 	}
@@ -88,16 +92,18 @@ func TestError_QueueAlreadyLocked(t *testing.T) {
 func TestError_CancelAlreadyCanceled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-error-cancel-twice")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-cancel-twice")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
-	queue.CancelPurgeJob(ctx, params, jobID)
+	qm := redissmq.NewQueueManager()
 
-	err := queue.CancelPurgeJob(ctx, params, jobID)
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	qm.CancelPurgeJob(ctx, params, jobID)
+
+	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Logf("second cancel error (may be expected): %v", err)
 	}
@@ -108,15 +114,16 @@ func TestError_CancelAlreadyCompleted(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-error-cancel-completed")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-error-cancel-completed")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	deadline := time.After(10 * time.Second)
 	for {
@@ -124,9 +131,9 @@ func TestError_CancelAlreadyCompleted(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, _ := queue.GetPurgeJob(ctx, jobID)
-			if job.Status == q.PurgeJobCompleted {
-				err := queue.CancelPurgeJob(ctx, params, jobID)
+			job, _ := qm.GetPurgeJob(ctx, jobID)
+			if job.Status == publicqueue.PurgeJobCompleted {
+				err := qm.CancelPurgeJob(ctx, params, jobID)
 				if err == nil {
 					t.Log("cancel of completed job succeeded (idempotent)")
 				} else {

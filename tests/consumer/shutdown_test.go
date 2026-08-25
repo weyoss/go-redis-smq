@@ -19,16 +19,15 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Graceful shutdown completes pending messages
 func TestShutdown_CompletesPendingMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-shutdown-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-shutdown-pending")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
@@ -59,7 +58,7 @@ func TestShutdown_CompletesPendingMessages(t *testing.T) {
 	t.Logf("consumed %d messages before shutdown", count)
 
 	// Verify remaining messages are still pending
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	t.Logf("pending after shutdown: %d", props.PendingMessagesCount)
 }
 
@@ -67,8 +66,8 @@ func TestShutdown_CompletesPendingMessages(t *testing.T) {
 func TestShutdown_Idempotent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-shutdown-idempotent")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-shutdown-idempotent")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
@@ -87,8 +86,8 @@ func TestShutdown_Idempotent(t *testing.T) {
 func TestShutdown_NotRunningAfterShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-shutdown-not-running")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-shutdown-not-running")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
@@ -114,7 +113,7 @@ func TestShutdown_WithoutRun(t *testing.T) {
 	testutil.Setup(t)
 
 	cons := redissmq.NewConsumer()
-	cons.Consume(q.MustQueueParams("test-shutdown-no-run"), func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(publicqueue.MustQueueParams("test-shutdown-no-run"), func(ctx context.Context, m *msg.Transferable) error {
 		return nil
 	})
 
@@ -127,8 +126,8 @@ func TestShutdown_WithoutRun(t *testing.T) {
 func TestShutdown_RunShutdownRunShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-run-shutdown-cycle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-run-shutdown-cycle")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 

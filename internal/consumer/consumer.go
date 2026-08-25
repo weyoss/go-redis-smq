@@ -22,7 +22,7 @@ import (
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type Consumer struct {
@@ -61,7 +61,7 @@ func (cons *Consumer) IsRunning() bool {
 	return cons.running
 }
 
-func (cons *Consumer) Consume(queue *q.QueueParams, handler publicconsumer.Handler) publicconsumer.Consumer {
+func (cons *Consumer) Consume(queue *queue.QueueParams, handler publicconsumer.Handler) publicconsumer.Consumer {
 	cons.log.Debug("adding handler", "queue", queue.String())
 	cons.runner.AddHandler(queue, "", Handler(handler))
 	if cons.IsRunning() {
@@ -71,7 +71,7 @@ func (cons *Consumer) Consume(queue *q.QueueParams, handler publicconsumer.Handl
 	return cons
 }
 
-func (cons *Consumer) ConsumeWithGroup(queue *q.QueueParams, groupID string, handler publicconsumer.Handler) publicconsumer.Consumer {
+func (cons *Consumer) ConsumeWithGroup(queue *queue.QueueParams, groupID string, handler publicconsumer.Handler) publicconsumer.Consumer {
 	cons.log.Debug("adding handler with group", "queue", queue.String(), "group", groupID)
 	cons.runner.AddHandler(queue, groupID, Handler(handler))
 	if cons.IsRunning() {
@@ -81,13 +81,13 @@ func (cons *Consumer) ConsumeWithGroup(queue *q.QueueParams, groupID string, han
 	return cons
 }
 
-func (cons *Consumer) Cancel(queue *q.QueueParams) publicconsumer.Consumer {
+func (cons *Consumer) Cancel(queue *queue.QueueParams) publicconsumer.Consumer {
 	cons.log.Debug("cancelling handler", "queue", queue.String())
 	cons.runner.RemoveHandler(queue, "")
 	return cons
 }
 
-func (cons *Consumer) CancelWithGroup(queue *q.QueueParams, groupID string) publicconsumer.Consumer {
+func (cons *Consumer) CancelWithGroup(queue *queue.QueueParams, groupID string) publicconsumer.Consumer {
 	cons.log.Debug("cancelling handler with group", "queue", queue.String(), "group", groupID)
 	cons.runner.RemoveHandler(queue, groupID)
 	return cons
@@ -191,7 +191,7 @@ func (cons *Consumer) shutdownLocked() {
 	consumerEvents.PublishDown(context.Background(), cons.id)
 }
 
-func (cons *Consumer) Queues() []*q.QueueParams {
+func (cons *Consumer) Queues() []*queue.QueueParams {
 	return cons.runner.Queues()
 }
 

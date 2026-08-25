@@ -13,10 +13,11 @@ package config_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
+	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Default namespace is used when no namespace specified
@@ -24,8 +25,8 @@ func TestNamespace_DefaultUsed(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	// Queue created without namespace uses default
-	params := q.MustQueueParams("test-ns-default")
-	if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	params := publicqueue.MustQueueParams("test-ns-default")
+	if err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -47,8 +48,8 @@ func TestNamespace_ChangeViaConfig(t *testing.T) {
 	}
 
 	// New queue without namespace uses new default
-	params := q.MustQueueParams("test-ns-changed")
-	if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	params := publicqueue.MustQueueParams("test-ns-changed")
+	if err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -67,8 +68,8 @@ func TestNamespace_ExplicitOverridesDefault(t *testing.T) {
 	config.Save(ctx, cfg)
 
 	// Create queue with explicit namespace
-	params := q.MustQueueParamsWithNS("test-ns-explicit", "staging")
-	if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	params := publicqueue.MustQueueParamsWithNS("test-ns-explicit", "staging")
+	if err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -103,11 +104,11 @@ func TestNamespace_DiscoveryByNamespace(t *testing.T) {
 	cfg.Namespace = "discovery-ns"
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-ns-discovery")
-	queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-ns-discovery")
+	internalQueue.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Should find queue in the namespace
-	queues, err := queue.ListByNamespace(ctx, "discovery-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "discovery-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)
 	}

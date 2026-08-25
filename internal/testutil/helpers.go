@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2026
- * Weyoss <weyoss@outlook.com>
- * https://github.com/weyoss
- *
- * This source code is licensed under the MIT license found in the LICENSE file
- * in the root directory of this source tree.
- *
- */
-
 package testutil
 
 import (
@@ -15,19 +5,25 @@ import (
 	"testing"
 
 	"github.com/weyoss/go-redis-smq"
-	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
+	"github.com/weyoss/go-redis-smq/pkg/producer"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-func CreateQueue(tb testing.TB, ctx context.Context, params *q.QueueParams, queueType q.QueueType, deliveryModel q.DeliveryModel) {
+// CreateQueue is a test helper that creates a queue using the internal
+// queue manager implementation. This is appropriate for internal test
+// utilities and avoids dependency on public convenience functions.
+func CreateQueue(tb testing.TB, ctx context.Context, params *publicqueue.QueueParams, queueType publicqueue.QueueType, deliveryModel publicqueue.DeliveryModel) {
 	tb.Helper()
-	if err := queue.Create(ctx, params, queueType, deliveryModel); err != nil {
+	qm := internalqueue.NewQueueManager()
+	if err := qm.Create(ctx, params, queueType, deliveryModel); err != nil {
 		tb.Fatalf("create queue %s: %v", params.Name(), err)
 	}
 }
 
-func StartProducer(tb testing.TB, ctx context.Context) publicproducer.Producer {
+// StartProducer is a test helper that starts a producer and registers cleanup.
+// It returns the public producer interface.
+func StartProducer(tb testing.TB, ctx context.Context) producer.Producer {
 	tb.Helper()
 	prod := redissmq.NewProducer()
 	if err := prod.Run(ctx); err != nil {

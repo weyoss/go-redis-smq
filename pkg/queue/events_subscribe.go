@@ -8,36 +8,54 @@
  *
  */
 
-package events
+package queue
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	internalEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/eventbus"
 )
 
-// Re-exported payload types. These aliases allow external users to refer to
-// event payload types without importing internal packages.
+// Public event names.
+const (
+	EventCreated              = "queue.queueCreated"
+	EventDeleted              = "queue.queueDeleted"
+	EventStateChanged         = "queue.stateChanged"
+	EventConsumerGroupCreated = "queue.consumerGroupCreated"
+	EventConsumerGroupDeleted = "queue.consumerGroupDeleted"
+)
 
 // CreatedPayload is the payload for the queue.queueCreated event.
-type CreatedPayload = internalEvents.CreatedPayload
+type CreatedPayload struct {
+	Queue      QueueParams
+	Properties QueueProps
+}
 
 // DeletedPayload is the payload for the queue.queueDeleted event.
-type DeletedPayload = internalEvents.DeletedPayload
+type DeletedPayload struct {
+	Queue QueueParams
+}
 
 // StateChangedPayload is the payload for the queue.stateChanged event.
-type StateChangedPayload = internalEvents.StateChangedPayload
+type StateChangedPayload struct {
+	Queue      QueueParams
+	Transition StateTransition
+}
 
 // ConsumerGroupCreatedPayload is the payload for the
 // queue.consumerGroupCreated event.
-type ConsumerGroupCreatedPayload = internalEvents.ConsumerGroupCreatedPayload
+type ConsumerGroupCreatedPayload struct {
+	Queue   QueueParams
+	GroupID string
+}
 
 // ConsumerGroupDeletedPayload is the payload for the
 // queue.consumerGroupDeleted event.
-type ConsumerGroupDeletedPayload = internalEvents.ConsumerGroupDeletedPayload
+type ConsumerGroupDeletedPayload struct {
+	Queue   QueueParams
+	GroupID string
+}
 
 func decodeArg(arg interface{}, target interface{}) error {
 	data, err := json.Marshal(arg)
@@ -48,89 +66,83 @@ func decodeArg(arg interface{}, target interface{}) error {
 }
 
 // SubscribeCreated registers a handler for the queue.queueCreated event.
-//
-// The handler receives a CreatedPayload containing the queue and its
-// properties. The returned subscription can be used to unsubscribe.
-func SubscribeCreated(handler func(CreatedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeCreated(handler func(CreatedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("queue events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-
-		var queue q.QueueParams
-		var props q.QueueProps
+		var queue QueueParams
+		var props QueueProps
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
 		if err := decodeArg(args[1], &props); err != nil {
 			return
 		}
-
 		handler(CreatedPayload{Queue: queue, Properties: props})
-	}, internalEvents.EventCreated)
+	}, EventCreated)
 }
 
 // SubscribeDeleted registers a handler for the queue.queueDeleted event.
-//
-// The handler receives a DeletedPayload containing the deleted queue.
-func SubscribeDeleted(handler func(DeletedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeDeleted(handler func(DeletedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("queue events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 1 {
 			return
 		}
-
-		var queue q.QueueParams
+		var queue QueueParams
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
-
 		handler(DeletedPayload{Queue: queue})
-	}, internalEvents.EventDeleted)
+	}, EventDeleted)
 }
 
 // SubscribeStateChanged registers a handler for the queue.stateChanged event.
-//
-// The handler receives a StateChangedPayload containing the queue and the
-// state transition.
-func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeStateChanged(handler func(StateChangedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("queue events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-
-		var queue q.QueueParams
-		var transition q.StateTransition
+		var queue QueueParams
+		var transition StateTransition
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
 		if err := decodeArg(args[1], &transition); err != nil {
 			return
 		}
-
 		handler(StateChangedPayload{Queue: queue, Transition: transition})
-	}, internalEvents.EventStateChanged)
+	}, EventStateChanged)
 }
 
 // SubscribeConsumerGroupCreated registers a handler for the
 // queue.consumerGroupCreated event.
-//
-// The handler receives a ConsumerGroupCreatedPayload containing the queue
-// and the new group ID.
-func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("queue events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-
-		var queue q.QueueParams
+		var queue QueueParams
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -138,25 +150,23 @@ func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*
 		if err := decodeArg(args[1], &groupID); err != nil {
 			return
 		}
-
 		handler(ConsumerGroupCreatedPayload{Queue: queue, GroupID: groupID})
-	}, internalEvents.EventConsumerGroupCreated)
+	}, EventConsumerGroupCreated)
 }
 
 // SubscribeConsumerGroupDeleted registers a handler for the
 // queue.consumerGroupDeleted event.
-//
-// The handler receives a ConsumerGroupDeletedPayload containing the queue
-// and the deleted group ID.
-func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (*eventbus.Subscription, error) {
-	bus := eventbus.InitUser(context.Background())
+func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("queue events: user event bus not configured")
+	}
 
 	return bus.Subscribe(func(_ string, args []interface{}) {
 		if len(args) < 2 {
 			return
 		}
-
-		var queue q.QueueParams
+		var queue QueueParams
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -164,7 +174,6 @@ func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (*
 		if err := decodeArg(args[1], &groupID); err != nil {
 			return
 		}
-
 		handler(ConsumerGroupDeletedPayload{Queue: queue, GroupID: groupID})
-	}, internalEvents.EventConsumerGroupDeleted)
+	}, EventConsumerGroupDeleted)
 }

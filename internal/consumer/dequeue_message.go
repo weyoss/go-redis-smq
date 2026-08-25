@@ -27,17 +27,17 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type DequeueMessage struct {
-	queue      *q.QueueParams
+	queue      *queue.QueueParams
 	groupID    string
 	consumerID string
 	blocking   bool
 
-	queueType      *q.QueueType
-	rateLimit      *q.RateLimitParams
+	queueType      *queue.QueueType
+	rateLimit      *queue.RateLimitParams
 	unacknowledger *MessageUnacknowledger
 	log            *slog.Logger
 }
@@ -50,7 +50,7 @@ func WithBlocking() DequeueOption {
 	}
 }
 
-func NewDequeueMessage(queue *q.QueueParams, groupID, consumerID string, opts ...DequeueOption) *DequeueMessage {
+func NewDequeueMessage(queue *queue.QueueParams, groupID, consumerID string, opts ...DequeueOption) *DequeueMessage {
 	d := &DequeueMessage{
 		queue:      queue,
 		groupID:    groupID,
@@ -177,7 +177,7 @@ func (d *DequeueMessage) pop(ctx context.Context) (string, error) {
 	qKey := keys.Queue{Namespace: d.queue.NS(), Name: d.queue.Name()}
 	dst := qKey.ConsumerProcessing(d.consumerID)
 
-	if *d.queueType == q.TypePriority {
+	if *d.queueType == queue.TypePriority {
 		return d.popPriority(ctx, qKey.Priority(), dst)
 	}
 	return d.popFIFO(ctx, qKey.Pending(), dst)
@@ -248,10 +248,10 @@ func (d *DequeueMessage) checkout(ctx context.Context, messageID string) (*inter
 			qSchema.QueueFieldProcessingMessagesCount.Key(),
 			qSchema.QueueFieldPendingMessagesCount.Key(),
 			qSchema.QueueFieldOperationalState.Key(),
-			q.StateActive.Int(),
-			q.StatePaused.Int(),
-			q.StateStopped.Int(),
-			q.StateLocked.Int(),
+			queue.StateActive.Int(),
+			queue.StatePaused.Int(),
+			queue.StateStopped.Int(),
+			queue.StateLocked.Int(),
 		},
 	)
 	if err != nil {

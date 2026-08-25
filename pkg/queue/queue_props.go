@@ -8,7 +8,7 @@
  *
  */
 
-package q
+package queue
 
 import "time"
 
@@ -44,7 +44,7 @@ type QueueProps struct {
 	// DelayedMessagesCount is the number of messages waiting for a retry delay.
 	DelayedMessagesCount int64
 
-	// RequeuedMessagesCount is the number of messages waiting to be re‑inserted.
+	// RequeuedMessagesCount is the number of messages waiting to be re-inserted.
 	RequeuedMessagesCount int64
 
 	// RateLimit is the rate limit configuration, or nil if none is set.

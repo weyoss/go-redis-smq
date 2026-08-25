@@ -19,25 +19,25 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create a priority queue
 func TestPriorityQueue_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-create")
-	err := queue.Create(ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	qm := redissmq.NewQueueManager()
+	params := publicqueue.MustQueueParams("test-priority-create")
+	err := qm.Create(ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	props, err := queue.Properties(ctx, params)
+	props, err := qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.Type != q.TypePriority {
+	if props.Type != publicqueue.TypePriority {
 		t.Fatalf("type = %v, want PRIORITY", props.Type)
 	}
 }
@@ -46,8 +46,8 @@ func TestPriorityQueue_Create(t *testing.T) {
 func TestPriorityQueue_ProduceWithoutPriority(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-no-prio")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-priority-no-prio")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -63,8 +63,8 @@ func TestPriorityQueue_ProduceWithoutPriority(t *testing.T) {
 func TestPriorityQueue_PriorityOrder(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-order")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-priority-order")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -106,8 +106,8 @@ func TestPriorityQueue_PriorityOrder(t *testing.T) {
 func TestPriorityQueue_SamePriority(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-same")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-priority-same")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -135,15 +135,15 @@ func TestPriorityQueue_SamePriority(t *testing.T) {
 func TestPriorityQueue_BrowsePending(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-browse")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-priority-browse")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg1").SetQueue(params).SetPriority(msg.PriorityNormal))
 	prod.Produce(ctx, msg.New().SetBody("msg2").SetQueue(params).SetPriority(msg.PriorityHigh))
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePending,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePending,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -158,8 +158,8 @@ func TestPriorityQueue_BrowsePending(t *testing.T) {
 func TestPriorityQueue_DisablePriority(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-disable")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-priority-disable")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -176,8 +176,8 @@ func TestPriorityQueue_DisablePriority(t *testing.T) {
 func TestPriorityQueue_PriorityOnFIFO(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-priority-on-fifo")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-priority-on-fifo")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 

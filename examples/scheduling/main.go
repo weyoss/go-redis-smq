@@ -20,7 +20,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -33,8 +32,9 @@ func main() {
 	defer redissmq.Shutdown()
 
 	// Create queue
-	tasksQueue := q.MustQueueParams(fmt.Sprintf("tasks-%d", time.Now().UnixMilli()))
-	if err := queue.Create(ctx, tasksQueue, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	qm := redissmq.NewQueueManager()
+	tasksQueue := queue.MustQueueParams(fmt.Sprintf("tasks-%d", time.Now().UnixMilli()))
+	if err := qm.Create(ctx, tasksQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
 		log.Fatalf("create queue: %v", err)
 	}
 
@@ -85,8 +85,8 @@ func main() {
 	}
 
 	// Check scheduled messages
-	result, err := queue.BrowseMessages(ctx, tasksQueue, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	result, err := qm.BrowseMessages(ctx, tasksQueue, &queue.BrowseParams{
+		Filter: queue.BrowseScheduled,
 	})
 	if err != nil {
 		log.Fatalf("browse scheduled: %v", err)

@@ -14,23 +14,25 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Create a queue and verify it exists
 func TestQueue_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-create")
+	params := publicqueue.MustQueueParams("test-create")
 
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	qm := redissmq.NewQueueManager()
+
+	err := qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	exists, err := queue.Exists(ctx, params)
+	exists, err := qm.Exists(ctx, params)
 	if err != nil {
 		t.Fatalf("exists: %v", err)
 	}
@@ -43,14 +45,15 @@ func TestQueue_Create(t *testing.T) {
 func TestQueue_CreateDuplicate(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dup")
+	params := publicqueue.MustQueueParams("test-dup")
+	qm := redissmq.NewQueueManager()
 
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	err := qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	err = qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err == nil {
 		t.Fatal("expected duplicate error")
 	}
@@ -62,25 +65,26 @@ func TestQueue_CreateDifferentTypes(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		qType q.QueueType
-		model q.DeliveryModel
+		qType publicqueue.QueueType
+		model publicqueue.DeliveryModel
 	}{
-		{"FIFO-P2P", q.TypeFIFO, q.DeliveryPointToPoint},
-		{"LIFO-P2P", q.TypeLIFO, q.DeliveryPointToPoint},
-		{"Priority-P2P", q.TypePriority, q.DeliveryPointToPoint},
-		{"FIFO-PubSub", q.TypeFIFO, q.DeliveryPubSub},
+		{"FIFO-P2P", publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint},
+		{"LIFO-P2P", publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint},
+		{"Priority-P2P", publicqueue.TypePriority, publicqueue.DeliveryPointToPoint},
+		{"FIFO-PubSub", publicqueue.TypeFIFO, publicqueue.DeliveryPubSub},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			params := q.MustQueueParams("test-" + tt.name)
+			params := publicqueue.MustQueueParams("test-" + tt.name)
+			qm := redissmq.NewQueueManager()
 
-			err := queue.Create(ctx, params, tt.qType, tt.model)
+			err := qm.Create(ctx, params, tt.qType, tt.model)
 			if err != nil {
 				t.Fatalf("create: %v", err)
 			}
 
-			props, err := queue.Properties(ctx, params)
+			props, err := qm.Properties(ctx, params)
 			if err != nil {
 				t.Fatalf("properties: %v", err)
 			}
@@ -98,21 +102,22 @@ func TestQueue_CreateDifferentTypes(t *testing.T) {
 func TestQueue_RateLimit(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-rate-limit")
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-rate-limit")
+	qm := redissmq.NewQueueManager()
+	err := qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	// Set rate limit
-	rl := q.MustRateLimitParams(100, time.Minute)
-	err = queue.SetRateLimit(ctx, params, rl)
+	rl := publicqueue.MustRateLimitParams(100, time.Minute)
+	err = qm.SetRateLimit(ctx, params, rl)
 	if err != nil {
 		t.Fatalf("set rate limit: %v", err)
 	}
 
 	// Verify
-	got, err := queue.RateLimit(ctx, params)
+	got, err := qm.RateLimit(ctx, params)
 	if err != nil {
 		t.Fatalf("get rate limit: %v", err)
 	}
@@ -128,24 +133,25 @@ func TestQueue_RateLimit(t *testing.T) {
 func TestQueue_Properties(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-props")
-	err := queue.Create(ctx, params, q.TypeLIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-props")
+	qm := redissmq.NewQueueManager()
+	err := qm.Create(ctx, params, publicqueue.TypeLIFO, publicqueue.DeliveryPubSub)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	props, err := queue.Properties(ctx, params)
+	props, err := qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
 
-	if props.Type != q.TypeLIFO {
+	if props.Type != publicqueue.TypeLIFO {
 		t.Errorf("type = %v, want LIFO", props.Type)
 	}
-	if props.DeliveryModel != q.DeliveryPubSub {
+	if props.DeliveryModel != publicqueue.DeliveryPubSub {
 		t.Errorf("delivery model = %v, want PubSub", props.DeliveryModel)
 	}
-	if props.OperationalState != q.StateActive {
+	if props.OperationalState != publicqueue.StateActive {
 		t.Errorf("state = %v, want ACTIVE", props.OperationalState)
 	}
 	if props.MessagesCount != 0 {
@@ -157,8 +163,9 @@ func TestQueue_Properties(t *testing.T) {
 func TestQueue_PropertiesNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("nonexistent")
-	_, err := queue.Properties(ctx, params)
+	params := publicqueue.MustQueueParams("nonexistent")
+	qm := redissmq.NewQueueManager()
+	_, err := qm.Properties(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for non-existent queue")
 	}
@@ -168,18 +175,19 @@ func TestQueue_PropertiesNotFound(t *testing.T) {
 func TestQueue_Delete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete")
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delete")
+	qm := redissmq.NewQueueManager()
+	err := qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	err = queue.Delete(ctx, params)
+	err = qm.Delete(ctx, params)
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	exists, err := queue.Exists(ctx, params)
+	exists, err := qm.Exists(ctx, params)
 	if err != nil {
 		t.Fatalf("exists: %v", err)
 	}
@@ -192,8 +200,8 @@ func TestQueue_Delete(t *testing.T) {
 func TestQueue_DeleteNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete-notfound")
-	err := queue.Delete(ctx, params)
+	params := publicqueue.MustQueueParams("test-delete-notfound")
+	err := redissmq.NewQueueManager().Delete(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for non-existent queue")
 	}
@@ -203,16 +211,18 @@ func TestQueue_DeleteNotFound(t *testing.T) {
 func TestQueue_ListAll(t *testing.T) {
 	ctx := testutil.Setup(t)
 
+	qm := redissmq.NewQueueManager()
+
 	// Create a few queues
 	names := []string{"list-a", "list-b", "list-c"}
 	for _, name := range names {
-		params := q.MustQueueParams(name)
-		if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+		params := publicqueue.MustQueueParams(name)
+		if err := qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint); err != nil {
 			t.Fatalf("create %s: %v", name, err)
 		}
 	}
 
-	all, err := queue.ListAll(ctx)
+	all, err := qm.ListAll(ctx)
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}

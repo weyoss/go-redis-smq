@@ -14,31 +14,31 @@ import (
 	"context"
 
 	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // PublishCreated publishes a queue.queueCreated event to the appropriate
 // bus(es) according to the routing policy.
-func PublishCreated(ctx context.Context, queue q.QueueParams, props q.QueueProps) {
+func PublishCreated(ctx context.Context, queue queue.QueueParams, props queue.QueueProps) {
 	eventmultiplexer.Publish(ctx, EventCreated, queue, props)
 }
 
 // PublishDeleted publishes a queue.queueDeleted event.
-func PublishDeleted(ctx context.Context, queue q.QueueParams) {
+func PublishDeleted(ctx context.Context, queue queue.QueueParams) {
 	eventmultiplexer.Publish(ctx, EventDeleted, queue)
 }
 
 // PublishStateChanged publishes a queue.stateChanged event.
-func PublishStateChanged(ctx context.Context, queue q.QueueParams, transition q.StateTransition) {
+func PublishStateChanged(ctx context.Context, queue queue.QueueParams, transition queue.StateTransition) {
 	eventmultiplexer.Publish(ctx, EventStateChanged, queue, transition)
 }
 
 // PublishConsumerGroupCreated publishes a queue.consumerGroupCreated event.
-func PublishConsumerGroupCreated(ctx context.Context, queue q.QueueParams, groupID string) {
+func PublishConsumerGroupCreated(ctx context.Context, queue queue.QueueParams, groupID string) {
 	eventmultiplexer.Publish(ctx, EventConsumerGroupCreated, queue, groupID)
 }
 
 // PublishConsumerGroupDeleted publishes a queue.consumerGroupDeleted event.
-func PublishConsumerGroupDeleted(ctx context.Context, queue q.QueueParams, groupID string) {
+func PublishConsumerGroupDeleted(ctx context.Context, queue queue.QueueParams, groupID string) {
 	eventmultiplexer.Publish(ctx, EventConsumerGroupDeleted, queue, groupID)
 }

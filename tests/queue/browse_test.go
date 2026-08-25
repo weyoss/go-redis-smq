@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2026
- * Weyoss <weyoss@outlook.com>
- * https://github.com/weyoss
- *
- * This source code is licensed under the MIT license found in the LICENSE file
- * in the root directory of this source tree.
- *
- */
-
 package queue_test
 
 import (
@@ -19,18 +9,16 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Browse published messages
 func TestBrowse_PublishedMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-published")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-published")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Produce 10 messages
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
 		m := msg.New().SetBody("msg").SetQueue(params)
@@ -39,8 +27,9 @@ func TestBrowse_PublishedMessages(t *testing.T) {
 		}
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	qm := redissmq.NewQueueManager()
+	result, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 0,
 		Count:  100,
 	})
@@ -62,18 +51,18 @@ func TestBrowse_PublishedMessages(t *testing.T) {
 func TestBrowse_PendingMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-pending")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Produce 5 messages (no consumer, all pending)
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
 		m := msg.New().SetBody("msg").SetQueue(params)
 		prod.Produce(ctx, m)
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePending,
+	qm := redissmq.NewQueueManager()
+	result, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePending,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -87,10 +76,9 @@ func TestBrowse_PendingMessages(t *testing.T) {
 func TestBrowse_ScheduledMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-scheduled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-scheduled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Produce 3 scheduled messages
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
 		m := msg.New().
@@ -102,8 +90,9 @@ func TestBrowse_ScheduledMessages(t *testing.T) {
 		}
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	qm := redissmq.NewQueueManager()
+	result, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseScheduled,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -117,11 +106,12 @@ func TestBrowse_ScheduledMessages(t *testing.T) {
 func TestBrowse_AcknowledgedMessages_AuditDisabled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-ack-disabled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-ack-disabled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	qm := redissmq.NewQueueManager()
+	_, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseAcknowledged,
 	})
 	if err == nil {
 		t.Fatal("expected error when audit is disabled")
@@ -140,17 +130,15 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 		t.Fatalf("save config: %v", err)
 	}
 
-	params := q.MustQueueParams("test-browse-ack")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-ack")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Produce and consume 3 messages
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
 		m := msg.New().SetBody("msg").SetQueue(params)
 		prod.Produce(ctx, m)
 	}
 
-	// Consume all 3
 	consumed := make(chan struct{}, 3)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
@@ -168,11 +156,11 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 		}
 	}
 
-	// Small delay for acks to be stored
 	time.Sleep(200 * time.Millisecond)
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseAcknowledged,
+	qm := redissmq.NewQueueManager()
+	result, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseAcknowledged,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -186,11 +174,12 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 func TestBrowse_DeadLetteredMessages_AuditDisabled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-dlq-disabled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-dlq-disabled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseDeadLettered,
+	qm := redissmq.NewQueueManager()
+	_, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseDeadLettered,
 	})
 	if err == nil {
 		t.Fatal("expected error when audit is disabled")
@@ -201,19 +190,20 @@ func TestBrowse_DeadLetteredMessages_AuditDisabled(t *testing.T) {
 func TestBrowse_Pagination(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-pagination")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-pagination")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Produce 10 messages
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
 		m := msg.New().SetBody("msg").SetQueue(params)
 		prod.Produce(ctx, m)
 	}
 
-	// Page 1: 3 items
-	result1, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	qm := redissmq.NewQueueManager()
+
+	// Page 1
+	result1, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 0,
 		Count:  3,
 	})
@@ -230,9 +220,9 @@ func TestBrowse_Pagination(t *testing.T) {
 		t.Fatal("HasMore should be true")
 	}
 
-	// Page 2: next 3 items
-	result2, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	// Page 2
+	result2, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 3,
 		Count:  3,
 	})
@@ -243,9 +233,9 @@ func TestBrowse_Pagination(t *testing.T) {
 		t.Fatalf("page 2: %d items, want 3", len(result2.IDs))
 	}
 
-	// Page 3: next 3 items
-	result3, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	// Page 3
+	result3, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 6,
 		Count:  3,
 	})
@@ -256,9 +246,9 @@ func TestBrowse_Pagination(t *testing.T) {
 		t.Fatalf("page 3: %d items, want 3", len(result3.IDs))
 	}
 
-	// Page 4: last 1 item
-	result4, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	// Page 4
+	result4, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 		Offset: 9,
 		Count:  3,
 	})
@@ -272,9 +262,9 @@ func TestBrowse_Pagination(t *testing.T) {
 		t.Fatal("HasMore should be false on last page")
 	}
 
-	// Verify no duplicate IDs across pages
+	// Verify no duplicates across pages
 	allIDs := make(map[string]bool)
-	for _, r := range []*q.BrowseResult{result1, result2, result3, result4} {
+	for _, r := range []*publicqueue.BrowseResult{result1, result2, result3, result4} {
 		for _, id := range r.IDs {
 			if allIDs[id] {
 				t.Fatalf("duplicate ID: %s", id)
@@ -291,11 +281,12 @@ func TestBrowse_Pagination(t *testing.T) {
 func TestBrowse_EmptyQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-browse-empty")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-browse-empty")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowsePublished,
+	qm := redissmq.NewQueueManager()
+	result, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowsePublished,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)

@@ -15,10 +15,10 @@ import (
 	"strings"
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Very long namespace name
@@ -26,8 +26,8 @@ func TestEdge_VeryLongName(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	longNS := strings.Repeat("a", 200)
-	params := q.MustQueueParamsWithNS("test-edge-long-q", longNS)
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParamsWithNS("test-edge-long-q", longNS)
+	err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create with long namespace: %v", err)
 	}
@@ -44,8 +44,8 @@ func TestEdge_SpecialCharacters(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	specialNS := "my-ns.with_special-chars.and.dots"
-	params := q.MustQueueParamsWithNS("test-edge-special-q", specialNS)
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParamsWithNS("test-edge-special-q", specialNS)
+	err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create with special chars namespace: %v", err)
 	}
@@ -63,10 +63,11 @@ func TestEdge_RapidCreateDelete(t *testing.T) {
 
 	nm := namespace.NewManager()
 
+	qm := redissmq.NewQueueManager()
 	for i := 0; i < 10; i++ {
 		nsName := fmt.Sprintf("rapid-ns-%d", i)
-		params := q.MustQueueParamsWithNS("rapid-q", nsName)
-		queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+		params := publicqueue.MustQueueParamsWithNS("rapid-q", nsName)
+		qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 		nm.Delete(ctx, nsName)
 
 		exists, _ := nm.Exists(ctx, nsName)
@@ -80,8 +81,8 @@ func TestEdge_RapidCreateDelete(t *testing.T) {
 func TestEdge_MinimumNameLength(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParamsWithNS("test-edge-min-q", "a")
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParamsWithNS("test-edge-min-q", "a")
+	err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create with single char namespace: %v", err)
 	}
@@ -100,10 +101,11 @@ func TestEdge_ManyNamespaces(t *testing.T) {
 	nm := namespace.NewManager()
 	count := 20
 
+	qm := redissmq.NewQueueManager()
 	for i := 0; i < count; i++ {
 		nsName := fmt.Sprintf("many-ns-%d", i)
-		params := q.MustQueueParamsWithNS("many-q", nsName)
-		queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+		params := publicqueue.MustQueueParamsWithNS("many-q", nsName)
+		qm.Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	}
 
 	namespaces, err := nm.List(ctx)
@@ -127,8 +129,8 @@ func TestEdge_AllValidCharacters(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	validNS := "a-b.c_d-e.f-g.h"
-	params := q.MustQueueParamsWithNS("test-edge-valid-q", validNS)
-	err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParamsWithNS("test-edge-valid-q", validNS)
+	err := redissmq.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	if err != nil {
 		t.Fatalf("create with valid chars namespace: %v", err)
 	}

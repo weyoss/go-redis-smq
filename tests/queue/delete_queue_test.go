@@ -20,22 +20,21 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Delete queue with pending messages returns error
 func TestDeleteQueue_WithPendingMessages(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delete-pending")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce a message (no consumer, stays pending)
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	err := queue.Delete(ctx, params)
+	err := redissmq.NewQueueManager().Delete(ctx, params)
 	if err == nil {
 		t.Fatal("expected error: cannot delete queue with pending messages")
 	}
@@ -45,8 +44,8 @@ func TestDeleteQueue_WithPendingMessages(t *testing.T) {
 func TestDeleteQueue_WithActiveConsumers(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete-active-consumers")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delete-active-consumers")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Start a consumer
 	cons := redissmq.NewConsumer()
@@ -58,7 +57,7 @@ func TestDeleteQueue_WithActiveConsumers(t *testing.T) {
 
 	time.Sleep(200 * time.Millisecond)
 
-	err := queue.Delete(ctx, params)
+	err := redissmq.NewQueueManager().Delete(ctx, params)
 	if err == nil {
 		t.Fatal("expected error: cannot delete queue with active consumers")
 	}
@@ -68,15 +67,15 @@ func TestDeleteQueue_WithActiveConsumers(t *testing.T) {
 func TestDeleteQueue_WithBoundExchange(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete-exchange")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delete-exchange")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Create and bind an exchange
 	exchangeParams := x.MustExchangeParams("test-exchange", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
 	dx.BindQueue(ctx, params, exchangeParams, "test.key")
 
-	err := queue.Delete(ctx, params)
+	err := redissmq.NewQueueManager().Delete(ctx, params)
 	if err == nil {
 		t.Fatal("expected error: cannot delete queue with bound exchange")
 	}
@@ -86,15 +85,17 @@ func TestDeleteQueue_WithBoundExchange(t *testing.T) {
 func TestDeleteQueue_EmptyQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete-empty")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delete-empty")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.Delete(ctx, params)
+	qm := redissmq.NewQueueManager()
+
+	err := qm.Delete(ctx, params)
 	if err != nil {
 		t.Fatalf("delete empty queue: %v", err)
 	}
 
-	exists, _ := queue.Exists(ctx, params)
+	exists, _ := qm.Exists(ctx, params)
 	if exists {
 		t.Fatal("queue should not exist after delete")
 	}
@@ -104,8 +105,8 @@ func TestDeleteQueue_EmptyQueue(t *testing.T) {
 func TestDeleteQueue_AfterConsumerShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-delete-after-shutdown")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-delete-after-shutdown")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Start and stop a consumer
 	cons := redissmq.NewConsumer()
@@ -118,7 +119,7 @@ func TestDeleteQueue_AfterConsumerShutdown(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Now delete should succeed
-	err := queue.Delete(ctx, params)
+	err := redissmq.NewQueueManager().Delete(ctx, params)
 	if err != nil {
 		t.Fatalf("delete after consumer shutdown: %v", err)
 	}

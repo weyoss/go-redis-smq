@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
@@ -46,7 +46,7 @@ func main() {
 	}
 	defer redissmq.Shutdown()
 
-	params := q.MustQueueParamsWithNS(queueName, queueNS)
+	params := queue.MustQueueParamsWithNS(queueName, queueNS)
 
 	cons := redissmq.NewConsumer(consumer.WithHeartbeatTTL(hbTTL))
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {

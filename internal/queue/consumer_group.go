@@ -19,7 +19,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type ConsumerGroupStore struct{}
@@ -28,7 +28,7 @@ func NewConsumerGroupStore() *ConsumerGroupStore {
 	return &ConsumerGroupStore{}
 }
 
-func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *q.QueueParams, groupID string) (int64, error) {
+func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *publicqueue.QueueParams, groupID string) (int64, error) {
 	if _, err := keys.ValidateKey(groupID); err != nil {
 		return 0, fmt.Errorf("invalid consumer group ID: %w", err)
 	}
@@ -38,8 +38,8 @@ func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *q.QueuePar
 		return 0, err
 	}
 
-	if props.DeliveryModel != q.DeliveryPubSub {
-		return 0, q.ErrConsumerGroupsNotSupported
+	if props.DeliveryModel != publicqueue.DeliveryPubSub {
+		return 0, publicqueue.ErrConsumerGroupsNotSupported
 	}
 
 	qKey := keys.Queue{
@@ -59,7 +59,7 @@ func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *q.QueuePar
 	return result, nil
 }
 
-func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *q.QueueParams, groupID string) error {
+func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *publicqueue.QueueParams, groupID string) error {
 	qKey := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -80,12 +80,12 @@ func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *q.QueueP
 
 	argv := []interface{}{
 		schema.QueueFieldType.Key(),
-		q.TypePriority.Int(),
+		publicqueue.TypePriority.Int(),
 		schema.QueueFieldDeliveryModel.Key(),
-		q.DeliveryPubSub.Int(),
+		publicqueue.DeliveryPubSub.Int(),
 		groupID,
 		schema.QueueFieldOperationalState.Key(),
-		q.StateLocked.String(),
+		publicqueue.StateLocked.String(),
 		schema.QueueFieldLockID.Key(),
 		"",
 	}
@@ -105,21 +105,21 @@ func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *q.QueueP
 		queueEvents.PublishConsumerGroupDeleted(ctx, *queueParams, groupID)
 		return nil
 	case "QUEUE_LOCKED":
-		return q.ErrLocked
+		return publicqueue.ErrLocked
 	case "QUEUE_NOT_FOUND":
-		return q.ErrNotFound
+		return publicqueue.ErrNotFound
 	case "CONSUMER_GROUPS_NOT_SUPPORTED":
-		return q.ErrConsumerGroupsNotSupported
+		return publicqueue.ErrConsumerGroupsNotSupported
 	case "CONSUMER_GROUP_NOT_EMPTY":
-		return q.ErrConsumerGroupNotEmpty
+		return publicqueue.ErrConsumerGroupNotEmpty
 	case "CONSUMER_GROUP_HAS_ACTIVE_CONSUMERS":
-		return q.ErrConsumerGroupHasActiveConsumers
+		return publicqueue.ErrConsumerGroupHasActiveConsumers
 	default:
 		return fmt.Errorf("delete consumer group: unexpected script reply: %s", replyStr)
 	}
 }
 
-func (cgs *ConsumerGroupStore) List(ctx context.Context, queueParams *q.QueueParams) ([]string, error) {
+func (cgs *ConsumerGroupStore) List(ctx context.Context, queueParams *publicqueue.QueueParams) ([]string, error) {
 	qKey := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

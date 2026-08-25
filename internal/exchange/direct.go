@@ -17,18 +17,18 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq/internal/codec"
 	exSchema "github.com/weyoss/go-redis-smq/internal/exchange/schema"
-	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type DirectStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*q.QueueParams]
+	queueCodec codec.SetCodec[*queue.QueueParams]
 }
 
 func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectStore {
@@ -36,13 +36,13 @@ func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectS
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalQueue.NewQueueParamsCodec(),
+		queueCodec: internalqueue.NewQueueParamsCodec(),
 	}
 }
 
 func (ds *DirectStore) BindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
 ) error {
@@ -110,7 +110,7 @@ func (ds *DirectStore) BindQueue(
 
 func (ds *DirectStore) UnbindQueue(
 	ctx context.Context,
-	queueParams *q.QueueParams,
+	queueParams *queue.QueueParams,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
 ) error {
@@ -200,7 +200,7 @@ func (ds *DirectStore) MatchQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
@@ -224,7 +224,7 @@ func (ds *DirectStore) BoundQueues(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
 	routingKey string,
-) ([]q.QueueParams, error) {
+) ([]queue.QueueParams, error) {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -237,19 +237,19 @@ func (ds *DirectStore) BoundQueues(
 		return nil, err
 	}
 
-	return internalQueue.DecodeQueueParams(members)
+	return internalqueue.DecodeQueueParams(members)
 }
 
 func (ds *DirectStore) Bindings(
 	ctx context.Context,
 	exchangeParams *x.ExchangeParams,
-) (map[string][]q.QueueParams, error) {
+) (map[string][]queue.QueueParams, error) {
 	routingKeys, err := ds.RoutingKeys(ctx, exchangeParams)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings := make(map[string][]q.QueueParams, len(routingKeys))
+	bindings := make(map[string][]queue.QueueParams, len(routingKeys))
 	for _, rk := range routingKeys {
 		queues, err := ds.BoundQueues(ctx, exchangeParams, rk)
 		if err != nil {

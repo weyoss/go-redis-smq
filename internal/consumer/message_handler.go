@@ -23,7 +23,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type Handler func(ctx context.Context, m *msg.Transferable) error
@@ -32,7 +32,7 @@ type MessageHandler struct {
 	mu             sync.RWMutex
 	running        bool
 	consumerID     string
-	queue          *q.QueueParams
+	queue          *queue.QueueParams
 	groupID        string
 	handler        Handler
 	options        *consumer.Options
@@ -56,7 +56,7 @@ type MessageHandler struct {
 	log        *slog.Logger
 }
 
-func NewMessageHandler(consumerID string, queue *q.QueueParams, groupID string, handler Handler, options *consumer.Options) *MessageHandler {
+func NewMessageHandler(consumerID string, queue *queue.QueueParams, groupID string, handler Handler, options *consumer.Options) *MessageHandler {
 	return &MessageHandler{
 		consumerID:  consumerID,
 		queue:       queue,
@@ -69,7 +69,7 @@ func NewMessageHandler(consumerID string, queue *q.QueueParams, groupID string, 
 	}
 }
 
-func (mh *MessageHandler) Queue() *q.QueueParams { return mh.queue }
+func (mh *MessageHandler) Queue() *queue.QueueParams { return mh.queue }
 
 func (mh *MessageHandler) IsRunning() bool {
 	mh.mu.RLock()

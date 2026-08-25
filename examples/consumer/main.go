@@ -24,7 +24,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -38,8 +37,8 @@ func main() {
 	defer redissmq.Shutdown()
 
 	// Create a queue (if not exists)
-	ordersQueue := q.MustQueueParams(fmt.Sprintf("orders-%d", time.Now().UnixMilli()))
-	if err := queue.Create(ctx, ordersQueue, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+	ordersQueue := queue.MustQueueParams(fmt.Sprintf("orders-%d", time.Now().UnixMilli()))
+	if err := redissmq.NewQueueManager().Create(ctx, ordersQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
 		// Queue may already exist — continue
 		log.Printf("create queue: %v (may already exist)", err)
 	}

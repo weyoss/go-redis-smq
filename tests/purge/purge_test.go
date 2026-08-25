@@ -21,8 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Purge pending messages
@@ -30,15 +29,17 @@ func TestPurge_PendingMessages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-purge-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-pending")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	deadline := time.After(15 * time.Second)
 	for {
@@ -46,22 +47,22 @@ func TestPurge_PendingMessages(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, err := queue.GetPurgeJob(ctx, jobID)
+			job, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
 				t.Fatalf("get job: %v", err)
 			}
-			if job.Status == q.PurgeJobCompleted {
+			if job.Status == publicqueue.PurgeJobCompleted {
 				if job.Meta.Purged != 10 {
 					t.Errorf("purged = %d, want 10", job.Meta.Purged)
 				}
 				// Verify no pending messages
-				props, _ := queue.Properties(ctx, params)
+				props, _ := qm.Properties(ctx, params)
 				if props.PendingMessagesCount != 0 {
 					t.Errorf("pending = %d, want 0", props.PendingMessagesCount)
 				}
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -74,15 +75,17 @@ func TestPurge_ScheduledMessages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-purge-scheduled")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-scheduled")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
 		prod.Produce(ctx, msg.New().SetBody("sched").SetQueue(params).SetScheduledDelay(1*time.Hour))
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowseScheduled)
+	qm := redissmq.NewQueueManager()
+
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowseScheduled)
 
 	deadline := time.After(15 * time.Second)
 	for {
@@ -90,21 +93,21 @@ func TestPurge_ScheduledMessages(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, err := queue.GetPurgeJob(ctx, jobID)
+			job, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
 				t.Fatalf("get job: %v", err)
 			}
-			if job.Status == q.PurgeJobCompleted {
+			if job.Status == publicqueue.PurgeJobCompleted {
 				if job.Meta.Purged != 5 {
 					t.Errorf("purged = %d, want 5", job.Meta.Purged)
 				}
-				result, _ := queue.BrowseMessages(ctx, params, &q.BrowseParams{Filter: q.BrowseScheduled})
+				result, _ := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{Filter: publicqueue.BrowseScheduled})
 				if result.Total != 0 {
 					t.Errorf("scheduled = %d, want 0", result.Total)
 				}
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -122,8 +125,8 @@ func TestPurge_AcknowledgedMessages(t *testing.T) {
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 1000
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-purge-ack")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-ack")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
@@ -131,7 +134,9 @@ func TestPurge_AcknowledgedMessages(t *testing.T) {
 		consumeAndAck(t, ctx, params, ids[0])
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowseAcknowledged)
+	qm := redissmq.NewQueueManager()
+
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
 
 	deadline := time.After(15 * time.Second)
 	for {
@@ -139,17 +144,17 @@ func TestPurge_AcknowledgedMessages(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, err := queue.GetPurgeJob(ctx, jobID)
+			job, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
 				t.Fatalf("get job: %v", err)
 			}
-			if job.Status == q.PurgeJobCompleted {
+			if job.Status == publicqueue.PurgeJobCompleted {
 				if job.Meta.Purged != 5 {
 					t.Errorf("purged = %d, want 5", job.Meta.Purged)
 				}
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -167,8 +172,8 @@ func TestPurge_DeadLetteredMessages(t *testing.T) {
 	cfg.MessageAudit.DeadLetteredMessages.QueueSize = 1000
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-purge-dlq")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-dlq")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
@@ -191,7 +196,9 @@ func TestPurge_DeadLetteredMessages(t *testing.T) {
 	defer cons.Shutdown()
 	time.Sleep(8 * time.Second)
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowseDeadLettered)
+	qm := redissmq.NewQueueManager()
+
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowseDeadLettered)
 
 	deadline := time.After(15 * time.Second)
 	for {
@@ -199,15 +206,15 @@ func TestPurge_DeadLetteredMessages(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, err := queue.GetPurgeJob(ctx, jobID)
+			job, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
 				t.Fatalf("get job: %v", err)
 			}
-			if job.Status == q.PurgeJobCompleted {
+			if job.Status == publicqueue.PurgeJobCompleted {
 				t.Logf("purged %d dead-lettered messages", job.Meta.Purged)
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -220,10 +227,11 @@ func TestPurge_EmptyQueue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-purge-empty")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-purge-empty")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	deadline := time.After(5 * time.Second)
 	for {
@@ -231,17 +239,17 @@ func TestPurge_EmptyQueue(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, err := queue.GetPurgeJob(ctx, jobID)
+			job, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
 				t.Fatalf("get job: %v", err)
 			}
-			if job.Status == q.PurgeJobCompleted {
+			if job.Status == publicqueue.PurgeJobCompleted {
 				if job.Meta.Purged != 0 {
 					t.Errorf("purged = %d, want 0", job.Meta.Purged)
 				}
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)

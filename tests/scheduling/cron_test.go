@@ -14,19 +14,19 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Schedule a message with CRON expression
 func TestCron_ScheduleWithCron(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-schedule")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-schedule")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -44,7 +44,7 @@ func TestCron_ScheduleWithCron(t *testing.T) {
 	}
 
 	// Message should be in scheduled, not pending
-	props, err := queue.Properties(ctx, params)
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -60,8 +60,8 @@ func TestCron_ScheduleWithCron(t *testing.T) {
 func TestCron_InvalidCronIgnored(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-invalid")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-invalid")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -79,7 +79,7 @@ func TestCron_InvalidCronIgnored(t *testing.T) {
 	}
 
 	// Message should be in pending (cron was ignored, treated as immediate)
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	t.Logf("scheduled: %d, pending: %d", props.ScheduledMessagesCount, props.PendingMessagesCount)
 }
 
@@ -87,8 +87,8 @@ func TestCron_InvalidCronIgnored(t *testing.T) {
 func TestCron_BrowseScheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-browse")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-browse")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -100,8 +100,8 @@ func TestCron_BrowseScheduled(t *testing.T) {
 		prod.Produce(ctx, m)
 	}
 
-	result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseScheduled,
 	})
 	if err != nil {
 		t.Fatalf("browse: %v", err)
@@ -115,8 +115,8 @@ func TestCron_BrowseScheduled(t *testing.T) {
 func TestCron_DeleteScheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-delete")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-delete")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -136,8 +136,8 @@ func TestCron_DeleteScheduled(t *testing.T) {
 	}
 
 	// Should no longer be in scheduled
-	scheduledResult, _ := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-		Filter: q.BrowseScheduled,
+	scheduledResult, _ := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+		Filter: publicqueue.BrowseScheduled,
 	})
 	if scheduledResult.Total != 0 {
 		t.Errorf("scheduled = %d, want 0 after delete", scheduledResult.Total)
@@ -148,8 +148,8 @@ func TestCron_DeleteScheduled(t *testing.T) {
 func TestCron_CronWithRepeat(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-repeat")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-repeat")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -169,7 +169,7 @@ func TestCron_CronWithRepeat(t *testing.T) {
 	}
 
 	// Message should be scheduled
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -179,8 +179,8 @@ func TestCron_CronWithRepeat(t *testing.T) {
 func TestCron_CommonExpressions(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-common")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-common")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -209,7 +209,7 @@ func TestCron_CommonExpressions(t *testing.T) {
 		}
 	}
 
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.ScheduledMessagesCount != int64(len(expressions)) {
 		t.Errorf("scheduled = %d, want %d", props.ScheduledMessagesCount, len(expressions))
 	}
@@ -219,8 +219,8 @@ func TestCron_CommonExpressions(t *testing.T) {
 func TestCron_ResetParams(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cron-reset")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cron-reset")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -242,7 +242,7 @@ func TestCron_ResetParams(t *testing.T) {
 	}
 
 	// Should be pending (immediate), not scheduled
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.ScheduledMessagesCount != 0 {
 		t.Errorf("scheduled = %d, want 0 (reset)", props.ScheduledMessagesCount)
 	}

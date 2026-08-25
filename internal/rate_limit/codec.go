@@ -19,7 +19,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/codec"
 	"github.com/weyoss/go-redis-smq/internal/rate_limit/schema"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // RateLimitCodec handles serialization of RateLimitParams to/from Redis.
@@ -34,6 +34,8 @@ import (
 // 2. JSON-encoded string (for storage within queue properties hash field "1"):
 //
 //	{"limit":100,"interval":60000}
+//
+// Note: The JSON format uses "interval" as milliseconds to match TypeScript.
 type RateLimitCodec struct{}
 
 // NewRateLimitCodec creates a new RateLimit codec.
@@ -43,7 +45,7 @@ func NewRateLimitCodec() *RateLimitCodec {
 
 // EncodeHash serializes RateLimitParams to a Redis hash map.
 // Used for the dedicated rate limit hash key.
-func (c *RateLimitCodec) EncodeHash(ctx context.Context, rl *q.RateLimitParams) (map[string]interface{}, error) {
+func (c *RateLimitCodec) EncodeHash(ctx context.Context, rl *publicqueue.RateLimitParams) (map[string]interface{}, error) {
 	if rl == nil {
 		return nil, codec.NewEncodingError("rate limit", "nil", codec.ErrInvalidFormat)
 	}
@@ -56,7 +58,7 @@ func (c *RateLimitCodec) EncodeHash(ctx context.Context, rl *q.RateLimitParams) 
 
 // DecodeHash deserializes a Redis hash map back to RateLimitParams.
 // Used for the dedicated rate limit hash key.
-func (c *RateLimitCodec) DecodeHash(ctx context.Context, hash map[string]string) (*q.RateLimitParams, error) {
+func (c *RateLimitCodec) DecodeHash(ctx context.Context, hash map[string]string) (*publicqueue.RateLimitParams, error) {
 	if len(hash) == 0 {
 		return nil, nil // Empty hash means no rate limit
 	}
@@ -73,7 +75,7 @@ func (c *RateLimitCodec) DecodeHash(ctx context.Context, hash map[string]string)
 		interval = time.Second // Minimum 1 second interval
 	}
 
-	rl, err := q.NewRateLimitParams(limit, interval)
+	rl, err := publicqueue.NewRateLimitParams(limit, interval)
 	if err != nil {
 		return nil, codec.NewDecodingError("rate limit", fmt.Sprintf("limit=%d interval=%d", limit, intervalMs), err)
 	}
@@ -84,10 +86,12 @@ func (c *RateLimitCodec) DecodeHash(ctx context.Context, hash map[string]string)
 // EncodeJSON serializes RateLimitParams to a JSON string.
 // Used for storage within queue properties hash field "1".
 //
+// JSON format matches TypeScript IRateLimitParams:
+//
 //	{"limit":100,"interval":60000}
 //
-// Note: "interval" is in milliseconds
-func (c *RateLimitCodec) EncodeJSON(ctx context.Context, rl *q.RateLimitParams) (string, error) {
+// Note: "interval" is in milliseconds for TypeScript compatibility.
+func (c *RateLimitCodec) EncodeJSON(ctx context.Context, rl *publicqueue.RateLimitParams) (string, error) {
 	if rl == nil {
 		return "", nil
 	}
@@ -101,12 +105,12 @@ func (c *RateLimitCodec) EncodeJSON(ctx context.Context, rl *q.RateLimitParams) 
 
 // DecodeJSON deserializes a JSON string back to RateLimitParams.
 // Used for reading from queue properties hash field "1".
-func (c *RateLimitCodec) DecodeJSON(ctx context.Context, data string) (*q.RateLimitParams, error) {
+func (c *RateLimitCodec) DecodeJSON(ctx context.Context, data string) (*publicqueue.RateLimitParams, error) {
 	if data == "" {
 		return nil, nil
 	}
 
-	var rl q.RateLimitParams
+	var rl publicqueue.RateLimitParams
 	if err := json.Unmarshal([]byte(data), &rl); err != nil {
 		return nil, codec.NewDecodingError("rate limit", "json", err)
 	}
@@ -120,5 +124,5 @@ func (c *RateLimitCodec) DecodeJSON(ctx context.Context, data string) (*q.RateLi
 
 // Compile-time interface checks
 var (
-	_ codec.HashCodec[*q.RateLimitParams] = (*RateLimitCodec)(nil)
+	_ codec.HashCodec[*publicqueue.RateLimitParams] = (*RateLimitCodec)(nil)
 )

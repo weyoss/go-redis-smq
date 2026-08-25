@@ -22,7 +22,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Requeue an acknowledged message
@@ -30,8 +30,8 @@ func TestRequeue_AcknowledgedMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-requeue-acked")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-requeue-acked")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().SetBody("requeue-me").SetQueue(params))
@@ -80,8 +80,8 @@ func TestRequeue_AcknowledgedMessage(t *testing.T) {
 func TestRequeue_RequeueScheduledMessage(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-req-sched")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-req-sched")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().
@@ -100,8 +100,8 @@ func TestRequeue_RequeueScheduledMessage(t *testing.T) {
 func TestRequeue_PendingMessage(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-requeue-pending")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-requeue-pending")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().SetBody("pending").SetQueue(params))
@@ -128,8 +128,8 @@ func TestRequeue_PreservesMessage(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-requeue-preserve")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-requeue-preserve")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	originalBody := map[string]interface{}{"orderId": 123, "amount": 99.99}
@@ -187,8 +187,8 @@ func TestRequeue_DoubleRequeue(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 10*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-requeue-double")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-requeue-double")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().SetBody("double-requeue").SetQueue(params))
@@ -235,8 +235,8 @@ func TestRequeue_DeadLetteredMessage(t *testing.T) {
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
 	config.Save(ctx, cfg)
 
-	params := q.MustQueueParams("test-requeue-dlq")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-requeue-dlq")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().

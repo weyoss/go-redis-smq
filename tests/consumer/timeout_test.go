@@ -20,7 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Handler respects context deadline – returns early, no forced timeout needed.
@@ -29,8 +29,8 @@ func TestConsumeTimeout_CooperativeHandler(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 25*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-timeout-cooperative")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-timeout-cooperative")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().
@@ -112,8 +112,8 @@ func TestConsumeTimeout_ForcedTimeout(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-timeout-forced")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-timeout-forced")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().

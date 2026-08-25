@@ -27,7 +27,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Producer is the concrete implementation of the public producer interface.
@@ -150,7 +150,7 @@ func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]
 	return prod.produceToExchange(ctx, m, exchangeParams, resolver)
 }
 
-func (prod *Producer) produceToQueue(ctx context.Context, m *msg.ProducibleMessage, queueParams *q.QueueParams, resolver *PubSubTargetResolver) ([]string, error) {
+func (prod *Producer) produceToQueue(ctx context.Context, m *msg.ProducibleMessage, queueParams *queue.QueueParams, resolver *PubSubTargetResolver) ([]string, error) {
 	var targets []string
 	if resolver != nil {
 		targets = resolver.Resolve(queueParams)
@@ -241,7 +241,7 @@ func (prod *Producer) produceToExchange(ctx context.Context, m *msg.ProducibleMe
 	return ids, nil
 }
 
-func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x.ExchangeParams, routingKey string) ([]q.QueueParams, error) {
+func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x.ExchangeParams, routingKey string) ([]queue.QueueParams, error) {
 	switch exchangeParams.Type() {
 	case x.TypeDirect:
 		if routingKey == "" {
@@ -263,7 +263,7 @@ func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x
 	}
 }
 
-func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.Envelope, queueParams *q.QueueParams) (string, error) {
+func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.Envelope, queueParams *queue.QueueParams) (string, error) {
 	envelope.SetDestinationQueue(queueParams)
 	messageID := envelope.ID()
 
@@ -332,7 +332,7 @@ func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.En
 		return messageID, nil
 	case "QUEUE_NOT_FOUND":
 		prod.log.Warn("queue not found", "queue", queueParams.String())
-		return "", q.ErrNotFound
+		return "", queue.ErrNotFound
 	case "CONSUMER_GROUP_NOT_FOUND":
 		prod.log.Warn("consumer group not found",
 			"queue", queueParams.String(),
@@ -353,10 +353,10 @@ func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.En
 		return "", publicproducer.ErrUnknownQueueType
 	case "QUEUE_STOPPED":
 		prod.log.Warn("queue stopped", "queue", queueParams.String())
-		return "", q.ErrNotOperational
+		return "", queue.ErrNotOperational
 	case "QUEUE_LOCKED":
 		prod.log.Warn("queue locked", "queue", queueParams.String())
-		return "", q.ErrLocked
+		return "", queue.ErrLocked
 	case "QUEUE_INVALID_STATE":
 		prod.log.Warn("queue in invalid state", "queue", queueParams.String())
 		return "", publicproducer.ErrInvalidQueueState

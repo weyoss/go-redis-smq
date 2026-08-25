@@ -19,7 +19,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	publicProducer "github.com/weyoss/go-redis-smq/pkg/producer"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Subscribe to producer lifecycle events
@@ -110,8 +110,8 @@ func TestProducerEvents_Lifecycle(t *testing.T) {
 func TestProducerEvents_MessagePublished_DirectToQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-msg-pub-direct")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-msg-pub-direct")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -161,8 +161,8 @@ func TestProducerEvents_MessagePublished_DirectToQueue(t *testing.T) {
 func TestProducerEvents_MessagePublished_Scheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-msg-pub-sched")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-msg-pub-sched")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var publishedIDs []string
@@ -202,8 +202,8 @@ func TestProducerEvents_MessagePublished_Scheduled(t *testing.T) {
 func TestProducerEvents_MessagePublished_ProducerID(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-msg-pub-prodid")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-msg-pub-prodid")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -242,8 +242,8 @@ func TestProducerEvents_MessagePublished_ProducerID(t *testing.T) {
 func TestProducerEvents_MultipleSubscribers(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-msg-pub-multi")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-msg-pub-multi")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -294,8 +294,8 @@ func TestProducerEvents_MultipleSubscribers(t *testing.T) {
 func TestProducerEvents_MultipleProducers(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-multi-prod")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-multi-prod")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	producerIDs := make(map[string]bool)
@@ -330,8 +330,8 @@ func TestProducerEvents_MultipleProducers(t *testing.T) {
 func TestProducerEvents_Unsubscribe(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-events-prod-unsub")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-events-prod-unsub")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	var mu sync.Mutex
 	var msgCount int

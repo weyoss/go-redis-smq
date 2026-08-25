@@ -14,19 +14,19 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Schedule message with all options set
 func TestEdge_AllOptions(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-all-options")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-all-options")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -51,8 +51,8 @@ func TestEdge_AllOptions(t *testing.T) {
 func TestEdge_ResetAfterSet(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-reset-after")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-reset-after")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -74,8 +74,8 @@ func TestEdge_ResetAfterSet(t *testing.T) {
 func TestEdge_MaxRepeat(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-max-repeat")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-max-repeat")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -98,8 +98,8 @@ func TestEdge_MaxRepeat(t *testing.T) {
 func TestEdge_VeryShortDelay(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-short-delay")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-short-delay")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -121,8 +121,8 @@ func TestEdge_VeryShortDelay(t *testing.T) {
 func TestEdge_VeryLongDelay(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-long-delay")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-long-delay")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -140,7 +140,7 @@ func TestEdge_VeryLongDelay(t *testing.T) {
 	}
 
 	// Should be in scheduled
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -150,8 +150,8 @@ func TestEdge_VeryLongDelay(t *testing.T) {
 func TestEdge_MultipleDelaysLastWins(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-multi-delays")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-multi-delays")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -174,8 +174,8 @@ func TestEdge_MultipleDelaysLastWins(t *testing.T) {
 func TestEdge_ScheduledOnPriorityQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-sched-prio")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-sched-prio")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -193,7 +193,7 @@ func TestEdge_ScheduledOnPriorityQueue(t *testing.T) {
 		t.Fatalf("expected 1 message ID, got %d", len(ids))
 	}
 
-	props, _ := queue.Properties(ctx, params)
+	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -203,8 +203,8 @@ func TestEdge_ScheduledOnPriorityQueue(t *testing.T) {
 func TestEdge_RapidScheduleDelete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-rapid-sched-del")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-rapid-sched-del")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -234,8 +234,8 @@ func TestEdge_RapidScheduleDelete(t *testing.T) {
 func TestEdge_ScheduleThenDisablePriority(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-disable-prio")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-edge-disable-prio")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 

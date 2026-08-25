@@ -13,14 +13,16 @@ package queue
 import (
 	"github.com/weyoss/go-redis-smq/internal/codec"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// Codecs holds codec instances for queue serialization.
 type Codecs struct {
-	Params codec.SetCodec[*q.QueueParams]
-	Props  codec.HashCodec[*q.QueueProps]
+	Params codec.SetCodec[*publicqueue.QueueParams]
+	Props  codec.HashCodec[*publicqueue.QueueProps]
 }
 
+// DefaultCodecs returns the standard TypeScript-compatible codecs.
 func DefaultCodecs() *Codecs {
 	return &Codecs{
 		Params: NewQueueParamsCodec(),
@@ -28,6 +30,12 @@ func DefaultCodecs() *Codecs {
 	}
 }
 
+// Manager provides the internal orchestration layer for queue operations.
+//
+// It holds references to all internal queue subcomponents (store, lookup,
+// validator, state, consumer groups, browsing, purge) and is used by the
+// concrete public interface implementations in queue_manager.go,
+// state_manager.go, and consumer_group_manager.go.
 type Manager struct {
 	store         *Store
 	lookup        *Lookup
@@ -38,10 +46,13 @@ type Manager struct {
 	purge         *PurgeManager
 }
 
+// NewManager creates a new internal queue manager with default codecs.
 func NewManager() *Manager {
 	return NewManagerWithCodecs(nil)
 }
 
+// NewManagerWithCodecs creates a new internal queue manager with custom codecs.
+// Passing nil will use the default codecs.
 func NewManagerWithCodecs(codecs *Codecs) *Manager {
 	if codecs == nil {
 		codecs = DefaultCodecs()
@@ -61,10 +72,23 @@ func NewManagerWithCodecs(codecs *Codecs) *Manager {
 	}
 }
 
-func (m *Manager) Store() *Store                           { return m.store }
-func (m *Manager) Lookup() *Lookup                         { return m.lookup }
-func (m *Manager) Validator() *Validator                   { return m.validator }
-func (m *Manager) State() *State                           { return m.state }
+// Store returns the internal store component.
+func (m *Manager) Store() *Store { return m.store }
+
+// Lookup returns the internal lookup component.
+func (m *Manager) Lookup() *Lookup { return m.lookup }
+
+// Validator returns the internal validator component.
+func (m *Manager) Validator() *Validator { return m.validator }
+
+// State returns the internal state management component.
+func (m *Manager) State() *State { return m.state }
+
+// ConsumerGroupStore returns the internal consumer group store.
 func (m *Manager) ConsumerGroupStore() *ConsumerGroupStore { return m.consumerGroup }
-func (m *Manager) Browse() *Browse                         { return m.browse }
-func (m *Manager) Purge() *PurgeManager                    { return m.purge }
+
+// Browse returns the internal browse component.
+func (m *Manager) Browse() *Browse { return m.browse }
+
+// Purge returns the internal purge manager.
+func (m *Manager) Purge() *PurgeManager { return m.purge }

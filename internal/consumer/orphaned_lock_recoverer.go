@@ -21,22 +21,22 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type OrphanedLockRecoverer struct {
-	queue      *q.QueueParams
+	queue      *queue.QueueParams
 	consumerID string
 	interval   time.Duration
 	log        *slog.Logger
 }
 
-func NewOrphanedLockRecoverer(queue *q.QueueParams, consumerID string) *OrphanedLockRecoverer {
+func NewOrphanedLockRecoverer(q *queue.QueueParams, consumerID string) *OrphanedLockRecoverer {
 	return &OrphanedLockRecoverer{
-		queue:      queue,
+		queue:      q,
 		consumerID: consumerID,
 		interval:   30 * time.Second,
-		log:        logger.New("consumer", "lock-recoverer", consumerID, queue.Name()),
+		log:        logger.New("consumer", "lock-recoverer", consumerID, q.Name()),
 	}
 }
 
@@ -79,7 +79,7 @@ func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
 	var state int
 	fmt.Sscanf(stateStr, "%d", &state)
 
-	if q.QueueState(state) != q.StateLocked {
+	if queue.QueueState(state) != queue.StateLocked {
 		return
 	}
 
@@ -115,12 +115,12 @@ func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Que
 	luaKeys := []string{qKey.Properties(), qKey.StateHistory()}
 	argv := []interface{}{
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateActive.Int(),
+		queue.StateActive.Int(),
 		"",
-		q.StateLocked.Int(),
-		q.StateActive.Int(),
+		queue.StateLocked.Int(),
+		queue.StateActive.Int(),
 		100,
-		q.StateLocked.Int(),
+		queue.StateLocked.Int(),
 		lockID,
 		qSchema.QueueFieldLastStateChangeAt.Key(),
 		time.Now().UnixMilli(),

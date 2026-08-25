@@ -22,7 +22,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 const maxQueueStateHistorySize = 100
@@ -44,22 +44,22 @@ func NewStore(codecs *Codecs) *Store {
 
 func (s *Store) Save(
 	ctx context.Context,
-	queueParams *q.QueueParams,
-	queueType q.QueueType,
-	deliveryModel q.DeliveryModel,
+	queueParams *publicqueue.QueueParams,
+	queueType publicqueue.QueueType,
+	deliveryModel publicqueue.DeliveryModel,
 ) error {
 	return s.SaveWithRateLimit(ctx, queueParams, queueType, deliveryModel, nil)
 }
 
 func (s *Store) SaveWithRateLimit(
 	ctx context.Context,
-	queueParams *q.QueueParams,
-	queueType q.QueueType,
-	deliveryModel q.DeliveryModel,
-	rateLimit *q.RateLimitParams,
+	queueParams *publicqueue.QueueParams,
+	queueType publicqueue.QueueType,
+	deliveryModel publicqueue.DeliveryModel,
+	rateLimit *publicqueue.RateLimitParams,
 ) error {
 	if queueParams == nil {
-		return q.ErrNameRequired
+		return publicqueue.ErrNameRequired
 	}
 
 	now := time.Now().UnixMilli()
@@ -75,10 +75,10 @@ func (s *Store) SaveWithRateLimit(
 		return fmt.Errorf("marshal queue params: %w", err)
 	}
 
-	initialTransition := q.StateTransition{
+	initialTransition := publicqueue.StateTransition{
 		From:      nil,
-		To:        q.StateActive,
-		Reason:    q.QueueStateTransitionReason(q.ReasonSystemInit),
+		To:        publicqueue.StateActive,
+		Reason:    publicqueue.QueueStateTransitionReason(publicqueue.ReasonSystemInit),
 		Timestamp: now,
 		Metadata: map[string]interface{}{
 			"queueType":     queueType.Int(),
@@ -121,7 +121,7 @@ func (s *Store) SaveWithRateLimit(
 		schema.QueueFieldDelayedMessagesCount.Key(),
 		schema.QueueFieldRequeuedMessagesCount.Key(),
 		schema.QueueFieldOperationalState.Key(),
-		q.StateActive.Int(),
+		publicqueue.StateActive.Int(),
 		maxQueueStateHistorySize,
 		schema.QueueFieldLastStateChangeAt.Key(),
 		fmt.Sprintf("%d", now),
@@ -141,32 +141,32 @@ func (s *Store) SaveWithRateLimit(
 
 	switch replyStr {
 	case "OK":
-		queueEvents.PublishCreated(ctx, *queueParams, q.QueueProps{
+		queueEvents.PublishCreated(ctx, *queueParams, publicqueue.QueueProps{
 			Type:          queueType,
 			DeliveryModel: deliveryModel,
 			RateLimit:     rateLimit,
 		})
 		return nil
 	case "QUEUE_EXISTS":
-		return q.ErrAlreadyExists
+		return publicqueue.ErrAlreadyExists
 	default:
 		return fmt.Errorf("create queue: unexpected script reply: %s", replyStr)
 	}
 }
 
-func (s *Store) SetRateLimit(ctx context.Context, queueParams *q.QueueParams, rateLimit *q.RateLimitParams) error {
+func (s *Store) SetRateLimit(ctx context.Context, queueParams *publicqueue.QueueParams, rateLimit *publicqueue.RateLimitParams) error {
 	return s.rateLimitStore.Set(ctx, queueParams, rateLimit)
 }
 
-func (s *Store) ClearRateLimit(ctx context.Context, queueParams *q.QueueParams) error {
+func (s *Store) ClearRateLimit(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	return s.rateLimitStore.Clear(ctx, queueParams)
 }
 
-func (s *Store) GetRateLimit(ctx context.Context, queueParams *q.QueueParams) (*q.RateLimitParams, error) {
+func (s *Store) GetRateLimit(ctx context.Context, queueParams *publicqueue.QueueParams) (*publicqueue.RateLimitParams, error) {
 	return s.rateLimitStore.Get(ctx, queueParams)
 }
 
-func (s *Store) Load(ctx context.Context, queueParams *q.QueueParams) (*q.QueueProps, error) {
+func (s *Store) Load(ctx context.Context, queueParams *publicqueue.QueueParams) (*publicqueue.QueueProps, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -185,7 +185,7 @@ func (s *Store) Load(ctx context.Context, queueParams *q.QueueParams) (*q.QueueP
 	return props, nil
 }
 
-func (s *Store) Exists(ctx context.Context, queueParams *q.QueueParams) (bool, error) {
+func (s *Store) Exists(ctx context.Context, queueParams *publicqueue.QueueParams) (bool, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -198,7 +198,7 @@ func (s *Store) Exists(ctx context.Context, queueParams *q.QueueParams) (bool, e
 	return count > 0, nil
 }
 
-func (s *Store) Delete(ctx context.Context, queueParams *q.QueueParams) error {
+func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -285,7 +285,7 @@ func (s *Store) Delete(ctx context.Context, queueParams *q.QueueParams) error {
 		schema.QueueFieldMessagesCount.Key(),
 		len(heartbeatKeys),
 		schema.QueueFieldOperationalState.Key(),
-		q.StateLocked.Int(),
+		publicqueue.StateLocked.Int(),
 		schema.QueueFieldLockID.Key(),
 		"",
 	}
@@ -308,17 +308,17 @@ func (s *Store) Delete(ctx context.Context, queueParams *q.QueueParams) error {
 		queueEvents.PublishDeleted(ctx, *queueParams)
 		return nil
 	case "QUEUE_LOCKED":
-		return q.ErrLocked
+		return publicqueue.ErrLocked
 	case "QUEUE_NOT_FOUND":
-		return q.ErrNotFound
+		return publicqueue.ErrNotFound
 	case "QUEUE_NOT_EMPTY":
-		return q.ErrQueueNotEmpty
+		return publicqueue.ErrQueueNotEmpty
 	case "QUEUE_HAS_ACTIVE_CONSUMERS":
-		return q.ErrQueueHasActiveConsumers
+		return publicqueue.ErrQueueHasActiveConsumers
 	case "QUEUE_HAS_BOUND_EXCHANGE":
-		return q.ErrQueueHasBoundExchanges
+		return publicqueue.ErrQueueHasBoundExchanges
 	case "CONSUMER_SET_MISMATCH":
-		return q.ErrConsumerSetMismatch
+		return publicqueue.ErrConsumerSetMismatch
 	default:
 		return fmt.Errorf("delete queue: unexpected script reply: %s", replyStr)
 	}

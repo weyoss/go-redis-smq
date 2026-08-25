@@ -13,12 +13,12 @@ package namespace_test
 import (
 	"testing"
 
+	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Full namespace lifecycle
@@ -28,8 +28,8 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	nm := namespace.NewManager()
 
 	// Create resources in namespace
-	q1 := q.MustQueueParamsWithNS("lifecycle-q", "lifecycle-ns")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("lifecycle-q", "lifecycle-ns")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	ex1 := x.MustExchangeParamsWithNS("lifecycle-ex", "lifecycle-ns", x.TypeDirect)
 	dx := exchange.NewDirectExchange()
@@ -78,7 +78,8 @@ func TestComplex_FullLifecycle(t *testing.T) {
 		t.Error("namespace should not exist after delete")
 	}
 
-	queues, _ = queue.ListByNamespace(ctx, "lifecycle-ns")
+	qm := redissmq.NewQueueManager()
+	queues, _ = qm.ListByNamespace(ctx, "lifecycle-ns")
 	if len(queues) != 0 {
 		t.Error("queues should be gone")
 	}
@@ -95,10 +96,10 @@ func TestComplex_MultipleNamespaces(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	// Namespace 1: queues only
-	q1 := q.MustQueueParamsWithNS("multi-q1", "ns-with-queues")
-	q2 := q.MustQueueParamsWithNS("multi-q2", "ns-with-queues")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeLIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("multi-q1", "ns-with-queues")
+	q2 := publicqueue.MustQueueParamsWithNS("multi-q2", "ns-with-queues")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint)
 
 	// Namespace 2: exchanges only
 	ex1 := x.MustExchangeParamsWithNS("multi-ex1", "ns-with-exchanges", x.TypeDirect)
@@ -109,8 +110,8 @@ func TestComplex_MultipleNamespaces(t *testing.T) {
 	fx.Create(ctx, ex2, x.PolicyStandard)
 
 	// Namespace 3: both
-	q3 := q.MustQueueParamsWithNS("multi-q3", "ns-with-both")
-	testutil.CreateQueue(t, ctx, q3, q.TypeFIFO, q.DeliveryPointToPoint)
+	q3 := publicqueue.MustQueueParamsWithNS("multi-q3", "ns-with-both")
+	testutil.CreateQueue(t, ctx, q3, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	ex3 := x.MustExchangeParamsWithNS("multi-ex3", "ns-with-both", x.TypeTopic)
 	tx := exchange.NewTopicExchange()
 	tx.Create(ctx, ex3, x.PolicyStandard)
@@ -155,10 +156,10 @@ func TestComplex_CrossNamespaceIsolation(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	// Same name, different namespaces
-	q1 := q.MustQueueParamsWithNS("shared-name", "iso-ns-a")
-	q2 := q.MustQueueParamsWithNS("shared-name", "iso-ns-b")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeLIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("shared-name", "iso-ns-a")
+	q2 := publicqueue.MustQueueParamsWithNS("shared-name", "iso-ns-b")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint)
 
 	ex1 := x.MustExchangeParamsWithNS("shared-name", "iso-ns-a", x.TypeDirect)
 	ex2 := x.MustExchangeParamsWithNS("shared-name", "iso-ns-b", x.TypeFanout)

@@ -28,13 +28,13 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // BatchAcker buffers acknowledgments and flushes them in batches.
 type BatchAcker struct {
 	mu             sync.Mutex
-	queue          *q.QueueParams
+	queue          *queue.QueueParams
 	consumerID     string
 	cfg            consumer.BatchConfig
 	buffer         []string
@@ -47,7 +47,7 @@ type BatchAcker struct {
 }
 
 // NewBatchAcker creates a new batch acker.
-func NewBatchAcker(queue *q.QueueParams, consumerID string, cfg consumer.BatchConfig) *BatchAcker {
+func NewBatchAcker(queue *queue.QueueParams, consumerID string, cfg consumer.BatchConfig) *BatchAcker {
 	return &BatchAcker{
 		queue:          queue,
 		consumerID:     consumerID,
@@ -181,10 +181,10 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 		storedMessagesSize,
 		now,
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateActive.Int(),
-		q.StatePaused.Int(),
-		q.StateStopped.Int(),
-		q.StateLocked.Int(),
+		queue.StateActive.Int(),
+		queue.StatePaused.Int(),
+		queue.StateStopped.Int(),
+		queue.StateLocked.Int(),
 		mSchema.MessageFieldStatus.Key(),
 		msg.StatusAcknowledged.Int(),
 		mSchema.MessageFieldAcknowledgedAt.Key(),

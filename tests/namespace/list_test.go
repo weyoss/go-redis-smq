@@ -17,7 +17,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: List namespaces when none exist
@@ -37,10 +37,10 @@ func TestList_Empty(t *testing.T) {
 func TestList_WithQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("test-list-q1", "ns-alpha")
-	q2 := q.MustQueueParamsWithNS("test-list-q2", "ns-beta")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParamsWithNS("test-list-q1", "ns-alpha")
+	q2 := queue.MustQueueParamsWithNS("test-list-q2", "ns-beta")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	namespaces, err := nm.List(ctx)
@@ -94,10 +94,10 @@ func TestList_WithExchanges(t *testing.T) {
 func TestList_AfterDelete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("test-list-del-q", "ns-to-keep")
-	q2 := q.MustQueueParamsWithNS("test-list-del-q2", "ns-to-delete")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParamsWithNS("test-list-del-q", "ns-to-keep")
+	q2 := queue.MustQueueParamsWithNS("test-list-del-q2", "ns-to-delete")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	nm.Delete(ctx, "ns-to-delete")
@@ -124,8 +124,8 @@ func TestList_MixedResources(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	// Queue in one namespace
-	q1 := q.MustQueueParamsWithNS("test-list-mixed-q", "ns-mixed")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := queue.MustQueueParamsWithNS("test-list-mixed-q", "ns-mixed")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Exchange in same namespace
 	ex1 := x.MustExchangeParamsWithNS("test-list-mixed-ex", "ns-mixed", x.TypeDirect)

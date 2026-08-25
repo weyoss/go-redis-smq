@@ -18,7 +18,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type Store struct {
@@ -35,7 +35,7 @@ func (s *Store) Codec() *RateLimitCodec {
 	return s.codec
 }
 
-func (s *Store) Set(ctx context.Context, queueParams *q.QueueParams, rl *q.RateLimitParams) error {
+func (s *Store) Set(ctx context.Context, queueParams *publicqueue.QueueParams, rl *publicqueue.RateLimitParams) error {
 	queueKeys := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -52,7 +52,7 @@ func (s *Store) Set(ctx context.Context, queueParams *q.QueueParams, rl *q.RateL
 		qSchema.QueueFieldRateLimit.Key(),
 		rateLimitJSON,
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateLocked.String(),
+		publicqueue.StateLocked.String(),
 		qSchema.QueueFieldLockID.Key(),
 		"",
 	}
@@ -71,15 +71,15 @@ func (s *Store) Set(ctx context.Context, queueParams *q.QueueParams, rl *q.RateL
 	case "OK":
 		return nil
 	case "QUEUE_LOCKED":
-		return q.ErrLocked
+		return publicqueue.ErrLocked
 	case "QUEUE_NOT_FOUND":
-		return q.ErrNotFound
+		return publicqueue.ErrNotFound
 	default:
 		return fmt.Errorf("set rate limit: unexpected script reply: %s", replyStr)
 	}
 }
 
-func (s *Store) Clear(ctx context.Context, queueParams *q.QueueParams) error {
+func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.QueueParams) error {
 	queueKeys := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -93,7 +93,7 @@ func (s *Store) Clear(ctx context.Context, queueParams *q.QueueParams) error {
 	argv := []interface{}{
 		qSchema.QueueFieldRateLimit.Key(),
 		qSchema.QueueFieldOperationalState.Key(),
-		q.StateLocked.String(),
+		publicqueue.StateLocked.String(),
 		qSchema.QueueFieldLockID.Key(),
 		"",
 	}
@@ -112,15 +112,15 @@ func (s *Store) Clear(ctx context.Context, queueParams *q.QueueParams) error {
 	case "OK":
 		return nil
 	case "QUEUE_LOCKED":
-		return q.ErrLocked
+		return publicqueue.ErrLocked
 	case "QUEUE_NOT_FOUND":
-		return q.ErrNotFound
+		return publicqueue.ErrNotFound
 	default:
 		return fmt.Errorf("clear rate limit: unexpected script reply: %s", replyStr)
 	}
 }
 
-func (s *Store) Get(ctx context.Context, queueParams *q.QueueParams) (*q.RateLimitParams, error) {
+func (s *Store) Get(ctx context.Context, queueParams *publicqueue.QueueParams) (*publicqueue.RateLimitParams, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

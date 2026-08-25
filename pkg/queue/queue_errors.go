@@ -8,10 +8,11 @@
  *
  */
 
-package q
+package queue
 
 import "errors"
 
+// Sentinel errors for queue operations.
 var (
 	// ErrNotFound indicates that the queue does not exist.
 	ErrNotFound = errors.New("queue not found")
@@ -49,6 +50,8 @@ var (
 	// ErrConsumerSetMismatch indicates that the consumer set has changed during an operation.
 	ErrConsumerSetMismatch = errors.New("consumer set mismatch")
 
+	// Param validation errors
+
 	// ErrNameRequired indicates that the queue name is empty.
 	ErrNameRequired = errors.New("queue name is required")
 
@@ -58,11 +61,15 @@ var (
 	// ErrInvalidNamespace indicates that the namespace is invalid.
 	ErrInvalidNamespace = errors.New("invalid namespace")
 
+	// Rate limit errors
+
 	// ErrInvalidRateLimit indicates that the rate limit value is invalid.
 	ErrInvalidRateLimit = errors.New("invalid rate limit value")
 
 	// ErrInvalidRateLimitInterval indicates that the rate limit interval is invalid.
 	ErrInvalidRateLimitInterval = errors.New("invalid rate limit interval (min 1s)")
+
+	// State transition errors
 
 	// ErrInvalidTransition indicates an invalid state transition.
 	ErrInvalidTransition = errors.New("invalid state transition")
@@ -79,6 +86,8 @@ var (
 	// ErrNotLocked indicates that the queue is not locked.
 	ErrNotLocked = errors.New("queue is not locked")
 
+	// Consumer group errors
+
 	// ErrConsumerGroupsNotSupported indicates that consumer groups are not supported on this queue.
 	ErrConsumerGroupsNotSupported = errors.New("consumer groups not supported for this queue")
 
@@ -87,6 +96,8 @@ var (
 
 	// ErrConsumerGroupHasActiveConsumers indicates that the consumer group has active consumers.
 	ErrConsumerGroupHasActiveConsumers = errors.New("consumer group has active consumers")
+
+	// Audit errors
 
 	// ErrAuditDisabled indicates that message audit is disabled.
 	ErrAuditDisabled = errors.New("message audit is disabled for this operation")

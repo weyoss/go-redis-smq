@@ -14,18 +14,18 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Delay + Repeat — first delivery delayed, then repeats
 func TestCombined_DelayAndRepeat(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-combined-delay-repeat")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-combined-delay-repeat")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -45,7 +45,11 @@ func TestCombined_DelayAndRepeat(t *testing.T) {
 	}
 
 	// Should be scheduled (delay takes precedence)
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -55,8 +59,8 @@ func TestCombined_DelayAndRepeat(t *testing.T) {
 func TestCombined_CronAndRepeat(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-combined-cron-repeat")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-combined-cron-repeat")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -76,7 +80,11 @@ func TestCombined_CronAndRepeat(t *testing.T) {
 	}
 
 	// Should be scheduled (CRON)
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -86,8 +94,8 @@ func TestCombined_CronAndRepeat(t *testing.T) {
 func TestCombined_DelayAndCron(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-combined-delay-cron")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-combined-delay-cron")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -106,7 +114,11 @@ func TestCombined_DelayAndCron(t *testing.T) {
 	}
 
 	// Should be scheduled (delay takes precedence)
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -116,8 +128,8 @@ func TestCombined_DelayAndCron(t *testing.T) {
 func TestCombined_AllOptions(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-combined-all")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-combined-all")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -137,7 +149,11 @@ func TestCombined_AllOptions(t *testing.T) {
 		t.Fatalf("expected 1 message ID, got %d", len(ids))
 	}
 
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
 	if props.ScheduledMessagesCount != 1 {
 		t.Errorf("scheduled = %d, want 1", props.ScheduledMessagesCount)
 	}
@@ -147,8 +163,8 @@ func TestCombined_AllOptions(t *testing.T) {
 func TestCombined_ResetAllParams(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-combined-reset-all")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-combined-reset-all")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -172,7 +188,11 @@ func TestCombined_ResetAllParams(t *testing.T) {
 	}
 
 	// Should be pending (immediate), not scheduled
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
 	if props.PendingMessagesCount != 1 {
 		t.Errorf("pending = %d, want 1", props.PendingMessagesCount)
 	}
@@ -185,8 +205,8 @@ func TestCombined_ResetAllParams(t *testing.T) {
 func TestCombined_MixedScheduling(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-combined-mixed")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-combined-mixed")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -216,7 +236,12 @@ func TestCombined_MixedScheduling(t *testing.T) {
 		SetScheduledRepeatPeriod(30*time.Second),
 	)
 
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
+
 	t.Logf("messages: %d, pending: %d, scheduled: %d",
 		props.MessagesCount, props.PendingMessagesCount, props.ScheduledMessagesCount)
 

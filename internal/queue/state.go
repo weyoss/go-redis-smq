@@ -22,21 +22,24 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 const maxHistorySize = 100
 
+// State is the internal implementation of queue state management.
 type State struct{}
 
+// NewState creates a new internal state manager.
 func NewState() *State {
 	return &State{}
 }
 
+// FetchCurrent returns the latest state transition for a queue.
 func (s *State) FetchCurrent(
 	ctx context.Context,
-	params *q.QueueParams,
-) (*q.StateTransition, error) {
+	params *publicqueue.QueueParams,
+) (*publicqueue.StateTransition, error) {
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
 	propsKey := qKey.Properties()
 	historyKey := qKey.StateHistory()
@@ -49,15 +52,15 @@ func (s *State) FetchCurrent(
 			return nil, existsErr
 		}
 		if exists == 0 {
-			return nil, q.ErrNotFound
+			return nil, publicqueue.ErrNotFound
 		}
 		return nil, err
 	}
 
-	current := q.StateActive
+	current := publicqueue.StateActive
 	if raw != "" {
 		if v, parseErr := strconv.Atoi(raw); parseErr == nil {
-			current = q.QueueState(v)
+			current = publicqueue.QueueState(v)
 		}
 	}
 
@@ -66,17 +69,18 @@ func (s *State) FetchCurrent(
 		return newInitialTransition(current), nil
 	}
 
-	var t q.StateTransition
+	var t publicqueue.StateTransition
 	if err := json.Unmarshal([]byte(latestJSON), &t); err != nil {
 		return nil, err
 	}
 	return &t, nil
 }
 
+// FetchHistory returns the full state transition history for a queue.
 func (s *State) FetchHistory(
 	ctx context.Context,
-	params *q.QueueParams,
-) ([]*q.StateTransition, error) {
+	params *publicqueue.QueueParams,
+) ([]*publicqueue.StateTransition, error) {
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
 	client := redisClient.Client()
 
@@ -85,9 +89,9 @@ func (s *State) FetchHistory(
 		return nil, err
 	}
 
-	history := make([]*q.StateTransition, 0, len(rawEntries))
+	history := make([]*publicqueue.StateTransition, 0, len(rawEntries))
 	for _, raw := range rawEntries {
-		var t q.StateTransition
+		var t publicqueue.StateTransition
 		if err := json.Unmarshal([]byte(raw), &t); err != nil {
 			return nil, err
 		}
@@ -96,83 +100,86 @@ func (s *State) FetchHistory(
 	return history, nil
 }
 
-// TransitionTo is the public API – reason is taken from opts.
+// TransitionTo is the public state transition method. It derives the reason
+// from the given options and calls the internal transitionTo.
 func (s *State) TransitionTo(
 	ctx context.Context,
-	params *q.QueueParams,
-	target q.QueueState,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	params *publicqueue.QueueParams,
+	target publicqueue.QueueState,
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	reason := reasonFromOpts(opts)
 	return s.transitionTo(ctx, params, target, reason, opts)
 }
 
-// AcquireLock is the public API.
+// AcquireLock is the public lock acquisition method. It derives the reason
+// and calls the internal acquireLock.
 func (s *State) AcquireLock(
 	ctx context.Context,
-	params *q.QueueParams,
-	owner q.LockOwner,
+	params *publicqueue.QueueParams,
+	owner publicqueue.LockOwner,
 	id string,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	reason := reasonFromOpts(opts)
 	return s.acquireLock(ctx, params, owner, id, reason, opts)
 }
 
-// ReleaseLock is the public API.
+// ReleaseLock is the public lock release method. It derives the reason and
+// calls the internal releaseLock.
 func (s *State) ReleaseLock(
 	ctx context.Context,
-	params *q.QueueParams,
-	owner q.LockOwner,
+	params *publicqueue.QueueParams,
+	owner publicqueue.LockOwner,
 	id string,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	reason := reasonFromOpts(opts)
 	return s.releaseLock(ctx, params, owner, id, reason, opts)
 }
 
-// ── Unexported internal methods that accept an explicit reason ──
-
+// transitionTo performs a state transition with an explicit reason.
 func (s *State) transitionTo(
 	ctx context.Context,
-	params *q.QueueParams,
-	target q.QueueState,
-	reason q.QueueStateTransitionReason,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	params *publicqueue.QueueParams,
+	target publicqueue.QueueState,
+	reason publicqueue.QueueStateTransitionReason,
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	current, err := s.FetchCurrent(ctx, params)
 	if err != nil {
 		return nil, err
 	}
 	if !current.To.CanTransitionTo(target) {
-		return nil, q.ErrInvalidTransition
+		return nil, publicqueue.ErrInvalidTransition
 	}
 	return s.saveState(ctx, params, &current.To, target, reason, opts)
 }
 
+// acquireLock acquires a lock with an explicit reason. Used by purge manager.
 func (s *State) acquireLock(
 	ctx context.Context,
-	params *q.QueueParams,
-	owner q.LockOwner,
+	params *publicqueue.QueueParams,
+	owner publicqueue.LockOwner,
 	id string,
-	reason q.QueueStateTransitionReason,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	reason publicqueue.QueueStateTransitionReason,
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	if id == "" {
-		return nil, q.ErrInvalidLock
+		return nil, publicqueue.ErrInvalidLock
 	}
 	current, err := s.FetchCurrent(ctx, params)
 	if err != nil {
 		return nil, err
 	}
-	if !current.To.CanTransitionTo(q.StateLocked) {
-		return nil, q.ErrInvalidTransition
+	if !current.To.CanTransitionTo(publicqueue.StateLocked) {
+		return nil, publicqueue.ErrInvalidTransition
 	}
 	desc := "Exclusive lock"
 	if opts != nil && opts.Description != nil {
 		desc = *opts.Description
 	}
-	lockOpts := &q.StateTransitionOptions{
+	lockOpts := &publicqueue.StateTransitionOptions{
 		Description: &desc,
 		LockID:      &id,
 		Owner:       &owner,
@@ -180,55 +187,57 @@ func (s *State) acquireLock(
 	if opts != nil && opts.Metadata != nil {
 		lockOpts.Metadata = opts.Metadata
 	}
-	return s.saveState(ctx, params, &current.To, q.StateLocked, reason, lockOpts)
+	return s.saveState(ctx, params, &current.To, publicqueue.StateLocked, reason, lockOpts)
 }
 
+// releaseLock releases a lock with an explicit reason. Used by purge manager.
 func (s *State) releaseLock(
 	ctx context.Context,
-	params *q.QueueParams,
-	owner q.LockOwner,
+	params *publicqueue.QueueParams,
+	owner publicqueue.LockOwner,
 	id string,
-	reason q.QueueStateTransitionReason,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	reason publicqueue.QueueStateTransitionReason,
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	if id == "" {
-		return nil, q.ErrInvalidLock
+		return nil, publicqueue.ErrInvalidLock
 	}
 	current, err := s.FetchCurrent(ctx, params)
 	if err != nil {
 		return nil, err
 	}
-	if current.To != q.StateLocked {
-		return nil, q.ErrNotLocked
+	if current.To != publicqueue.StateLocked {
+		return nil, publicqueue.ErrNotLocked
 	}
 	if current.Owner == nil || *current.Owner != owner {
-		return nil, q.ErrLockOwnerMismatch
+		return nil, publicqueue.ErrLockOwnerMismatch
 	}
 	if current.LockID == nil || *current.LockID != id {
-		return nil, q.ErrLockIDMismatch
+		return nil, publicqueue.ErrLockIDMismatch
 	}
 	desc := "Queue unlocked"
 	if opts != nil && opts.Description != nil {
 		desc = *opts.Description
 	}
-	unlockOpts := &q.StateTransitionOptions{
+	unlockOpts := &publicqueue.StateTransitionOptions{
 		Description: &desc,
 		LockID:      &id,
 	}
 	if opts != nil && opts.Metadata != nil {
 		unlockOpts.Metadata = opts.Metadata
 	}
-	return s.saveState(ctx, params, &current.To, q.StateActive, reason, unlockOpts)
+	return s.saveState(ctx, params, &current.To, publicqueue.StateActive, reason, unlockOpts)
 }
 
+// saveState persists the new state transition and publishes an event.
 func (s *State) saveState(
 	ctx context.Context,
-	params *q.QueueParams,
-	from *q.QueueState,
-	to q.QueueState,
-	reason q.QueueStateTransitionReason,
-	opts *q.StateTransitionOptions,
-) (*q.StateTransition, error) {
+	params *publicqueue.QueueParams,
+	from *publicqueue.QueueState,
+	to publicqueue.QueueState,
+	reason publicqueue.QueueStateTransitionReason,
+	opts *publicqueue.StateTransitionOptions,
+) (*publicqueue.StateTransition, error) {
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
 
 	t := newTransition(from, to, reason, opts)
@@ -249,9 +258,9 @@ func (s *State) saveState(
 		strconv.Itoa(to.Int()),
 		string(tJSON),
 		expectedPrev,
-		strconv.Itoa(q.StateActive.Int()),
+		strconv.Itoa(publicqueue.StateActive.Int()),
 		maxHistorySize,
-		strconv.Itoa(q.StateLocked.Int()),
+		strconv.Itoa(publicqueue.StateLocked.Int()),
 		extractLockID(opts),
 		schema.QueueFieldLastStateChangeAt.Key(),
 		strconv.FormatInt(t.Timestamp, 10),
@@ -273,22 +282,22 @@ func (s *State) saveState(
 	return result, nil
 }
 
-func newInitialTransition(state q.QueueState) *q.StateTransition {
-	return &q.StateTransition{
+func newInitialTransition(state publicqueue.QueueState) *publicqueue.StateTransition {
+	return &publicqueue.StateTransition{
 		From:      nil,
 		To:        state,
-		Reason:    q.QueueStateTransitionReason(q.ReasonSystemInit),
+		Reason:    publicqueue.QueueStateTransitionReason(publicqueue.ReasonSystemInit),
 		Timestamp: time.Now().UnixMilli(),
 	}
 }
 
 func newTransition(
-	from *q.QueueState,
-	to q.QueueState,
-	reason q.QueueStateTransitionReason,
-	opts *q.StateTransitionOptions,
-) *q.StateTransition {
-	t := &q.StateTransition{
+	from *publicqueue.QueueState,
+	to publicqueue.QueueState,
+	reason publicqueue.QueueStateTransitionReason,
+	opts *publicqueue.StateTransitionOptions,
+) *publicqueue.StateTransition {
+	t := &publicqueue.StateTransition{
 		From:      from,
 		To:        to,
 		Reason:    reason,
@@ -314,21 +323,21 @@ func newTransition(
 	return t
 }
 
-func reasonFromOpts(opts *q.StateTransitionOptions) q.QueueStateTransitionReason {
+func reasonFromOpts(opts *publicqueue.StateTransitionOptions) publicqueue.QueueStateTransitionReason {
 	if opts != nil && opts.Reason != nil {
-		return q.QueueStateTransitionReason(*opts.Reason)
+		return publicqueue.QueueStateTransitionReason(*opts.Reason)
 	}
-	return q.QueueStateTransitionReason(q.ReasonManual)
+	return publicqueue.QueueStateTransitionReason(publicqueue.ReasonManual)
 }
 
-func extractLockID(opts *q.StateTransitionOptions) string {
+func extractLockID(opts *publicqueue.StateTransitionOptions) string {
 	if opts != nil && opts.LockID != nil {
 		return *opts.LockID
 	}
 	return ""
 }
 
-func interpretReply(reply interface{}, t *q.StateTransition) (*q.StateTransition, error) {
+func interpretReply(reply interface{}, t *publicqueue.StateTransition) (*publicqueue.StateTransition, error) {
 	s, err := redisClient.String(reply)
 	if err != nil {
 		return nil, err
@@ -337,11 +346,11 @@ func interpretReply(reply interface{}, t *q.StateTransition) (*q.StateTransition
 	case "OK":
 		return t, nil
 	case "QUEUE_NOT_FOUND":
-		return nil, q.ErrNotFound
+		return nil, publicqueue.ErrNotFound
 	case "INVALID_STATE_TRANSITION":
-		return nil, q.ErrInvalidTransition
+		return nil, publicqueue.ErrInvalidTransition
 	case "INVALID_LOCK":
-		return nil, q.ErrInvalidLock
+		return nil, publicqueue.ErrInvalidLock
 	default:
 		return nil, fmt.Errorf("set queue state: unexpected script reply: %s", s)
 	}

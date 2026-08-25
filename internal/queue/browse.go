@@ -17,11 +17,12 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 const defaultBrowseCount = 100
 
+// Browse provides message browsing operations for queues.
 type Browse struct {
 	store *Store
 }
@@ -32,11 +33,11 @@ func NewBrowse(store *Store) *Browse {
 
 func (b *Browse) BrowseMessages(
 	ctx context.Context,
-	queueParams *q.QueueParams,
-	params *q.BrowseParams,
-) (*q.BrowseResult, error) {
+	queueParams *publicqueue.QueueParams,
+	params *publicqueue.BrowseParams,
+) (*publicqueue.BrowseResult, error) {
 	if params == nil {
-		params = &q.BrowseParams{Filter: q.BrowsePublished}
+		params = &publicqueue.BrowseParams{Filter: publicqueue.BrowsePublished}
 	}
 	if params.Count <= 0 {
 		params.Count = defaultBrowseCount
@@ -50,23 +51,23 @@ func (b *Browse) BrowseMessages(
 	qKey := keys.Queue{Namespace: queueParams.NS(), Name: queueParams.Name()}
 
 	switch params.Filter {
-	case q.BrowsePublished:
+	case publicqueue.BrowsePublished:
 		return b.browseList(ctx, qKey.Published(), params)
-	case q.BrowsePending:
+	case publicqueue.BrowsePending:
 		switch props.Type {
-		case q.TypePriority:
+		case publicqueue.TypePriority:
 			return b.browseSortedSet(ctx, qKey.Priority(), params)
 		default:
 			return b.browseList(ctx, qKey.Pending(), params)
 		}
-	case q.BrowseScheduled:
+	case publicqueue.BrowseScheduled:
 		return b.browseSortedSet(ctx, qKey.Scheduled(), params)
-	case q.BrowseAcknowledged:
+	case publicqueue.BrowseAcknowledged:
 		if !config.Get().MessageAudit.AcknowledgedMessages.Enabled {
 			return nil, fmt.Errorf("browse: acknowledged messages audit is disabled")
 		}
 		return b.browseList(ctx, qKey.Acknowledged(), params)
-	case q.BrowseDeadLettered:
+	case publicqueue.BrowseDeadLettered:
 		if !config.Get().MessageAudit.DeadLetteredMessages.Enabled {
 			return nil, fmt.Errorf("browse: dead-lettered messages audit is disabled")
 		}
@@ -79,8 +80,8 @@ func (b *Browse) BrowseMessages(
 func (b *Browse) browseList(
 	ctx context.Context,
 	key string,
-	params *q.BrowseParams,
-) (*q.BrowseResult, error) {
+	params *publicqueue.BrowseParams,
+) (*publicqueue.BrowseResult, error) {
 	total, err := redisClient.Client().LLen(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("browse list: %w", err)
@@ -92,7 +93,7 @@ func (b *Browse) browseList(
 		return nil, fmt.Errorf("browse list: %w", err)
 	}
 
-	return &q.BrowseResult{
+	return &publicqueue.BrowseResult{
 		IDs:     ids,
 		Total:   total,
 		Offset:  params.Offset,
@@ -104,8 +105,8 @@ func (b *Browse) browseList(
 func (b *Browse) browseSortedSet(
 	ctx context.Context,
 	key string,
-	params *q.BrowseParams,
-) (*q.BrowseResult, error) {
+	params *publicqueue.BrowseParams,
+) (*publicqueue.BrowseResult, error) {
 	total, err := redisClient.Client().ZCard(ctx, key).Result()
 	if err != nil {
 		return nil, fmt.Errorf("browse sorted set: %w", err)
@@ -117,7 +118,7 @@ func (b *Browse) browseSortedSet(
 		return nil, fmt.Errorf("browse sorted set: %w", err)
 	}
 
-	return &q.BrowseResult{
+	return &publicqueue.BrowseResult{
 		IDs:     ids,
 		Total:   total,
 		Offset:  params.Offset,

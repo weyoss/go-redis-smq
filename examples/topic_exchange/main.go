@@ -22,7 +22,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
 func main() {
@@ -34,15 +33,18 @@ func main() {
 	}
 	defer redissmq.Shutdown()
 
+	//
+	qm := redissmq.NewQueueManager()
+
 	// Create queues
-	userQueue := q.MustQueueParams(fmt.Sprintf("user-events-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, userQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	userQueue := queue.MustQueueParams(fmt.Sprintf("user-events-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, userQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	orderQueue := q.MustQueueParams(fmt.Sprintf("order-events-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, orderQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	orderQueue := queue.MustQueueParams(fmt.Sprintf("order-events-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, orderQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	allQueue := q.MustQueueParams(fmt.Sprintf("all-events-%d", time.Now().UnixMilli()))
-	queue.Create(ctx, allQueue, q.TypeFIFO, q.DeliveryPointToPoint)
+	allQueue := queue.MustQueueParams(fmt.Sprintf("all-events-%d", time.Now().UnixMilli()))
+	qm.Create(ctx, allQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create topic exchange
 	tx := exchange.NewTopicExchange()
@@ -73,7 +75,7 @@ func main() {
 	}
 	ch := make(chan result, 10)
 
-	startConsumer := func(queue *q.QueueParams, label string) {
+	startConsumer := func(queue *queue.QueueParams, label string) {
 		c := redissmq.NewConsumer()
 		c.Consume(queue, func(ctx context.Context, m *msg.Transferable) error {
 			ch <- result{queue: label, body: m.Body}

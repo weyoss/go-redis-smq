@@ -21,7 +21,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 type consumerInfo struct {
@@ -31,8 +31,8 @@ type consumerInfo struct {
 	CreatedAt   int64    `json:"createdAt"`
 }
 
-func SubscribeConsumer(ctx context.Context, consumerID string, queue *q.QueueParams, groupID string) error {
-	log := logger.New("consumer", "subscribe", consumerID, queue.Name())
+func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.QueueParams, groupID string) error {
+	log := logger.New("consumer", "subscribe", consumerID, q.Name())
 
 	info := consumerInfo{
 		IPAddresses: localIPs(),
@@ -47,7 +47,7 @@ func SubscribeConsumer(ctx context.Context, consumerID string, queue *q.QueuePar
 		"group", groupID,
 	)
 
-	qKey := keys.Queue{Namespace: queue.NS(), Name: queue.Name()}
+	qKey := keys.Queue{Namespace: q.NS(), Name: q.Name()}
 
 	luaKeys := []string{
 		qKey.Properties(),
@@ -62,14 +62,14 @@ func SubscribeConsumer(ctx context.Context, consumerID string, queue *q.QueuePar
 	}
 
 	consumerInfoJSON, _ := json.Marshal(info)
-	queueJSON, _ := json.Marshal(queue)
+	queueJSON, _ := json.Marshal(q)
 
 	argv := []interface{}{
 		consumerID,
 		string(consumerInfoJSON),
 		string(queueJSON),
 		"11",
-		q.StateActive.Int(),
+		queue.StateActive.Int(),
 	}
 
 	reply, err := redisClient.Eval(ctx, scripts.SubscribeConsumer, luaKeys, argv...)
@@ -90,17 +90,17 @@ func SubscribeConsumer(ctx context.Context, consumerID string, queue *q.QueuePar
 		return nil
 	case "QUEUE_NOT_FOUND":
 		log.Warn("queue not found")
-		return fmt.Errorf("queue not found: %s/%s", queue.NS(), queue.Name())
+		return fmt.Errorf("queue not found: %s/%s", q.NS(), q.Name())
 	case "QUEUE_NOT_ACTIVE":
 		log.Warn("queue not active")
-		return fmt.Errorf("queue not active: %s/%s", queue.NS(), queue.Name())
+		return fmt.Errorf("queue not active: %s/%s", q.NS(), q.Name())
 	default:
 		log.Error("unexpected subscribe reply", "reply", replyStr)
 		return fmt.Errorf("unexpected script reply: %s", replyStr)
 	}
 }
 
-func UnsubscribeConsumer(ctx context.Context, consumerID string, queue *q.QueueParams, groupID string) error {
+func UnsubscribeConsumer(ctx context.Context, consumerID string, queue *queue.QueueParams, groupID string) error {
 	log := logger.New("consumer", "unsubscribe", consumerID, queue.Name())
 
 	log.Debug("unsubscribing consumer", "group", groupID)

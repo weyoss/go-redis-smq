@@ -13,19 +13,20 @@ package queue_test
 import (
 	"testing"
 
+	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Save consumer group on PubSub queue
 func TestConsumerGroup_Save(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-save")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-cg-save")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	result, err := queue.SaveConsumerGroup(ctx, params, "email-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	result, err := cgm.Save(ctx, params, "email-service")
 	if err != nil {
 		t.Fatalf("save consumer group: %v", err)
 	}
@@ -38,12 +39,16 @@ func TestConsumerGroup_Save(t *testing.T) {
 func TestConsumerGroup_SaveDuplicate(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-dup")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-cg-dup")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "email-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	_, err := cgm.Save(ctx, params, "email-service")
+	if err != nil {
+		t.Fatalf("save consumer group: %v", err)
+	}
 
-	result, err := queue.SaveConsumerGroup(ctx, params, "email-service")
+	result, err := cgm.Save(ctx, params, "email-service")
 	if err != nil {
 		t.Fatalf("save consumer group: %v", err)
 	}
@@ -56,10 +61,11 @@ func TestConsumerGroup_SaveDuplicate(t *testing.T) {
 func TestConsumerGroup_SaveOnP2P(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-p2p")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-cg-p2p")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := queue.SaveConsumerGroup(ctx, params, "email-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	_, err := cgm.Save(ctx, params, "email-service")
 	if err == nil {
 		t.Fatal("expected error for consumer group on P2P queue")
 	}
@@ -69,13 +75,20 @@ func TestConsumerGroup_SaveOnP2P(t *testing.T) {
 func TestConsumerGroup_List(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-list")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-cg-list")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "email-service")
-	queue.SaveConsumerGroup(ctx, params, "sms-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	_, err := cgm.Save(ctx, params, "email-service")
+	if err != nil {
+		t.Fatalf("save email-service: %v", err)
+	}
+	_, err = cgm.Save(ctx, params, "sms-service")
+	if err != nil {
+		t.Fatalf("save sms-service: %v", err)
+	}
 
-	groups, err := queue.ListConsumerGroups(ctx, params)
+	groups, err := cgm.List(ctx, params)
 	if err != nil {
 		t.Fatalf("list consumer groups: %v", err)
 	}
@@ -99,10 +112,11 @@ func TestConsumerGroup_List(t *testing.T) {
 func TestConsumerGroup_ListEmpty(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-empty")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-cg-empty")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	groups, err := queue.ListConsumerGroups(ctx, params)
+	cgm := redissmq.NewConsumerGroupManager()
+	groups, err := cgm.List(ctx, params)
 	if err != nil {
 		t.Fatalf("list consumer groups: %v", err)
 	}
@@ -115,17 +129,21 @@ func TestConsumerGroup_ListEmpty(t *testing.T) {
 func TestConsumerGroup_Delete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-delete")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-cg-delete")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	queue.SaveConsumerGroup(ctx, params, "email-service")
+	cgm := redissmq.NewConsumerGroupManager()
+	_, err := cgm.Save(ctx, params, "email-service")
+	if err != nil {
+		t.Fatalf("save consumer group: %v", err)
+	}
 
-	err := queue.DeleteConsumerGroup(ctx, params, "email-service")
+	err = cgm.Delete(ctx, params, "email-service")
 	if err != nil {
 		t.Fatalf("delete consumer group: %v", err)
 	}
 
-	groups, _ := queue.ListConsumerGroups(ctx, params)
+	groups, _ := cgm.List(ctx, params)
 	if len(groups) != 0 {
 		t.Fatalf("groups = %d, want 0 after delete", len(groups))
 	}
@@ -135,10 +153,11 @@ func TestConsumerGroup_Delete(t *testing.T) {
 func TestConsumerGroup_DeleteNonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cg-delete-nf")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := publicqueue.MustQueueParams("test-cg-delete-nf")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPubSub)
 
-	err := queue.DeleteConsumerGroup(ctx, params, "nonexistent")
+	cgm := redissmq.NewConsumerGroupManager()
+	err := cgm.Delete(ctx, params, "nonexistent")
 	if err != nil {
 		t.Fatalf("delete non-existent group should succeed: %v", err)
 	}

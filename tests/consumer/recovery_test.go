@@ -25,7 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Consumer crashes while processing – message recovered and consumed by another consumer.
@@ -39,8 +39,8 @@ func TestRecovery_CrashAndRecover(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 120*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-recovery-crash")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-recovery-crash")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {

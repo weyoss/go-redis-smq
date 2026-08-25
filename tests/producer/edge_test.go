@@ -16,15 +16,15 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Produce with all message options set
 func TestEdge_AllOptions(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-all-options")
-	testutil.CreateQueue(t, ctx, params, q.TypePriority, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-all-options")
+	testutil.CreateQueue(t, ctx, params, queue.TypePriority, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -53,8 +53,8 @@ func TestEdge_AllOptions(t *testing.T) {
 func TestEdge_NilBody(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-nil-body")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-nil-body")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -73,8 +73,8 @@ func TestEdge_LongQueueName(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	longName := "this-is-a-very-long-queue-name-that-pushes-the-limits-of-redis-key-length-but-should-still-be-valid"
-	params := q.MustQueueParams(longName)
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams(longName)
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -92,8 +92,8 @@ func TestEdge_LongQueueName(t *testing.T) {
 func TestEdge_UnicodeBody(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-unicode")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-unicode")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -112,8 +112,8 @@ func TestEdge_UnicodeBody(t *testing.T) {
 func TestEdge_ComplexJSONBody(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-complex-json")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-complex-json")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -145,8 +145,8 @@ func TestEdge_ComplexJSONBody(t *testing.T) {
 func TestEdge_RapidProduceShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-rapid-prod")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-rapid-prod")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	for i := 0; i < 10; i++ {
 		prod := testutil.StartProducer(t, ctx)
@@ -175,8 +175,8 @@ func TestEdge_OnlyExchangeNoQueue(t *testing.T) {
 func TestEdge_PriorityOnNonPriorityQueue(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-prio-on-fifo")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-prio-on-fifo")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -191,8 +191,8 @@ func TestEdge_PriorityOnNonPriorityQueue(t *testing.T) {
 func TestEdge_ProduceAfterShutdown(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-edge-after-shutdown")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-edge-after-shutdown")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Shutdown(ctx)

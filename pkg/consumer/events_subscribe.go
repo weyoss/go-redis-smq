@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/weyoss/go-redis-smq/pkg/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 const (
@@ -37,7 +37,7 @@ type LifecyclePayload struct {
 
 type MessagePayload struct {
 	MessageID  string
-	Queue      q.QueueParams
+	Queue      queue.QueueParams
 	ConsumerID string
 }
 
@@ -53,7 +53,7 @@ type MessageDeadLetteredPayload struct {
 
 type MessageReceivedPayload struct {
 	MessageID  string
-	Queue      q.QueueParams
+	Queue      queue.QueueParams
 	ConsumerID string
 }
 
@@ -155,7 +155,7 @@ func SubscribeMessageReceived(handler func(MessageReceivedPayload)) (eventbus.Su
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
@@ -186,7 +186,7 @@ func SubscribeMessageAcknowledged(handler func(MessagePayload)) (eventbus.Subscr
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
@@ -221,7 +221,7 @@ func SubscribeMessageUnacknowledged(handler func(MessageUnacknowledgedPayload)) 
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var consumerID string
 		var cause int
 
@@ -263,7 +263,7 @@ func SubscribeMessageDeadLettered(handler func(MessageDeadLetteredPayload)) (eve
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var consumerID string
 		var cause int
 
@@ -305,7 +305,7 @@ func SubscribeMessageRequeued(handler func(MessagePayload)) (eventbus.Subscripti
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
@@ -340,7 +340,7 @@ func SubscribeMessageDelayed(handler func(MessagePayload)) (eventbus.Subscriptio
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {

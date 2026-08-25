@@ -13,19 +13,19 @@ package queue_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: MustExist succeeds for an existing queue
 func TestValidation_MustExist_Success(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-validation-exists")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-validation-exists")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.MustExist(ctx, params)
+	err := redissmq.NewQueueManager().MustExist(ctx, params)
 	if err != nil {
 		t.Fatalf("must exist: %v", err)
 	}
@@ -35,8 +35,8 @@ func TestValidation_MustExist_Success(t *testing.T) {
 func TestValidation_MustExist_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("nonexistent")
-	err := queue.MustExist(ctx, params)
+	params := publicqueue.MustQueueParams("nonexistent")
+	err := redissmq.NewQueueManager().MustExist(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for non-existent queue")
 	}
@@ -46,10 +46,10 @@ func TestValidation_MustExist_NotFound(t *testing.T) {
 func TestValidation_MustBeOperational_Active(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-validation-active")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-validation-active")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.MustBeOperational(ctx, params)
+	err := redissmq.NewQueueManager().MustBeOperational(ctx, params)
 	if err != nil {
 		t.Fatalf("must be operational: %v", err)
 	}
@@ -59,12 +59,13 @@ func TestValidation_MustBeOperational_Active(t *testing.T) {
 func TestValidation_MustBeOperational_Paused(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-validation-paused")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-validation-paused")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Pause(ctx, params, nil)
+	sm := redissmq.NewStateManager()
+	sm.Pause(ctx, params, nil)
 
-	err := queue.MustBeOperational(ctx, params)
+	err := redissmq.NewQueueManager().MustBeOperational(ctx, params)
 	if err != nil {
 		t.Fatalf("must be operational: %v", err)
 	}
@@ -74,12 +75,12 @@ func TestValidation_MustBeOperational_Paused(t *testing.T) {
 func TestValidation_MustBeOperational_Stopped(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-validation-stopped")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-validation-stopped")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
-	err := queue.MustBeOperational(ctx, params)
+	err := redissmq.NewQueueManager().MustBeOperational(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for stopped queue")
 	}
@@ -89,10 +90,10 @@ func TestValidation_MustBeOperational_Stopped(t *testing.T) {
 func TestValidation_CanEnqueue_Active(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-enqueue-active")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-enqueue-active")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.CanEnqueue(ctx, params)
+	err := redissmq.NewQueueManager().CanEnqueue(ctx, params)
 	if err != nil {
 		t.Fatalf("can enqueue: %v", err)
 	}
@@ -102,12 +103,12 @@ func TestValidation_CanEnqueue_Active(t *testing.T) {
 func TestValidation_CanEnqueue_Paused(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-enqueue-paused")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-enqueue-paused")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Pause(ctx, params, nil)
+	redissmq.NewStateManager().Pause(ctx, params, nil)
 
-	err := queue.CanEnqueue(ctx, params)
+	err := redissmq.NewQueueManager().CanEnqueue(ctx, params)
 	if err != nil {
 		t.Fatalf("can enqueue: %v", err)
 	}
@@ -117,12 +118,12 @@ func TestValidation_CanEnqueue_Paused(t *testing.T) {
 func TestValidation_CanEnqueue_Stopped(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-enqueue-stopped")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-enqueue-stopped")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
-	err := queue.CanEnqueue(ctx, params)
+	err := redissmq.NewQueueManager().CanEnqueue(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for stopped queue")
 	}
@@ -132,10 +133,10 @@ func TestValidation_CanEnqueue_Stopped(t *testing.T) {
 func TestValidation_CanDequeue_Active(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dequeue-active")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-dequeue-active")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	err := queue.CanDequeue(ctx, params)
+	err := redissmq.NewQueueManager().CanDequeue(ctx, params)
 	if err != nil {
 		t.Fatalf("can dequeue: %v", err)
 	}
@@ -145,12 +146,12 @@ func TestValidation_CanDequeue_Active(t *testing.T) {
 func TestValidation_CanDequeue_Paused(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dequeue-paused")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-dequeue-paused")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Pause(ctx, params, nil)
+	redissmq.NewStateManager().Pause(ctx, params, nil)
 
-	err := queue.CanDequeue(ctx, params)
+	err := redissmq.NewQueueManager().CanDequeue(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for paused queue")
 	}
@@ -160,12 +161,12 @@ func TestValidation_CanDequeue_Paused(t *testing.T) {
 func TestValidation_CanDequeue_Stopped(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dequeue-stopped")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-dequeue-stopped")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queue.Stop(ctx, params, nil)
+	redissmq.NewStateManager().Stop(ctx, params, nil)
 
-	err := queue.CanDequeue(ctx, params)
+	err := redissmq.NewQueueManager().CanDequeue(ctx, params)
 	if err == nil {
 		t.Fatal("expected error for stopped queue")
 	}
@@ -175,18 +176,19 @@ func TestValidation_CanDequeue_Stopped(t *testing.T) {
 func TestValidation_NonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("nonexistent")
+	params := publicqueue.MustQueueParams("nonexistent")
+	qm := redissmq.NewQueueManager()
 
-	if err := queue.MustExist(ctx, params); err == nil {
+	if err := qm.MustExist(ctx, params); err == nil {
 		t.Fatal("MustExist: expected error")
 	}
-	if err := queue.MustBeOperational(ctx, params); err == nil {
+	if err := qm.MustBeOperational(ctx, params); err == nil {
 		t.Fatal("MustBeOperational: expected error")
 	}
-	if err := queue.CanEnqueue(ctx, params); err == nil {
+	if err := qm.CanEnqueue(ctx, params); err == nil {
 		t.Fatal("CanEnqueue: expected error")
 	}
-	if err := queue.CanDequeue(ctx, params); err == nil {
+	if err := qm.CanDequeue(ctx, params); err == nil {
 		t.Fatal("CanDequeue: expected error")
 	}
 }

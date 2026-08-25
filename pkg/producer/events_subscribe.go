@@ -15,7 +15,7 @@ import (
 	"fmt"
 
 	"github.com/weyoss/go-redis-smq/pkg/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Public event names.
@@ -34,7 +34,7 @@ type LifecyclePayload struct {
 
 type MessagePublishedPayload struct {
 	MessageID  string
-	Queue      q.QueueParams
+	Queue      queue.QueueParams
 	ProducerID string
 }
 
@@ -136,7 +136,7 @@ func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (eventbus.
 		}
 
 		var messageID string
-		var queue q.QueueParams
+		var queue queue.QueueParams
 		var producerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {

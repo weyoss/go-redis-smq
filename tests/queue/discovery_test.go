@@ -13,17 +13,17 @@ package queue_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: List all queues when none exist
 func TestDiscovery_ListAll_Empty(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := queue.ListAll(ctx)
+	_, err := redissmq.NewQueueManager().ListAll(ctx)
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
@@ -33,12 +33,12 @@ func TestDiscovery_ListAll_Empty(t *testing.T) {
 func TestDiscovery_ListAll(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ns1 := q.MustQueueParamsWithNS("discovery-a", "ns1")
-	ns2 := q.MustQueueParamsWithNS("discovery-b", "ns2")
-	testutil.CreateQueue(t, ctx, ns1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, ns2, q.TypeFIFO, q.DeliveryPointToPoint)
+	ns1 := publicqueue.MustQueueParamsWithNS("discovery-a", "ns1")
+	ns2 := publicqueue.MustQueueParamsWithNS("discovery-b", "ns2")
+	testutil.CreateQueue(t, ctx, ns1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, ns2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	all, err := queue.ListAll(ctx)
+	all, err := redissmq.NewQueueManager().ListAll(ctx)
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
@@ -59,10 +59,10 @@ func TestDiscovery_ListAll(t *testing.T) {
 func TestDiscovery_ListByNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ns := q.MustQueueParamsWithNS("discovery-c", "test-ns")
-	testutil.CreateQueue(t, ctx, ns, q.TypeFIFO, q.DeliveryPointToPoint)
+	ns := publicqueue.MustQueueParamsWithNS("discovery-c", "test-ns")
+	testutil.CreateQueue(t, ctx, ns, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	queues, err := queue.ListByNamespace(ctx, "test-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "test-ns")
 	if err != nil {
 		t.Fatalf("list by namespace: %v", err)
 	}
@@ -83,7 +83,7 @@ func TestDiscovery_ListByNamespace(t *testing.T) {
 func TestDiscovery_ListByNamespace_Empty(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	queues, err := queue.ListByNamespace(ctx, "empty-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "empty-ns")
 	if err != nil {
 		t.Fatalf("list by namespace: %v", err)
 	}
@@ -96,10 +96,10 @@ func TestDiscovery_ListByNamespace_Empty(t *testing.T) {
 func TestDiscovery_ListNamespaces(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("discovery-d", "alpha")
-	q2 := q.MustQueueParamsWithNS("discovery-e", "beta")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("discovery-d", "alpha")
+	q2 := publicqueue.MustQueueParamsWithNS("discovery-e", "beta")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	namespaces, err := nm.List(ctx)
@@ -128,10 +128,10 @@ func TestDiscovery_ListNamespaces(t *testing.T) {
 func TestDiscovery_DeleteNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := q.MustQueueParamsWithNS("discovery-f", "deletable-ns")
-	q2 := q.MustQueueParamsWithNS("discovery-g", "deletable-ns")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParamsWithNS("discovery-f", "deletable-ns")
+	q2 := publicqueue.MustQueueParamsWithNS("discovery-g", "deletable-ns")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	err := nm.Delete(ctx, "deletable-ns")
@@ -139,7 +139,7 @@ func TestDiscovery_DeleteNamespace(t *testing.T) {
 		t.Fatalf("delete namespace: %v", err)
 	}
 
-	queues, err := queue.ListByNamespace(ctx, "deletable-ns")
+	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "deletable-ns")
 	if err != nil {
 		t.Fatalf("list by namespace: %v", err)
 	}

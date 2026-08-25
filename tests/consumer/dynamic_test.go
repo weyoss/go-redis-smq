@@ -19,17 +19,17 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Add handler to a running consumer
 func TestDynamic_AddHandlerAfterRun(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params1 := q.MustQueueParams("test-dynamic-add-1")
-	params2 := q.MustQueueParams("test-dynamic-add-2")
-	testutil.CreateQueue(t, ctx, params1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, params2, q.TypeFIFO, q.DeliveryPointToPoint)
+	params1 := queue.MustQueueParams("test-dynamic-add-1")
+	params2 := queue.MustQueueParams("test-dynamic-add-2")
+	testutil.CreateQueue(t, ctx, params1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, params2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg1").SetQueue(params1))
@@ -73,8 +73,8 @@ func TestDynamic_AddHandlerAfterRun(t *testing.T) {
 func TestDynamic_ReplaceHandler(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dynamic-replace")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-dynamic-replace")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -113,8 +113,8 @@ func TestDynamic_ReplaceHandler(t *testing.T) {
 func TestDynamic_RemoveHandler(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dynamic-remove")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-dynamic-remove")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -151,8 +151,8 @@ func TestDynamic_RemoveHandler(t *testing.T) {
 func TestDynamic_NoHandlersStaysRunning(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-dynamic-no-handlers")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParams("test-dynamic-no-handlers")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {

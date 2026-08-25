@@ -17,15 +17,15 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Exists returns true for namespace with queues
 func TestExists_WithQueues(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParamsWithNS("test-exists-q", "existing-ns")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParamsWithNS("test-exists-q", "existing-ns")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	exists, err := nm.Exists(ctx, "existing-ns")
@@ -73,8 +73,8 @@ func TestExists_NotFound(t *testing.T) {
 func TestExists_AfterDelete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParamsWithNS("test-exists-del-q", "temp-ns")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue.MustQueueParamsWithNS("test-exists-del-q", "temp-ns")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	nm := namespace.NewManager()
 	nm.Delete(ctx, "temp-ns")

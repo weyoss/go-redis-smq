@@ -19,8 +19,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Full lifecycle — enqueue, process, complete, verify empty
@@ -28,20 +27,22 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-full-lifecycle")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-full-lifecycle")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 25; i++ {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 	}
 
-	props, _ := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+
+	props, _ := qm.Properties(ctx, params)
 	if props.PendingMessagesCount != 25 {
 		t.Fatalf("pending = %d, want 25", props.PendingMessagesCount)
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	t.Logf("job created: %s", jobID)
 
 	deadline := time.After(15 * time.Second)
@@ -50,17 +51,18 @@ func TestComplex_FullLifecycle(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, _ := queue.GetPurgeJob(ctx, jobID)
-			if job.Status == q.PurgeJobCompleted {
+			job, _ := qm.GetPurgeJob(ctx, jobID)
+			if job.Status == publicqueue.PurgeJobCompleted {
 				if job.Meta.Purged != 25 {
 					t.Errorf("purged = %d, want 25", job.Meta.Purged)
 				}
-				props, _ := queue.Properties(ctx, params)
+				props, _ := qm.Properties(ctx, params)
 				if props.PendingMessagesCount != 0 {
 					t.Errorf("pending = %d, want 0", props.PendingMessagesCount)
 				}
-				transition, _ := queue.Current(ctx, params)
-				if transition.To != q.StateActive {
+				sm := redissmq.NewStateManager()
+				transition, _ := sm.Current(ctx, params)
+				if transition.To != publicqueue.StateActive {
 					t.Errorf("queue state = %s, want ACTIVE", transition.To.String())
 				}
 				return
@@ -75,10 +77,10 @@ func TestComplex_MultipleJobsDifferentQueues(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	q1 := q.MustQueueParams("test-complex-multi-q1")
-	q2 := q.MustQueueParams("test-complex-multi-q2")
-	testutil.CreateQueue(t, ctx, q1, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, q.TypeFIFO, q.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParams("test-complex-multi-q1")
+	q2 := publicqueue.MustQueueParams("test-complex-multi-q2")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
@@ -86,8 +88,10 @@ func TestComplex_MultipleJobsDifferentQueues(t *testing.T) {
 		prod.Produce(ctx, msg.New().SetBody("q2").SetQueue(q2))
 	}
 
-	jobID1, _ := queue.PurgeQueue(ctx, q1, q.BrowsePending)
-	jobID2, _ := queue.PurgeQueue(ctx, q2, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+
+	jobID1, _ := qm.PurgeQueue(ctx, q1, publicqueue.BrowsePending)
+	jobID2, _ := qm.PurgeQueue(ctx, q2, publicqueue.BrowsePending)
 
 	deadline := time.After(20 * time.Second)
 	for {
@@ -95,10 +99,10 @@ func TestComplex_MultipleJobsDifferentQueues(t *testing.T) {
 		case <-deadline:
 			t.Fatalf("timeout: jobs not completed")
 		default:
-			job1, _ := queue.GetPurgeJob(ctx, jobID1)
-			job2, _ := queue.GetPurgeJob(ctx, jobID2)
+			job1, _ := qm.GetPurgeJob(ctx, jobID1)
+			job2, _ := qm.GetPurgeJob(ctx, jobID2)
 
-			if job1.Status == q.PurgeJobCompleted && job2.Status == q.PurgeJobCompleted {
+			if job1.Status == publicqueue.PurgeJobCompleted && job2.Status == publicqueue.PurgeJobCompleted {
 				if job1.Meta.Purged != 10 {
 					t.Errorf("job1 purged = %d, want 10", job1.Meta.Purged)
 				}
@@ -117,15 +121,16 @@ func TestComplex_PurgeWhileProducing(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-purge-while-prod")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-purge-while-prod")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 20; i++ {
 		prod.Produce(ctx, msg.New().SetBody("initial").SetQueue(params))
 	}
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	var produced atomic.Int64
 	go func() {
@@ -144,12 +149,12 @@ func TestComplex_PurgeWhileProducing(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, _ := queue.GetPurgeJob(ctx, jobID)
-			if job.Status == q.PurgeJobCompleted {
+			job, _ := qm.GetPurgeJob(ctx, jobID)
+			if job.Status == publicqueue.PurgeJobCompleted {
 				t.Logf("purged: %d, produced during purge: %d", job.Meta.Purged, produced.Load())
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -162,8 +167,8 @@ func TestComplex_PurgeWithConsumerActive(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-purge-with-cons")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-purge-with-cons")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 15; i++ {
@@ -181,7 +186,8 @@ func TestComplex_PurgeWithConsumerActive(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	jobID, _ := queue.PurgeQueue(ctx, params, q.BrowsePending)
+	qm := redissmq.NewQueueManager()
+	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	deadline := time.After(15 * time.Second)
 	for {
@@ -189,12 +195,12 @@ func TestComplex_PurgeWithConsumerActive(t *testing.T) {
 		case <-deadline:
 			t.Fatal("timeout waiting for job completion")
 		default:
-			job, _ := queue.GetPurgeJob(ctx, jobID)
-			if job.Status == q.PurgeJobCompleted {
+			job, _ := qm.GetPurgeJob(ctx, jobID)
+			if job.Status == publicqueue.PurgeJobCompleted {
 				t.Logf("purged: %d, consumed before purge: %d", job.Meta.Purged, consumed.Load())
 				return
 			}
-			if job.Status == q.PurgeJobFailed {
+			if job.Status == publicqueue.PurgeJobFailed {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
@@ -206,18 +212,20 @@ func TestComplex_PurgeWithConsumerActive(t *testing.T) {
 func TestComplex_RapidEnqueueCancel(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-rapid-enq-cancel")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-rapid-enq-cancel")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
+	qm := redissmq.NewQueueManager()
+
 	for i := 0; i < 5; i++ {
-		jobID, err := queue.PurgeQueue(ctx, params, q.BrowsePending)
+		jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 		if err != nil {
 			t.Fatalf("cycle %d enqueue: %v", i, err)
 		}
-		err = queue.CancelPurgeJob(ctx, params, jobID)
+		err = qm.CancelPurgeJob(ctx, params, jobID)
 		if err != nil {
 			t.Logf("cycle %d cancel: %v", i, err)
 		}

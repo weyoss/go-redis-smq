@@ -19,16 +19,15 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	queue2 "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Cancel stops consuming from a queue
 func TestCancel_StopConsuming(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-stop")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-cancel-stop")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("before-cancel").SetQueue(params))
@@ -67,11 +66,11 @@ func TestCancel_StopConsuming(t *testing.T) {
 func TestCancel_StopConsumingWithGroup(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-group")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPubSub)
+	params := queue2.MustQueueParams("test-cancel-group")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPubSub)
 
 	// Create consumer group
-	queue.SaveConsumerGroup(ctx, params, "workers")
+	redissmq.NewConsumerGroupManager().Save(ctx, params, "workers")
 
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
@@ -108,8 +107,8 @@ func TestCancel_StopConsumingWithGroup(t *testing.T) {
 func TestCancel_Idempotent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-idempotent")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-cancel-idempotent")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
@@ -129,8 +128,8 @@ func TestCancel_Idempotent(t *testing.T) {
 func TestCancel_ConsumerStillRunning(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-cancel-still-running")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := queue2.MustQueueParams("test-cancel-still-running")
+	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
 
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {

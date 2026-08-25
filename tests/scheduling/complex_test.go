@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2026
- * Weyoss <weyoss@outlook.com>
- * https://github.com/weyoss
- *
- * This source code is licensed under the MIT license found in the LICENSE file
- * in the root directory of this source tree.
- *
- */
-
 package scheduling_test
 
 import (
@@ -19,8 +9,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Multiple scheduled messages with different delays consumed in order
@@ -28,8 +17,8 @@ func TestComplex_DifferentDelays(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-different-delays")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-different-delays")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -71,8 +60,8 @@ func TestComplex_DifferentDelays(t *testing.T) {
 func TestComplex_HighVolumeScheduled(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-high-volume-sched")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-high-volume-sched")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -85,7 +74,8 @@ func TestComplex_HighVolumeScheduled(t *testing.T) {
 		)
 	}
 
-	props, err := queue.Properties(ctx, params)
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
@@ -102,8 +92,8 @@ func TestComplex_ProducerConsumerScheduled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-prod-cons-sched")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-prod-cons-sched")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
@@ -144,8 +134,8 @@ func TestComplex_MixedImmediateAndScheduled(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	params := q.MustQueueParams("test-complex-mixed-immediate")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-mixed-immediate")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -180,8 +170,8 @@ func TestComplex_MixedImmediateAndScheduled(t *testing.T) {
 func TestComplex_BrowseScheduledPagination(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := q.MustQueueParams("test-complex-browse-pag")
-	testutil.CreateQueue(t, ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-browse-pag")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -193,15 +183,16 @@ func TestComplex_BrowseScheduledPagination(t *testing.T) {
 		)
 	}
 
-	// Browse with pagination
+	qm := redissmq.NewQueueManager()
+
 	offset := int64(0)
 	pageSize := int64(10)
 	totalIDs := 0
 	page := 1
 
 	for {
-		result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-			Filter: q.BrowseScheduled,
+		result, err := qm.BrowseMessages(ctx, params, &publicqueue.BrowseParams{
+			Filter: publicqueue.BrowseScheduled,
 			Offset: offset,
 			Count:  pageSize,
 		})
@@ -227,13 +218,13 @@ func TestComplex_BrowseScheduledPagination(t *testing.T) {
 func TestComplex_SchedulingMultipleQueueTypes(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	fifoQ := q.MustQueueParams("test-complex-sched-fifo")
-	lifoQ := q.MustQueueParams("test-complex-sched-lifo")
-	prioQ := q.MustQueueParams("test-complex-sched-prio")
+	fifoQ := publicqueue.MustQueueParams("test-complex-sched-fifo")
+	lifoQ := publicqueue.MustQueueParams("test-complex-sched-lifo")
+	prioQ := publicqueue.MustQueueParams("test-complex-sched-prio")
 
-	testutil.CreateQueue(t, ctx, fifoQ, q.TypeFIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, lifoQ, q.TypeLIFO, q.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, prioQ, q.TypePriority, q.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, fifoQ, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, lifoQ, publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, prioQ, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -247,8 +238,12 @@ func TestComplex_SchedulingMultipleQueueTypes(t *testing.T) {
 	prod.Produce(ctx, msg.New().SetBody("prio").SetQueue(prioQ).SetScheduledDelay(30*time.Minute).SetPriority(msg.PriorityHigh))
 
 	// Verify all queues have scheduled messages
-	for _, qp := range []*q.QueueParams{fifoQ, lifoQ, prioQ} {
-		props, _ := queue.Properties(ctx, qp)
+	qm := redissmq.NewQueueManager()
+	for _, qp := range []*publicqueue.QueueParams{fifoQ, lifoQ, prioQ} {
+		props, err := qm.Properties(ctx, qp)
+		if err != nil {
+			t.Fatalf("properties %s: %v", qp.Name(), err)
+		}
 		if props.ScheduledMessagesCount != 1 {
 			t.Errorf("%s: scheduled = %d, want 1", qp.Name(), props.ScheduledMessagesCount)
 		}

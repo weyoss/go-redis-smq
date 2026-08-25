@@ -14,7 +14,7 @@ import (
 	"context"
 
 	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Handler is the function signature for processing a message.
@@ -29,17 +29,17 @@ type Consumer interface {
 	IsRunning() bool
 
 	// Consume registers a handler for a queue.
-	Consume(queue *q.QueueParams, handler Handler) Consumer
+	Consume(queue *queue.QueueParams, handler Handler) Consumer
 
 	// ConsumeWithGroup registers a handler for a Pub/Sub queue and consumer
 	// group.
-	ConsumeWithGroup(queue *q.QueueParams, groupID string, handler Handler) Consumer
+	ConsumeWithGroup(queue *queue.QueueParams, groupID string, handler Handler) Consumer
 
 	// Cancel removes a handler from a queue.
-	Cancel(queue *q.QueueParams) Consumer
+	Cancel(queue *queue.QueueParams) Consumer
 
 	// CancelWithGroup removes a handler from a consumer group.
-	CancelWithGroup(queue *q.QueueParams, groupID string) Consumer
+	CancelWithGroup(queue *queue.QueueParams, groupID string) Consumer
 
 	// Run starts the consumer and all registered handlers.
 	Run(ctx context.Context) error
@@ -48,5 +48,5 @@ type Consumer interface {
 	Shutdown()
 
 	// Queues returns the queue parameters of all registered handlers.
-	Queues() []*q.QueueParams
+	Queues() []*queue.QueueParams
 }
