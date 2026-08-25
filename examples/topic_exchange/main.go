@@ -19,7 +19,6 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -47,8 +46,8 @@ func main() {
 	qm.Create(ctx, allQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create topic exchange
-	tx := exchange.NewTopicExchange()
-	exchangeParams := x.MustExchangeParams(fmt.Sprintf("app-events-%d", time.Now().UnixMilli()), x.TypeTopic)
+	tx := redissmq.NewTopicExchange()
+	exchangeParams := exchange.MustExchangeParams(fmt.Sprintf("app-events-%d", time.Now().UnixMilli()), exchange.TypeTopic)
 
 	// Bind queues with patterns:
 	// "user.*" matches user.created, user.updated, user.deleted

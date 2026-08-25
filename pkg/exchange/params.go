@@ -8,15 +8,15 @@
  *
  */
 
-package x
+package exchange
 
 import (
 	"encoding/json"
 	"errors"
 	"fmt"
 
-	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/pkg/config"
+	"github.com/weyoss/go-redis-smq/pkg/redis"
 )
 
 var (
@@ -68,12 +68,12 @@ func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*Exchang
 		namespace = config.Get().Namespace
 	}
 
-	validName, err := keys.ValidateKey(name)
+	validName, err := redis.ValidateKey(name)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err.Error())
 	}
 
-	validNS, err := keys.ValidateKey(namespace)
+	validNS, err := redis.ValidateKey(namespace)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err.Error())
 	}

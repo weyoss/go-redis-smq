@@ -17,7 +17,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 )
 
@@ -272,11 +272,11 @@ func rebuildMessage(params *publicmessage.Params) *publicmessage.ProducibleMessa
 	msg.SetScheduledRepeat(params.ScheduledRepeat)
 	if params.Exchange != nil {
 		switch params.Exchange.Type() {
-		case x.TypeDirect:
+		case exchange.TypeDirect:
 			msg.SetDirectExchange(params.Exchange)
-		case x.TypeFanout:
+		case exchange.TypeFanout:
 			msg.SetFanoutExchange(params.Exchange)
-		case x.TypeTopic:
+		case exchange.TypeTopic:
 			msg.SetTopicExchange(params.Exchange)
 		}
 	}

@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -120,8 +120,8 @@ func BenchmarkProducer_ViaExchange(b *testing.B) {
 	params := queue.MustQueueParams(fmt.Sprintf("bench-producer-ex-q-%d", time.Now().UnixNano()))
 	testutil.CreateQueue(b, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams(fmt.Sprintf("bench-ex-%d", time.Now().UnixNano()), x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams(fmt.Sprintf("bench-ex-%d", time.Now().UnixNano()), exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	if err := dx.BindQueue(ctx, params, exchangeParams, "bench.key"); err != nil {
 		b.Fatalf("bind: %v", err)
 	}

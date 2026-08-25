@@ -8,7 +8,7 @@
  *
  */
 
-package x
+package exchange
 
 // ExchangePolicy restricts which queue types can bind to an exchange.
 // Integer values are persisted in Redis and must not be changed.

@@ -19,7 +19,7 @@ import (
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -126,7 +126,7 @@ func (m *Manager) ListQueues(ctx context.Context, name string) ([]queue.QueuePar
 }
 
 // ListExchanges returns all exchanges in a namespace.
-func (m *Manager) ListExchanges(ctx context.Context, name string) ([]x.ExchangeParams, error) {
+func (m *Manager) ListExchanges(ctx context.Context, name string) ([]exchange.ExchangeParams, error) {
 	validName, err := validate(name)
 	if err != nil {
 		return nil, err

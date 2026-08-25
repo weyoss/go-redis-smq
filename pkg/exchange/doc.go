@@ -11,11 +11,25 @@
 // Package exchange provides the public API for managing RedisSMQ exchanges.
 //
 // Exchanges route messages from producers to one or more queues. This package
-// includes managers for common operations and type-specific helpers for
-// direct, topic, and fanout exchanges.
+// defines the exchange types, parameters, policies, errors, and the public
+// interfaces for direct, topic, and fanout exchanges.
+//
+// The concrete implementations are provided by the root redissmq package and
+// are created using factory functions such as redissmq.NewDirectExchange().
 //
 // Example:
 //
-//	params := x.MustExchangeParams("orders", x.TypeDirect)
-//	err := exchange.Create(ctx, params, x.PolicyStandard)
+//	dx := redissmq.NewDirectExchange()
+//	params := exchange.MustExchangeParams("orders", exchange.TypeDirect)
+//	err := dx.Create(ctx, params, exchange.PolicyStandard)
+//	err = dx.BindQueue(ctx, queueParams, params, "order.created")
+//
+// The package includes:
+//
+//   - ExchangeType: the type of routing (direct, fanout, topic)
+//   - ExchangeParams: identifies an exchange and its type
+//   - ExchangeProps: stored configuration of an exchange
+//   - ExchangePolicy: restricts which queue types can bind
+//   - Errors: typed errors for common failures
+//   - Interfaces: Manager, DirectExchange, FanoutExchange, TopicExchange
 package exchange

@@ -13,8 +13,8 @@ package message
 import (
 	"time"
 
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 )
 
 // CloneMessage creates a deep copy of a MessageEnvelope for requeue operations.
@@ -38,7 +38,7 @@ func cloneMessage(source *Envelope, preserveState bool) *Envelope {
 	producibleMsg := source.ProducibleMessage()
 
 	// Create new message with same properties
-	newMsg := publicmessage.New()
+	newMsg := message.New()
 	newMsg.SetTTL(producibleMsg.TTL())
 	newMsg.SetRetryThreshold(producibleMsg.RetryThreshold())
 	newMsg.SetRetryDelay(producibleMsg.RetryDelay())
@@ -65,11 +65,11 @@ func cloneMessage(source *Envelope, preserveState bool) *Envelope {
 	// Copy exchange configuration
 	if ex := producibleMsg.Exchange(); ex != nil {
 		switch ex.Type() {
-		case x.TypeDirect:
+		case exchange.TypeDirect:
 			newMsg.SetDirectExchange(ex)
-		case x.TypeFanout:
+		case exchange.TypeFanout:
 			newMsg.SetFanoutExchange(ex)
-		case x.TypeTopic:
+		case exchange.TypeTopic:
 			newMsg.SetTopicExchange(ex)
 		}
 	}
@@ -122,7 +122,7 @@ func cloneMessage(source *Envelope, preserveState bool) *Envelope {
 		envelope.SetStatus(source.Status())
 	} else {
 		// Fresh state for requeue
-		envelope.SetStatus(publicmessage.StatusNew)
+		envelope.SetStatus(message.StatusNew)
 
 		// Mark the requeue parent relationship
 		state := envelope.MessageState()

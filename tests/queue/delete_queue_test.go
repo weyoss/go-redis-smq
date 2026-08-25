@@ -18,7 +18,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -71,8 +70,8 @@ func TestDeleteQueue_WithBoundExchange(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Create and bind an exchange
-	exchangeParams := x.MustExchangeParams("test-exchange", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-exchange", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, params, exchangeParams, "test.key")
 
 	err := redissmq.NewQueueManager().Delete(ctx, params)

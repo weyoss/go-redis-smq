@@ -13,9 +13,9 @@ package exchange_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -27,13 +27,13 @@ func TestError_TypeMismatch(t *testing.T) {
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create as topic
-	topicParams := x.MustExchangeParams("test-error-type-mismatch-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange()
-	tx.Create(ctx, topicParams, x.PolicyStandard)
+	topicParams := exchange.MustExchangeParams("test-error-type-mismatch-ex", exchange.TypeTopic)
+	tx := redissmq.NewTopicExchange()
+	tx.Create(ctx, topicParams, exchange.PolicyStandard)
 
 	// Try to use direct exchange methods on it
-	directParams := x.MustExchangeParams("test-error-type-mismatch-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	directParams := exchange.MustExchangeParams("test-error-type-mismatch-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	_, err := dx.MatchQueues(ctx, directParams, "test.key")
 	if err == nil {
@@ -46,8 +46,8 @@ func TestError_TypeMismatch(t *testing.T) {
 func TestError_ExchangeNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("nonexistent", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	params := exchange.MustExchangeParams("nonexistent", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	_, err := dx.MatchQueues(ctx, params, "test.key")
 	if err == nil {
@@ -62,9 +62,9 @@ func TestError_UnbindNotBound(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-error-unbind-not-bound-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-error-unbind-not-bound-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-error-unbind-not-bound-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	err := dx.UnbindQueue(ctx, queueParams, exchangeParams, "never.bound")
 	if err == nil {
@@ -76,15 +76,15 @@ func TestError_UnbindNotBound(t *testing.T) {
 func TestError_DuplicateExchange(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-error-dup-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	params := exchange.MustExchangeParams("test-error-dup-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
-	err := dx.Create(ctx, params, x.PolicyStandard)
+	err := dx.Create(ctx, params, exchange.PolicyStandard)
 	if err != nil {
 		t.Fatalf("first create: %v", err)
 	}
 
-	err = dx.Create(ctx, params, x.PolicyStandard)
+	err = dx.Create(ctx, params, exchange.PolicyStandard)
 	if err == nil {
 		t.Fatal("expected error for duplicate exchange")
 	}
@@ -95,11 +95,11 @@ func TestError_CrossNamespaceBinding(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	queueParams := queue.MustQueueParamsWithNS("test-error-cross-ns-q", "ns1")
-	exchangeParams := x.MustExchangeParamsWithNS("test-error-cross-ns-ex", "ns2", x.TypeDirect)
+	exchangeParams := exchange.MustExchangeParamsWithNS("test-error-cross-ns-ex", "ns2", exchange.TypeDirect)
 
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	dx := exchange.NewDirectExchange()
+	dx := redissmq.NewDirectExchange()
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err == nil {
 		t.Fatal("expected error: namespace mismatch")
@@ -110,8 +110,8 @@ func TestError_CrossNamespaceBinding(t *testing.T) {
 func TestError_DeleteNonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("nonexistent-delete", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	params := exchange.MustExchangeParams("nonexistent-delete", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	err := dx.Delete(ctx, params)
 	if err == nil {
@@ -126,8 +126,8 @@ func TestError_EmptyRoutingKey(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-error-empty-rk-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-error-empty-rk-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-error-empty-rk-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "")
 	if err == nil {
@@ -137,12 +137,12 @@ func TestError_EmptyRoutingKey(t *testing.T) {
 
 // Scenario: Invalid exchange name
 func TestError_InvalidExchangeName(t *testing.T) {
-	_, err := x.NewExchangeParams("", x.TypeDirect)
+	_, err := exchange.NewExchangeParams("", exchange.TypeDirect)
 	if err == nil {
 		t.Fatal("expected error for empty exchange name")
 	}
 
-	_, err = x.NewExchangeParams("3invalid", x.TypeDirect)
+	_, err = exchange.NewExchangeParams("3invalid", exchange.TypeDirect)
 	if err == nil {
 		t.Fatal("expected error: name starts with number")
 	}

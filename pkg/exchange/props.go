@@ -8,7 +8,7 @@
  *
  */
 
-package x
+package exchange
 
 // ExchangeProps holds the stored configuration of an exchange.
 type ExchangeProps struct {

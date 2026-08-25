@@ -17,7 +17,7 @@ import (
 
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	x "github.com/weyoss/go-redis-smq/pkg/exchange"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 

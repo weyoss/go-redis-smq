@@ -20,7 +20,7 @@ import (
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -40,12 +40,25 @@ func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectS
 	}
 }
 
+// Create creates a direct exchange with the given queue policy.
+// Returns ErrTypeMismatch if params.Type() is not TypeDirect.
+func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+	if params.Type() != pubexchange.TypeDirect {
+		return pubexchange.ErrTypeMismatch
+	}
+	return ds.store.Save(ctx, params, policy)
+}
+
 func (ds *DirectStore) BindQueue(
 	ctx context.Context,
 	queueParams *queue.QueueParams,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) error {
+	if queueParams.NS() != exchangeParams.Namespace() {
+		return pubexchange.ErrNamespaceMismatch
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -86,7 +99,7 @@ func (ds *DirectStore) BindQueue(
 			return err
 		}
 		if isMember {
-			return x.ErrQueueAlreadyBound
+			return pubexchange.ErrQueueAlreadyBound
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -111,9 +124,13 @@ func (ds *DirectStore) BindQueue(
 func (ds *DirectStore) UnbindQueue(
 	ctx context.Context,
 	queueParams *queue.QueueParams,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) error {
+	if queueParams.NS() != exchangeParams.Namespace() {
+		return pubexchange.ErrNamespaceMismatch
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -150,7 +167,7 @@ func (ds *DirectStore) UnbindQueue(
 			return err
 		}
 		if !isMember {
-			return x.ErrQueueNotBound
+			return pubexchange.ErrQueueNotBound
 		}
 
 		allKeys, err := tx.SMembers(ctx, exKey.RoutingKeys()).Result()
@@ -198,7 +215,7 @@ func (ds *DirectStore) UnbindQueue(
 
 func (ds *DirectStore) MatchQueues(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) ([]queue.QueueParams, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
@@ -210,8 +227,12 @@ func (ds *DirectStore) MatchQueues(
 
 func (ds *DirectStore) RoutingKeys(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) ([]string, error) {
+	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
+		return nil, err
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -222,9 +243,13 @@ func (ds *DirectStore) RoutingKeys(
 
 func (ds *DirectStore) BoundQueues(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) ([]queue.QueueParams, error) {
+	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
+		return nil, err
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -242,7 +267,7 @@ func (ds *DirectStore) BoundQueues(
 
 func (ds *DirectStore) Bindings(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) (map[string][]queue.QueueParams, error) {
 	routingKeys, err := ds.RoutingKeys(ctx, exchangeParams)
 	if err != nil {
@@ -260,7 +285,7 @@ func (ds *DirectStore) Bindings(
 	return bindings, nil
 }
 
-func (ds *DirectStore) Delete(ctx context.Context, exchangeParams *x.ExchangeParams) error {
+func (ds *DirectStore) Delete(ctx context.Context, exchangeParams *pubexchange.ExchangeParams) error {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -298,7 +323,7 @@ func (ds *DirectStore) Delete(ctx context.Context, exchangeParams *x.ExchangePar
 				return err
 			}
 			if count > 0 {
-				return x.ErrHasBoundQueues
+				return pubexchange.ErrHasBoundQueues
 			}
 		}
 

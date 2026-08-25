@@ -16,9 +16,9 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -31,15 +31,15 @@ func TestComplex_MixedExchangeTypes(t *testing.T) {
 	// Direct exchange
 	directQueue := queue.MustQueueParams("test-complex-mixed-direct-q")
 	testutil.CreateQueue(t, ctx, directQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
-	directEx := x.MustExchangeParams("test-complex-mixed-direct-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	directEx := exchange.MustExchangeParams("test-complex-mixed-direct-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, directQueue, directEx, "order.created")
 
 	// Topic exchange
 	topicQueue := queue.MustQueueParams("test-complex-mixed-topic-q")
 	testutil.CreateQueue(t, ctx, topicQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
-	topicEx := x.MustExchangeParams("test-complex-mixed-topic-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange()
+	topicEx := exchange.MustExchangeParams("test-complex-mixed-topic-ex", exchange.TypeTopic)
+	tx := redissmq.NewTopicExchange()
 	tx.BindQueue(ctx, topicQueue, topicEx, "user.*")
 
 	// Fanout exchange
@@ -47,8 +47,8 @@ func TestComplex_MixedExchangeTypes(t *testing.T) {
 	fanoutQ2 := queue.MustQueueParams("test-complex-mixed-fanout-q2")
 	testutil.CreateQueue(t, ctx, fanoutQ1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, fanoutQ2, queue.TypeFIFO, queue.DeliveryPointToPoint)
-	fanoutEx := x.MustExchangeParams("test-complex-mixed-fanout-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	fanoutEx := exchange.MustExchangeParams("test-complex-mixed-fanout-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, fanoutQ1, fanoutEx)
 	fx.BindQueue(ctx, fanoutQ2, fanoutEx)
 
@@ -105,13 +105,13 @@ func TestComplex_OneQueueMultipleExchanges(t *testing.T) {
 	sharedQueue := queue.MustQueueParams("test-complex-shared-q")
 	testutil.CreateQueue(t, ctx, sharedQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	ex1 := x.MustExchangeParams("test-complex-shared-ex1", x.TypeDirect)
-	ex2 := x.MustExchangeParams("test-complex-shared-ex2", x.TypeFanout)
+	ex1 := exchange.MustExchangeParams("test-complex-shared-ex1", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParams("test-complex-shared-ex2", exchange.TypeFanout)
 
-	dx := exchange.NewDirectExchange()
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, sharedQueue, ex1, "order.created")
 
-	fx := exchange.NewFanoutExchange()
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, sharedQueue, ex2)
 
 	var count atomic.Int64
@@ -147,8 +147,8 @@ func TestComplex_MultipleProducersSameExchange(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-complex-multi-prod-ex-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-complex-multi-prod-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-complex-multi-prod-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, queueParams, exchangeParams, "task.process")
 
 	var count atomic.Int64
@@ -188,8 +188,8 @@ func TestComplex_DynamicBindUnbind(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-complex-dynamic-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-complex-dynamic-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 
@@ -247,19 +247,19 @@ func TestComplex_DynamicBindUnbind(t *testing.T) {
 func TestComplex_ExchangeDiscovery(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-complex-discovery-ex1", "ns-alpha", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-complex-discovery-ex2", "ns-alpha", x.TypeTopic)
-	ex3 := x.MustExchangeParamsWithNS("test-complex-discovery-ex3", "ns-beta", x.TypeFanout)
+	ex1 := exchange.MustExchangeParamsWithNS("test-complex-discovery-ex1", "ns-alpha", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-complex-discovery-ex2", "ns-alpha", exchange.TypeTopic)
+	ex3 := exchange.MustExchangeParamsWithNS("test-complex-discovery-ex3", "ns-beta", exchange.TypeFanout)
 
-	dx := exchange.NewDirectExchange()
-	tx := exchange.NewTopicExchange()
-	fx := exchange.NewFanoutExchange()
+	dx := redissmq.NewDirectExchange()
+	tx := redissmq.NewTopicExchange()
+	fx := redissmq.NewFanoutExchange()
 
-	dx.Create(ctx, ex1, x.PolicyStandard)
-	tx.Create(ctx, ex2, x.PolicyStandard)
-	fx.Create(ctx, ex3, x.PolicyStandard)
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
+	tx.Create(ctx, ex2, exchange.PolicyStandard)
+	fx.Create(ctx, ex3, exchange.PolicyStandard)
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 
 	// List all
 	all, err := em.ListAll(ctx)

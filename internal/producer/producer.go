@@ -18,13 +18,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	internalexchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	publicexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
@@ -35,9 +35,9 @@ type Producer struct {
 	mu             sync.RWMutex
 	running        bool
 	id             string
-	directExchange *exchange.DirectExchange
-	fanoutExchange *exchange.FanoutExchange
-	topicExchange  *exchange.TopicExchange
+	directExchange *internalexchange.DirectStore
+	fanoutExchange *internalexchange.FanoutStore
+	topicExchange  *internalexchange.TopicStore
 	pubSubResolver *PubSubTargetResolver
 	log            *slog.Logger
 }
@@ -45,15 +45,17 @@ type Producer struct {
 // New creates a new producer that satisfies the public producer interface.
 func New() publicproducer.Producer {
 	id := uuid.New().String()
+	em := internalexchange.NewManager()
 	return &Producer{
 		id:             id,
-		directExchange: exchange.NewDirectExchange(),
-		fanoutExchange: exchange.NewFanoutExchange(),
-		topicExchange:  exchange.NewTopicExchange(),
+		directExchange: em.Direct(),
+		fanoutExchange: em.Fanout(),
+		topicExchange:  em.Topic(),
 		log:            logger.New("producer", "manager", id),
 	}
 }
 
+// Run starts the producer and prepares it for publishing.
 func (prod *Producer) Run(ctx context.Context) error {
 	prod.mu.Lock()
 	defer prod.mu.Unlock()
@@ -88,6 +90,7 @@ func (prod *Producer) Run(ctx context.Context) error {
 	return nil
 }
 
+// Shutdown gracefully stops the producer.
 func (prod *Producer) Shutdown(ctx context.Context) {
 	prod.mu.Lock()
 	defer prod.mu.Unlock()
@@ -112,14 +115,17 @@ func (prod *Producer) Shutdown(ctx context.Context) {
 	PublishDown(ctx, prod.id)
 }
 
+// IsRunning reports whether the producer is currently running.
 func (prod *Producer) IsRunning() bool {
 	prod.mu.RLock()
 	defer prod.mu.RUnlock()
 	return prod.running
 }
 
+// ID returns the unique identifier of the producer.
 func (prod *Producer) ID() string { return prod.id }
 
+// Produce publishes a message to its configured destination.
 func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMessage) ([]string, error) {
 	prod.mu.RLock()
 	running := prod.running
@@ -150,7 +156,13 @@ func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMe
 	return prod.produceToExchange(ctx, m, exchangeParams, resolver)
 }
 
-func (prod *Producer) produceToQueue(ctx context.Context, m *publicmessage.ProducibleMessage, queueParams *queue.QueueParams, resolver *PubSubTargetResolver) ([]string, error) {
+// produceToQueue publishes a message to a specific queue, handling Pub/Sub groups if needed.
+func (prod *Producer) produceToQueue(
+	ctx context.Context,
+	m *publicmessage.ProducibleMessage,
+	queueParams *queue.QueueParams,
+	resolver *PubSubTargetResolver,
+) ([]string, error) {
 	var targets []string
 	if resolver != nil {
 		targets = resolver.Resolve(queueParams)
@@ -201,7 +213,13 @@ func (prod *Producer) produceToQueue(ctx context.Context, m *publicmessage.Produ
 	return []string{id}, nil
 }
 
-func (prod *Producer) produceToExchange(ctx context.Context, m *publicmessage.ProducibleMessage, exchangeParams *x.ExchangeParams, resolver *PubSubTargetResolver) ([]string, error) {
+// produceToExchange publishes a message to all queues matched by an exchange.
+func (prod *Producer) produceToExchange(
+	ctx context.Context,
+	m *publicmessage.ProducibleMessage,
+	exchangeParams *publicexchange.ExchangeParams,
+	resolver *PubSubTargetResolver,
+) ([]string, error) {
 	queues, err := prod.matchExchangeQueues(ctx, exchangeParams, m.ExchangeRoutingKey())
 	if err != nil {
 		prod.log.Error("failed to match exchange queues",
@@ -241,21 +259,26 @@ func (prod *Producer) produceToExchange(ctx context.Context, m *publicmessage.Pr
 	return ids, nil
 }
 
-func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x.ExchangeParams, routingKey string) ([]queue.QueueParams, error) {
+// matchExchangeQueues resolves the destination queues for an exchange and routing key.
+func (prod *Producer) matchExchangeQueues(
+	ctx context.Context,
+	exchangeParams *publicexchange.ExchangeParams,
+	routingKey string,
+) ([]queue.QueueParams, error) {
 	switch exchangeParams.Type() {
-	case x.TypeDirect:
+	case publicexchange.TypeDirect:
 		if routingKey == "" {
 			return nil, publicproducer.ErrRoutingKeyRequired
 		}
 		return prod.directExchange.MatchQueues(ctx, exchangeParams, routingKey)
 
-	case x.TypeTopic:
+	case publicexchange.TypeTopic:
 		if routingKey == "" {
 			return nil, publicproducer.ErrRoutingKeyRequired
 		}
 		return prod.topicExchange.MatchQueues(ctx, exchangeParams, routingKey)
 
-	case x.TypeFanout:
+	case publicexchange.TypeFanout:
 		return prod.fanoutExchange.MatchQueues(ctx, exchangeParams)
 
 	default:
@@ -263,7 +286,12 @@ func (prod *Producer) matchExchangeQueues(ctx context.Context, exchangeParams *x
 	}
 }
 
-func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.Envelope, queueParams *queue.QueueParams) (string, error) {
+// dispatch publishes a message envelope to the destination queue.
+func (prod *Producer) dispatch(
+	ctx context.Context,
+	envelope *internalMessage.Envelope,
+	queueParams *queue.QueueParams,
+) (string, error) {
 	envelope.SetDestinationQueue(queueParams)
 	messageID := envelope.ID()
 

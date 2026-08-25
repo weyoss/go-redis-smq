@@ -13,9 +13,9 @@ package exchange_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -26,9 +26,9 @@ func TestPolicy_StandardAllowsFIFO(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-standard-fifo")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-standard-fifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-policy-standard-fifo-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err != nil {
@@ -43,9 +43,9 @@ func TestPolicy_StandardAllowsLIFO(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-standard-lifo")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeLIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-standard-lifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-policy-standard-lifo-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err != nil {
@@ -60,9 +60,9 @@ func TestPolicy_StandardRejectsPriority(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-standard-prio")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-standard-prio-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-policy-standard-prio-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err == nil {
@@ -77,9 +77,9 @@ func TestPolicy_PriorityAllowsPriority(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-prio-allows")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-prio-allows-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyPriority)
+	exchangeParams := exchange.MustExchangeParams("test-policy-prio-allows-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyPriority)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err != nil {
@@ -94,9 +94,9 @@ func TestPolicy_PriorityRejectsFIFO(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-prio-rejects-fifo")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-prio-rejects-fifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyPriority)
+	exchangeParams := exchange.MustExchangeParams("test-policy-prio-rejects-fifo-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyPriority)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err == nil {
@@ -111,9 +111,9 @@ func TestPolicy_PriorityRejectsLIFO(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-prio-rejects-lifo")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeLIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-prio-rejects-lifo-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyPriority)
+	exchangeParams := exchange.MustExchangeParams("test-policy-prio-rejects-lifo-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyPriority)
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key")
 	if err == nil {
@@ -128,9 +128,9 @@ func TestPolicy_TopicExchangeEnforcement(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-topic-prio")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-topic-prio-ex", x.TypeTopic)
-	tx := exchange.NewTopicExchange()
-	tx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-policy-topic-prio-ex", exchange.TypeTopic)
+	tx := redissmq.NewTopicExchange()
+	tx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	err := tx.BindQueue(ctx, queueParams, exchangeParams, "test.*")
 	if err == nil {
@@ -145,9 +145,9 @@ func TestPolicy_FanoutExchangeEnforcement(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-policy-fanout-prio")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-fanout-prio-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
-	fx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-policy-fanout-prio-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
+	fx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	err := fx.BindQueue(ctx, queueParams, exchangeParams)
 	if err == nil {
@@ -164,8 +164,8 @@ func TestPolicy_AutoCreatedExchange(t *testing.T) {
 	testutil.CreateQueue(t, ctx, fifoQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, prioQueue, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-policy-auto-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-policy-auto-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	// First bind auto-creates exchange — no policy set yet, FIFO allowed
 	err := dx.BindQueue(ctx, fifoQueue, exchangeParams, "test.key")

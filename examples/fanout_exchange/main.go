@@ -19,7 +19,6 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -47,8 +46,8 @@ func main() {
 	qm.Create(ctx, pushQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create fanout exchange
-	fx := exchange.NewFanoutExchange()
-	exchangeParams := x.MustExchangeParams("system-alerts", x.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("system-alerts", exchange.TypeFanout)
 
 	// Bind all queues — no routing key needed
 	if err := fx.BindQueue(ctx, emailQueue, exchangeParams); err != nil {

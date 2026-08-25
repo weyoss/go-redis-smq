@@ -17,6 +17,7 @@ import (
 
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	internalexchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	internalmessage "github.com/weyoss/go-redis-smq/internal/message"
 	internalproducer "github.com/weyoss/go-redis-smq/internal/producer"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
@@ -26,6 +27,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publiceventbus "github.com/weyoss/go-redis-smq/pkg/eventbus"
+	publicexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -233,4 +235,28 @@ func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
 // message manager interface.
 func NewMessageManager() publicmessage.MessageManager {
 	return internalmessage.NewManager()
+}
+
+// NewExchangeManager creates a new exchange manager that implements the
+// public exchange manager interface.
+func NewExchangeManager() publicexchange.Manager {
+	return internalexchange.NewManager()
+}
+
+// NewDirectExchange creates a new direct exchange that implements the public
+// direct exchange interface.
+func NewDirectExchange() publicexchange.DirectExchange {
+	return internalexchange.NewManager().Direct()
+}
+
+// NewFanoutExchange creates a new fanout exchange that implements the public
+// fanout exchange interface.
+func NewFanoutExchange() publicexchange.FanoutExchange {
+	return internalexchange.NewManager().Fanout()
+}
+
+// NewTopicExchange creates a new topic exchange that implements the public
+// topic exchange interface.
+func NewTopicExchange() publicexchange.TopicExchange {
+	return internalexchange.NewManager().Topic()
 }

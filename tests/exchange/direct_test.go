@@ -19,7 +19,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -28,10 +27,10 @@ import (
 func TestDirect_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-direct-create", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	params := exchange.MustExchangeParams("test-direct-create", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
-	err := dx.Create(ctx, params, x.PolicyStandard)
+	err := dx.Create(ctx, params, exchange.PolicyStandard)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -44,8 +43,8 @@ func TestDirect_BindQueue(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-direct-bind-queue")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-bind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-bind-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
 	if err != nil {
@@ -60,8 +59,8 @@ func TestDirect_BindAutoCreatesExchange(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-direct-auto-create-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-auto-create-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-auto-create-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	// Bind without creating first — should auto-create
 	err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
@@ -70,7 +69,7 @@ func TestDirect_BindAutoCreatesExchange(t *testing.T) {
 	}
 
 	// Verify exchange exists
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exists, err := em.Exists(ctx, exchangeParams)
 	if err != nil {
 		t.Fatalf("exists: %v", err)
@@ -89,8 +88,8 @@ func TestDirect_MatchQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-match-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-match-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 	dx.BindQueue(ctx, q2, exchangeParams, "order.created")
@@ -108,9 +107,9 @@ func TestDirect_MatchQueues(t *testing.T) {
 func TestDirect_NoMatch(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	exchangeParams := x.MustExchangeParams("test-direct-nomatch", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-direct-nomatch", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	queues, err := dx.MatchQueues(ctx, exchangeParams, "nonexistent.key")
 	if err != nil {
@@ -128,8 +127,8 @@ func TestDirect_UnbindQueue(t *testing.T) {
 	q := queue.MustQueueParams("test-direct-unbind-q")
 	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-unbind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-unbind-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 
@@ -148,9 +147,9 @@ func TestDirect_UnbindQueue(t *testing.T) {
 func TestDirect_RoutingKeys(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	exchangeParams := x.MustExchangeParams("test-direct-keys-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exchangeParams, x.PolicyStandard)
+	exchangeParams := exchange.MustExchangeParams("test-direct-keys-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 
 	q := queue.MustQueueParams("test-direct-keys-q")
 	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
@@ -177,8 +176,8 @@ func TestDirect_ProduceConsume(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-prod-consume-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-prod-consume-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 	dx.BindQueue(ctx, q2, exchangeParams, "order.created")
 
@@ -230,8 +229,8 @@ func TestDirect_DuplicateBinding(t *testing.T) {
 	q := queue.MustQueueParams("test-direct-dup-bind-q")
 	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-dup-bind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-dup-bind-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 
@@ -248,8 +247,8 @@ func TestDirect_DeleteWithBoundQueues(t *testing.T) {
 	q := queue.MustQueueParams("test-direct-delete-bound-q")
 	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-delete-bound-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-delete-bound-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 
 	err := dx.Delete(ctx, exchangeParams)
@@ -265,8 +264,8 @@ func TestDirect_DeleteAfterUnbind(t *testing.T) {
 	q := queue.MustQueueParams("test-direct-delete-unbind-q")
 	testutil.CreateQueue(t, ctx, q, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-delete-unbind-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-delete-unbind-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	dx.BindQueue(ctx, q, exchangeParams, "order.created")
 	dx.UnbindQueue(ctx, q, exchangeParams, "order.created")
 
@@ -275,7 +274,7 @@ func TestDirect_DeleteAfterUnbind(t *testing.T) {
 		t.Fatalf("delete: %v", err)
 	}
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exists, _ := em.Exists(ctx, exchangeParams)
 	if exists {
 		t.Fatal("exchange should not exist after delete")
@@ -291,8 +290,8 @@ func TestDirect_MultipleRoutingKeys(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-direct-multi-rk-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-direct-multi-rk-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	dx.BindQueue(ctx, q1, exchangeParams, "order.created")
 	dx.BindQueue(ctx, q2, exchangeParams, "order.cancelled")

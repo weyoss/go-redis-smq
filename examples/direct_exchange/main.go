@@ -19,7 +19,6 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -44,8 +43,8 @@ func main() {
 	qm.Create(ctx, eventsQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Create direct exchange
-	dx := exchange.NewDirectExchange()
-	exchangeParams := x.MustExchangeParams("app-events", x.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("app-events", exchange.TypeDirect)
 
 	// Bind queues to routing keys
 	if err := dx.BindQueue(ctx, ordersQueue, exchangeParams, "order.created"); err != nil {

@@ -19,7 +19,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -28,10 +27,10 @@ import (
 func TestFanout_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-create", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-create", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 
-	err := fx.Create(ctx, exchangeParams, x.PolicyStandard)
+	err := fx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -44,8 +43,8 @@ func TestFanout_BindQueue(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-fanout-bind-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-bind-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-bind-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 
 	err := fx.BindQueue(ctx, queueParams, exchangeParams)
 	if err != nil {
@@ -65,8 +64,8 @@ func TestFanout_BroadcastsToAll(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q3, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-broadcast-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-broadcast-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, q1, exchangeParams)
 	fx.BindQueue(ctx, q2, exchangeParams)
 	fx.BindQueue(ctx, q3, exchangeParams)
@@ -112,8 +111,8 @@ func TestFanout_IgnoresRoutingKey(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-ignore-rk-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-ignore-rk-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, q1, exchangeParams)
 	fx.BindQueue(ctx, q2, exchangeParams)
 
@@ -152,8 +151,8 @@ func TestFanout_NoRoutingKeyNeeded(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-fanout-no-rk-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-no-rk-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-no-rk-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 
 	var count atomic.Int64
@@ -186,8 +185,8 @@ func TestFanout_Unbind(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-fanout-unbind-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-unbind-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-unbind-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 	fx.UnbindQueue(ctx, queueParams, exchangeParams)
@@ -207,8 +206,8 @@ func TestFanout_BoundQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-bound-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-bound-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, q1, exchangeParams)
 	fx.BindQueue(ctx, q2, exchangeParams)
 
@@ -228,8 +227,8 @@ func TestFanout_DeleteWithBoundQueues(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-fanout-delete-bound-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-delete-bound-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-delete-bound-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 
 	err := fx.Delete(ctx, exchangeParams)
@@ -245,8 +244,8 @@ func TestFanout_DeleteAfterUnbind(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-fanout-delete-unbind-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-fanout-delete-unbind-ex", x.TypeFanout)
-	fx := exchange.NewFanoutExchange()
+	exchangeParams := exchange.MustExchangeParams("test-fanout-delete-unbind-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
 	fx.BindQueue(ctx, queueParams, exchangeParams)
 	fx.UnbindQueue(ctx, queueParams, exchangeParams)
 

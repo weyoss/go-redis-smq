@@ -19,7 +19,7 @@ import (
 	exSchema "github.com/weyoss/go-redis-smq/internal/exchange/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 )
 
 type Store struct {
@@ -33,7 +33,7 @@ func NewStore(codecs *Codecs) *Store {
 	return &Store{codecs: codecs}
 }
 
-func (s *Store) Save(ctx context.Context, params *x.ExchangeParams, policy x.ExchangePolicy) error {
+func (s *Store) Save(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -44,7 +44,7 @@ func (s *Store) Save(ctx context.Context, params *x.ExchangeParams, policy x.Exc
 		return fmt.Errorf("save exchange: %w", err)
 	}
 
-	props := &x.ExchangeProps{
+	props := &pubexchange.ExchangeProps{
 		Type:   params.Type(),
 		Policy: policy,
 	}
@@ -66,7 +66,7 @@ func (s *Store) Save(ctx context.Context, params *x.ExchangeParams, policy x.Exc
 			return err
 		}
 		if exists {
-			return x.ErrAlreadyExists
+			return pubexchange.ErrAlreadyExists
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -82,7 +82,7 @@ func (s *Store) Save(ctx context.Context, params *x.ExchangeParams, policy x.Exc
 	return redisClient.WithTransaction(ctx, watchKeys, 3, txf)
 }
 
-func (s *Store) Load(ctx context.Context, params *x.ExchangeParams) (*x.ExchangeProps, error) {
+func (s *Store) Load(ctx context.Context, params *pubexchange.ExchangeParams) (*pubexchange.ExchangeProps, error) {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -90,7 +90,7 @@ func (s *Store) Load(ctx context.Context, params *x.ExchangeParams) (*x.Exchange
 
 	hash, err := redisClient.LoadHash(ctx, key, "exchange properties")
 	if err != nil {
-		return nil, x.ErrNotFound
+		return nil, pubexchange.ErrNotFound
 	}
 
 	props, err := s.codecs.Props.DecodeHash(ctx, hash)
@@ -101,7 +101,7 @@ func (s *Store) Load(ctx context.Context, params *x.ExchangeParams) (*x.Exchange
 	return props, nil
 }
 
-func (s *Store) Exists(ctx context.Context, params *x.ExchangeParams) (bool, error) {
+func (s *Store) Exists(ctx context.Context, params *pubexchange.ExchangeParams) (bool, error) {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -114,7 +114,7 @@ func (s *Store) Exists(ctx context.Context, params *x.ExchangeParams) (bool, err
 	return count > 0, nil
 }
 
-func (s *Store) ValidateType(ctx context.Context, params *x.ExchangeParams, required bool) error {
+func (s *Store) ValidateType(ctx context.Context, params *pubexchange.ExchangeParams, required bool) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -124,7 +124,7 @@ func (s *Store) ValidateType(ctx context.Context, params *x.ExchangeParams, requ
 		exSchema.ExchangeFieldType.Key(), "exchange type")
 	if err != nil {
 		if required {
-			return x.ErrNotFound
+			return pubexchange.ErrNotFound
 		}
 		return nil
 	}
@@ -134,19 +134,72 @@ func (s *Store) ValidateType(ctx context.Context, params *x.ExchangeParams, requ
 		return fmt.Errorf("parse exchange type: %w", err)
 	}
 
-	actualType := x.ExchangeType(typeValue)
+	actualType := pubexchange.ExchangeType(typeValue)
 	if actualType != params.Type() {
-		return x.NewTypeMismatchError(params.Type(), actualType)
+		return pubexchange.ErrTypeMismatch
 	}
 	return nil
 }
 
-func (s *Store) Delete(ctx context.Context, params *x.ExchangeParams) error {
+// Delete removes an exchange and all its associated data structures.
+// It first checks that no queues are bound to the exchange; if any exist,
+// it returns pubexchange.ErrHasBoundQueues.
+func (s *Store) Delete(ctx context.Context, params *pubexchange.ExchangeParams) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
 	}
 
+	// Ensure the exchange exists.
+	exists, err := s.Exists(ctx, params)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return pubexchange.ErrNotFound
+	}
+
+	// Check for bound queues depending on exchange type.
+	switch params.Type() {
+	case pubexchange.TypeDirect:
+		routingKeys, err := redisClient.LoadSetMembers(ctx, key.RoutingKeys(), "routing keys")
+		if err != nil {
+			return err
+		}
+		for _, rk := range routingKeys {
+			count, err := redisClient.Client().SCard(ctx, key.RoutingKeyQueues(rk)).Result()
+			if err != nil {
+				return err
+			}
+			if count > 0 {
+				return pubexchange.ErrHasBoundQueues
+			}
+		}
+	case pubexchange.TypeTopic:
+		patterns, err := redisClient.LoadSetMembers(ctx, key.BindingPatterns(), "binding patterns")
+		if err != nil {
+			return err
+		}
+		for _, p := range patterns {
+			count, err := redisClient.Client().SCard(ctx, key.PatternQueues(p)).Result()
+			if err != nil {
+				return err
+			}
+			if count > 0 {
+				return pubexchange.ErrHasBoundQueues
+			}
+		}
+	case pubexchange.TypeFanout:
+		count, err := redisClient.Client().SCard(ctx, key.FanoutQueues()).Result()
+		if err != nil {
+			return err
+		}
+		if count > 0 {
+			return pubexchange.ErrHasBoundQueues
+		}
+	}
+
+	// No bound queues; proceed with deletion.
 	paramsStr, err := s.codecs.Params.EncodeSet(ctx, params)
 	if err != nil {
 		return fmt.Errorf("delete exchange: %w", err)
@@ -161,11 +214,11 @@ func (s *Store) Delete(ctx context.Context, params *x.ExchangeParams) error {
 	pipe.SRem(ctx, keys.Namespace{Name: params.Namespace()}.Exchanges(), paramsStr)
 
 	switch params.Type() {
-	case x.TypeDirect:
+	case pubexchange.TypeDirect:
 		pipe.Del(ctx, key.RoutingKeys())
-	case x.TypeTopic:
+	case pubexchange.TypeTopic:
 		pipe.Del(ctx, key.BindingPatterns())
-	case x.TypeFanout:
+	case pubexchange.TypeFanout:
 		pipe.Del(ctx, key.FanoutQueues())
 	}
 

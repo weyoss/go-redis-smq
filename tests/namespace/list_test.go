@@ -13,9 +13,9 @@ package namespace_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -64,13 +64,13 @@ func TestList_WithQueues(t *testing.T) {
 func TestList_WithExchanges(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-list-ex1", "ns-exchange-alpha", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-list-ex2", "ns-exchange-beta", x.TypeFanout)
+	ex1 := exchange.MustExchangeParamsWithNS("test-list-ex1", "ns-exchange-alpha", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-list-ex2", "ns-exchange-beta", exchange.TypeFanout)
 
-	dx := exchange.NewDirectExchange()
-	fx := exchange.NewFanoutExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
-	fx.Create(ctx, ex2, x.PolicyStandard)
+	dx := redissmq.NewDirectExchange()
+	fx := redissmq.NewFanoutExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
+	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 	namespaces, err := nm.List(ctx)
@@ -128,9 +128,9 @@ func TestList_MixedResources(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	// Exchange in same namespace
-	ex1 := x.MustExchangeParamsWithNS("test-list-mixed-ex", "ns-mixed", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("test-list-mixed-ex", "ns-mixed", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 	namespaces, err := nm.List(ctx)

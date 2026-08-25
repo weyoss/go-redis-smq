@@ -8,7 +8,7 @@
  *
  */
 
-package x
+package exchange
 
 // ExchangeType defines how an exchange routes messages to queues.
 // Integer values are persisted in Redis and must not be changed.

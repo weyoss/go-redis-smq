@@ -13,9 +13,9 @@ package namespace_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -24,9 +24,9 @@ import (
 func TestExchange_CreateInNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	exParams := x.MustExchangeParamsWithNS("test-ns-ex", "exchange-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	err := dx.Create(ctx, exParams, x.PolicyStandard)
+	exParams := exchange.MustExchangeParamsWithNS("test-ns-ex", "exchange-ns", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	err := dx.Create(ctx, exParams, exchange.PolicyStandard)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -40,14 +40,14 @@ func TestExchange_CreateInNamespace(t *testing.T) {
 func TestExchange_ListByNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-ns-list-ex1", "list-ex-ns", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-ns-list-ex2", "list-ex-ns", x.TypeTopic)
-	dx := exchange.NewDirectExchange()
-	tx := exchange.NewTopicExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
-	tx.Create(ctx, ex2, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("test-ns-list-ex1", "list-ex-ns", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-ns-list-ex2", "list-ex-ns", exchange.TypeTopic)
+	dx := redissmq.NewDirectExchange()
+	tx := redissmq.NewTopicExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
+	tx.Create(ctx, ex2, exchange.PolicyStandard)
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exchanges, err := em.ListByNamespace(ctx, "list-ex-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -61,15 +61,15 @@ func TestExchange_ListByNamespace(t *testing.T) {
 func TestExchange_NamespaceIsolation(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("same-name", "ex-ns-a", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("same-name", "ex-ns-b", x.TypeDirect)
-	dx1 := exchange.NewDirectExchange()
-	dx2 := exchange.NewDirectExchange()
-	dx1.Create(ctx, ex1, x.PolicyStandard)
-	dx2.Create(ctx, ex2, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("same-name", "ex-ns-a", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("same-name", "ex-ns-b", exchange.TypeDirect)
+	dx1 := redissmq.NewDirectExchange()
+	dx2 := redissmq.NewDirectExchange()
+	dx1.Create(ctx, ex1, exchange.PolicyStandard)
+	dx2.Create(ctx, ex2, exchange.PolicyStandard)
 
 	// Both should exist independently
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exists1, _ := em.Exists(ctx, ex1)
 	exists2, _ := em.Exists(ctx, ex2)
 
@@ -85,17 +85,17 @@ func TestExchange_NamespaceIsolation(t *testing.T) {
 func TestExchange_SameNameDifferentNamespaces(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("events", "production", x.TypeTopic)
-	ex2 := x.MustExchangeParamsWithNS("events", "staging", x.TypeTopic)
-	tx1 := exchange.NewTopicExchange()
-	tx2 := exchange.NewTopicExchange()
-	tx1.Create(ctx, ex1, x.PolicyStandard)
-	tx2.Create(ctx, ex2, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("events", "production", exchange.TypeTopic)
+	ex2 := exchange.MustExchangeParamsWithNS("events", "staging", exchange.TypeTopic)
+	tx1 := redissmq.NewTopicExchange()
+	tx2 := redissmq.NewTopicExchange()
+	tx1.Create(ctx, ex1, exchange.PolicyStandard)
+	tx2.Create(ctx, ex2, exchange.PolicyStandard)
 
 	// Delete one should not affect the other
 	tx1.Delete(ctx, ex1)
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exists2, _ := em.Exists(ctx, ex2)
 	if !exists2 {
 		t.Error("staging/events should still exist after deleting production/events")
@@ -109,8 +109,8 @@ func TestExchange_BindInNamespace(t *testing.T) {
 	queueParams := queue.MustQueueParamsWithNS("test-ns-bind-q", "bind-ns")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exParams := x.MustExchangeParamsWithNS("test-ns-bind-ex", "bind-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exParams := exchange.MustExchangeParamsWithNS("test-ns-bind-ex", "bind-ns", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 
 	err := dx.BindQueue(ctx, queueParams, exParams, "test.key")
 	if err != nil {
@@ -122,14 +122,14 @@ func TestExchange_BindInNamespace(t *testing.T) {
 func TestExchange_ListAfterDeletingNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-ns-del-ex", "temp-ex-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("test-ns-del-ex", "temp-ex-ns", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 	nm.Delete(ctx, "temp-ex-ns")
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exchanges, err := em.ListByNamespace(ctx, "temp-ex-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)

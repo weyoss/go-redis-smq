@@ -11,7 +11,7 @@
 package message
 
 import (
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -66,7 +66,7 @@ type Transferable struct {
 
 	// Exchange is the exchange used for routing, if the message was sent
 	// via an exchange.
-	Exchange *x.ExchangeParams `json:"exchange,omitempty"`
+	Exchange *exchange.ExchangeParams `json:"exchange,omitempty"`
 
 	// Queue is the target queue, if the message was sent directly to a
 	// queue.

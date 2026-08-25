@@ -13,9 +13,9 @@ package namespace_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -41,9 +41,9 @@ func TestExists_WithQueues(t *testing.T) {
 func TestExists_WithExchanges(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	exParams := x.MustExchangeParamsWithNS("test-exists-ex", "exchange-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exParams, x.PolicyStandard)
+	exParams := exchange.MustExchangeParamsWithNS("test-exists-ex", "exchange-ns", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exParams, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 	exists, err := nm.Exists(ctx, "exchange-ns")

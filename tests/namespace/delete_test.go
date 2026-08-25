@@ -16,7 +16,6 @@ import (
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -50,12 +49,12 @@ func TestDelete_WithQueues(t *testing.T) {
 func TestDelete_WithExchanges(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-del-ex1", "exchange-del-ns", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-del-ex2", "exchange-del-ns", x.TypeFanout)
-	dx := exchange.NewDirectExchange()
-	fx := exchange.NewFanoutExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
-	fx.Create(ctx, ex2, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("test-del-ex1", "exchange-del-ns", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-del-ex2", "exchange-del-ns", exchange.TypeFanout)
+	dx := redissmq.NewDirectExchange()
+	fx := redissmq.NewFanoutExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
+	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 	err := nm.Delete(ctx, "exchange-del-ns")
@@ -64,7 +63,7 @@ func TestDelete_WithExchanges(t *testing.T) {
 	}
 
 	// Exchanges should be gone
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exchanges, err := em.ListByNamespace(ctx, "exchange-del-ns")
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -81,9 +80,9 @@ func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 	params := publicqueue.MustQueueParamsWithNS("test-del-mixed-q", "mixed-ns")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	exParams := x.MustExchangeParamsWithNS("test-del-mixed-ex", "mixed-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, exParams, x.PolicyStandard)
+	exParams := exchange.MustExchangeParamsWithNS("test-del-mixed-ex", "mixed-ns", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, exParams, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 	err := nm.Delete(ctx, "mixed-ns")
@@ -93,7 +92,7 @@ func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 
 	// Both should be gone
 	queues, _ := redissmq.NewQueueManager().ListByNamespace(ctx, "mixed-ns")
-	exchanges, _ := exchange.NewManager().ListByNamespace(ctx, "mixed-ns")
+	exchanges, _ := redissmq.NewExchangeManager().ListByNamespace(ctx, "mixed-ns")
 
 	if len(queues) != 0 {
 		t.Errorf("expected 0 queues, got %d", len(queues))

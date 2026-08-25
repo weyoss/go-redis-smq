@@ -20,7 +20,7 @@ import (
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -43,13 +43,27 @@ func NewFanoutStore(store *Store, validator *Validator, codecs *Codecs) *FanoutS
 	}
 }
 
+// Create creates a fanout exchange with the given queue policy.
+// Returns ErrTypeMismatch if params.Type() is not TypeFanout.
+func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+	if params.Type() != pubexchange.TypeFanout {
+		return pubexchange.ErrTypeMismatch
+	}
+	return fs.store.Save(ctx, params, policy)
+}
+
 // BindQueue binds a queue to a fanout exchange.
 // The queue will receive all messages published to this exchange.
+// The queue and exchange must be in the same namespace.
 func (fs *FanoutStore) BindQueue(
 	ctx context.Context,
 	queueParams *queue.QueueParams,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) error {
+	if queueParams.NS() != exchangeParams.Namespace() {
+		return pubexchange.ErrNamespaceMismatch
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -89,7 +103,7 @@ func (fs *FanoutStore) BindQueue(
 			return err
 		}
 		if isMember {
-			return x.ErrQueueAlreadyBound
+			return pubexchange.ErrQueueAlreadyBound
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -111,11 +125,16 @@ func (fs *FanoutStore) BindQueue(
 }
 
 // UnbindQueue removes a queue binding from a fanout exchange.
+// The queue and exchange must be in the same namespace.
 func (fs *FanoutStore) UnbindQueue(
 	ctx context.Context,
 	queueParams *queue.QueueParams,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) error {
+	if queueParams.NS() != exchangeParams.Namespace() {
+		return pubexchange.ErrNamespaceMismatch
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -151,7 +170,7 @@ func (fs *FanoutStore) UnbindQueue(
 			return err
 		}
 		if !isMember {
-			return x.ErrQueueNotBound
+			return pubexchange.ErrQueueNotBound
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -165,11 +184,25 @@ func (fs *FanoutStore) UnbindQueue(
 	return redisClient.WithTransaction(ctx, watchKeys, 5, txf)
 }
 
+// MatchQueues returns all queues bound to this fanout exchange.
+// This is equivalent to BoundQueues for fanout exchanges.
+func (fs *FanoutStore) MatchQueues(
+	ctx context.Context,
+	exchangeParams *pubexchange.ExchangeParams,
+) ([]queue.QueueParams, error) {
+	return fs.BoundQueues(ctx, exchangeParams)
+}
+
 // BoundQueues returns all queues bound to this fanout exchange.
+// It validates that the exchange is a fanout exchange.
 func (fs *FanoutStore) BoundQueues(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) ([]queue.QueueParams, error) {
+	if err := fs.store.ValidateType(ctx, exchangeParams, true); err != nil {
+		return nil, err
+	}
+
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -187,7 +220,7 @@ func (fs *FanoutStore) BoundQueues(
 
 // Delete removes a fanout exchange and all its queue bindings.
 // Returns error if the exchange has bound queues.
-func (fs *FanoutStore) Delete(ctx context.Context, exchangeParams *x.ExchangeParams) error {
+func (fs *FanoutStore) Delete(ctx context.Context, exchangeParams *pubexchange.ExchangeParams) error {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -215,7 +248,7 @@ func (fs *FanoutStore) Delete(ctx context.Context, exchangeParams *x.ExchangePar
 			return err
 		}
 		if count > 0 {
-			return x.ErrHasBoundQueues
+			return pubexchange.ErrHasBoundQueues
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {

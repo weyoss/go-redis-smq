@@ -14,9 +14,9 @@ import (
 	"errors"
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -24,19 +24,20 @@ import (
 func TestPackage_CreateAndProperties(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-package-create", x.TypeDirect)
-	if err := exchange.Create(ctx, params, x.PolicyStandard); err != nil {
+	params := exchange.MustExchangeParams("test-package-create", exchange.TypeDirect)
+	xm := redissmq.NewExchangeManager()
+	if err := xm.Create(ctx, params, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	props, err := exchange.Properties(ctx, params)
+	props, err := xm.Properties(ctx, params)
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.Type != x.TypeDirect {
+	if props.Type != exchange.TypeDirect {
 		t.Errorf("type = %v, want direct", props.Type)
 	}
-	if props.Policy != x.PolicyStandard {
+	if props.Policy != exchange.PolicyStandard {
 		t.Errorf("policy = %v, want standard", props.Policy)
 	}
 }
@@ -45,9 +46,10 @@ func TestPackage_CreateAndProperties(t *testing.T) {
 func TestPackage_Exists(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-package-exists", x.TypeFanout)
+	params := exchange.MustExchangeParams("test-package-exists", exchange.TypeFanout)
 
-	exists, err := exchange.Exists(ctx, params)
+	xm := redissmq.NewExchangeManager()
+	exists, err := xm.Exists(ctx, params)
 	if err != nil {
 		t.Fatalf("exists (before create): %v", err)
 	}
@@ -55,11 +57,11 @@ func TestPackage_Exists(t *testing.T) {
 		t.Fatal("exchange should not exist before creation")
 	}
 
-	if err := exchange.Create(ctx, params, x.PolicyStandard); err != nil {
+	if err := xm.Create(ctx, params, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	exists, err = exchange.Exists(ctx, params)
+	exists, err = xm.Exists(ctx, params)
 	if err != nil {
 		t.Fatalf("exists (after create): %v", err)
 	}
@@ -72,34 +74,34 @@ func TestPackage_Exists(t *testing.T) {
 func TestPackage_ValidateType(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	directParams := x.MustExchangeParams("test-package-validate-type", x.TypeDirect)
+	directParams := exchange.MustExchangeParams("test-package-validate-type", exchange.TypeDirect)
+	xm := redissmq.NewExchangeManager()
 
 	// required=false should not error even if missing
-	if err := exchange.ValidateType(ctx, directParams, false); err != nil {
+	if err := xm.ValidateType(ctx, directParams, false); err != nil {
 		t.Fatalf("validate type (missing, required=false): %v", err)
 	}
 
 	// required=true should error when missing
-	if err := exchange.ValidateType(ctx, directParams, true); !errors.Is(err, x.ErrNotFound) {
+	if err := xm.ValidateType(ctx, directParams, true); !errors.Is(err, exchange.ErrNotFound) {
 		t.Fatalf("validate type (missing, required=true): got %v, want ErrNotFound", err)
 	}
 
 	// Create as direct
-	if err := exchange.Create(ctx, directParams, x.PolicyStandard); err != nil {
+	if err := xm.Create(ctx, directParams, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	// Same type should succeed
-	if err := exchange.ValidateType(ctx, directParams, true); err != nil {
+	if err := xm.ValidateType(ctx, directParams, true); err != nil {
 		t.Fatalf("validate type (matching): %v", err)
 	}
 
 	// Different type should return TypeMismatchError
-	topicParams := x.MustExchangeParams("test-package-validate-type", x.TypeTopic)
-	err := exchange.ValidateType(ctx, topicParams, true)
-	var typeErr *x.TypeMismatchError
-	if !errors.As(err, &typeErr) {
-		t.Fatalf("validate type mismatch: got %v, want TypeMismatchError", err)
+	topicParams := exchange.MustExchangeParams("test-package-validate-type", exchange.TypeTopic)
+	err := xm.ValidateType(ctx, topicParams, true)
+	if !errors.Is(err, exchange.ErrTypeMismatch) {
+		t.Fatalf("validate type mismatch: got %v, want ErrTypeMismatch", err)
 	}
 }
 
@@ -113,10 +115,11 @@ func TestPackage_ValidateBinding(t *testing.T) {
 	prioQueue := queue.MustQueueParams("test-package-binding-prio")
 	testutil.CreateQueue(t, ctx, prioQueue, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	directParams := x.MustExchangeParams("test-package-binding-ex", x.TypeDirect)
+	directParams := exchange.MustExchangeParams("test-package-binding-ex", exchange.TypeDirect)
 
 	// Exchange doesn't exist yet → nil, nil
-	props, err := exchange.ValidateBinding(ctx, directParams, fifoQueue)
+	xm := redissmq.NewExchangeManager()
+	props, err := xm.ValidateBinding(ctx, directParams, fifoQueue)
 	if err != nil {
 		t.Fatalf("validate binding (missing exchange): %v", err)
 	}
@@ -125,12 +128,12 @@ func TestPackage_ValidateBinding(t *testing.T) {
 	}
 
 	// Create standard direct exchange
-	if err := exchange.Create(ctx, directParams, x.PolicyStandard); err != nil {
+	if err := xm.Create(ctx, directParams, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
 	// Valid FIFO queue binding
-	props, err = exchange.ValidateBinding(ctx, directParams, fifoQueue)
+	props, err = xm.ValidateBinding(ctx, directParams, fifoQueue)
 	if err != nil {
 		t.Fatalf("validate binding (fifo): %v", err)
 	}
@@ -139,9 +142,8 @@ func TestPackage_ValidateBinding(t *testing.T) {
 	}
 
 	// Policy violation – Priority queue cannot bind to Standard exchange
-	_, err = exchange.ValidateBinding(ctx, directParams, prioQueue)
-	var policyErr *x.PolicyViolationError
-	if !errors.As(err, &policyErr) {
+	_, err = xm.ValidateBinding(ctx, directParams, prioQueue)
+	if !errors.Is(err, exchange.ErrPolicyViolation) {
 		t.Fatalf("validate binding (priority): got %v, want PolicyViolationError", err)
 	}
 }
@@ -150,16 +152,17 @@ func TestPackage_ValidateBinding(t *testing.T) {
 func TestPackage_Delete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-package-delete", x.TypeTopic)
-	if err := exchange.Create(ctx, params, x.PolicyStandard); err != nil {
+	params := exchange.MustExchangeParams("test-package-delete", exchange.TypeTopic)
+	xm := redissmq.NewExchangeManager()
+	if err := xm.Create(ctx, params, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
-	if err := exchange.Delete(ctx, params); err != nil {
+	if err := xm.Delete(ctx, params); err != nil {
 		t.Fatalf("delete: %v", err)
 	}
 
-	exists, err := exchange.Exists(ctx, params)
+	exists, err := xm.Exists(ctx, params)
 	if err != nil {
 		t.Fatalf("exists after delete: %v", err)
 	}
@@ -175,13 +178,14 @@ func TestPackage_ListByQueue(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-package-list-by-queue")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-package-list-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-package-list-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	if err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key"); err != nil {
 		t.Fatalf("bind queue: %v", err)
 	}
 
-	exchanges, err := exchange.ListByQueue(ctx, queueParams)
+	xm := redissmq.NewExchangeManager()
+	exchanges, err := xm.ListByQueue(ctx, queueParams)
 	if err != nil {
 		t.Fatalf("list by queue: %v", err)
 	}
@@ -197,16 +201,17 @@ func TestPackage_ListByQueue(t *testing.T) {
 func TestPackage_ListAll(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-package-list-all-1", "ns-package-a", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-package-list-all-2", "ns-package-b", x.TypeFanout)
-	if err := exchange.Create(ctx, ex1, x.PolicyStandard); err != nil {
+	ex1 := exchange.MustExchangeParamsWithNS("test-package-list-all-1", "ns-package-a", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-package-list-all-2", "ns-package-b", exchange.TypeFanout)
+	xm := redissmq.NewExchangeManager()
+	if err := xm.Create(ctx, ex1, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex1: %v", err)
 	}
-	if err := exchange.Create(ctx, ex2, x.PolicyStandard); err != nil {
+	if err := xm.Create(ctx, ex2, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex2: %v", err)
 	}
 
-	all, err := exchange.ListAll(ctx)
+	all, err := xm.ListAll(ctx)
 	if err != nil {
 		t.Fatalf("list all: %v", err)
 	}
@@ -227,16 +232,17 @@ func TestPackage_ListAll(t *testing.T) {
 func TestPackage_ListByNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	ex1 := x.MustExchangeParamsWithNS("test-package-list-ns-1", "ns-package-list", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-package-list-ns-2", "ns-package-list", x.TypeTopic)
-	if err := exchange.Create(ctx, ex1, x.PolicyStandard); err != nil {
+	ex1 := exchange.MustExchangeParamsWithNS("test-package-list-ns-1", "ns-package-list", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-package-list-ns-2", "ns-package-list", exchange.TypeTopic)
+	xm := redissmq.NewExchangeManager()
+	if err := xm.Create(ctx, ex1, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex1: %v", err)
 	}
-	if err := exchange.Create(ctx, ex2, x.PolicyStandard); err != nil {
+	if err := xm.Create(ctx, ex2, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex2: %v", err)
 	}
 
-	exchanges, err := exchange.ListByNamespace(ctx, "ns-package-list")
+	exchanges, err := xm.ListByNamespace(ctx, "ns-package-list")
 	if err != nil {
 		t.Fatalf("list by namespace: %v", err)
 	}

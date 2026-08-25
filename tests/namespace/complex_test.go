@@ -16,7 +16,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -31,9 +30,9 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	q1 := publicqueue.MustQueueParamsWithNS("lifecycle-q", "lifecycle-ns")
 	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	ex1 := x.MustExchangeParamsWithNS("lifecycle-ex", "lifecycle-ns", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("lifecycle-ex", "lifecycle-ns", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
 
 	// Verify namespace exists
 	exists, _ := nm.Exists(ctx, "lifecycle-ns")
@@ -84,7 +83,7 @@ func TestComplex_FullLifecycle(t *testing.T) {
 		t.Error("queues should be gone")
 	}
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exchanges, _ = em.ListByNamespace(ctx, "lifecycle-ns")
 	if len(exchanges) != 0 {
 		t.Error("exchanges should be gone")
@@ -102,19 +101,19 @@ func TestComplex_MultipleNamespaces(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint)
 
 	// Namespace 2: exchanges only
-	ex1 := x.MustExchangeParamsWithNS("multi-ex1", "ns-with-exchanges", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("multi-ex2", "ns-with-exchanges", x.TypeFanout)
-	dx := exchange.NewDirectExchange()
-	fx := exchange.NewFanoutExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
-	fx.Create(ctx, ex2, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("multi-ex1", "ns-with-exchanges", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("multi-ex2", "ns-with-exchanges", exchange.TypeFanout)
+	dx := redissmq.NewDirectExchange()
+	fx := redissmq.NewFanoutExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
+	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
 	// Namespace 3: both
 	q3 := publicqueue.MustQueueParamsWithNS("multi-q3", "ns-with-both")
 	testutil.CreateQueue(t, ctx, q3, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
-	ex3 := x.MustExchangeParamsWithNS("multi-ex3", "ns-with-both", x.TypeTopic)
-	tx := exchange.NewTopicExchange()
-	tx.Create(ctx, ex3, x.PolicyStandard)
+	ex3 := exchange.MustExchangeParamsWithNS("multi-ex3", "ns-with-both", exchange.TypeTopic)
+	tx := redissmq.NewTopicExchange()
+	tx.Create(ctx, ex3, exchange.PolicyStandard)
 
 	nm := namespace.NewManager()
 
@@ -161,12 +160,12 @@ func TestComplex_CrossNamespaceIsolation(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeLIFO, publicqueue.DeliveryPointToPoint)
 
-	ex1 := x.MustExchangeParamsWithNS("shared-name", "iso-ns-a", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("shared-name", "iso-ns-b", x.TypeFanout)
-	dx := exchange.NewDirectExchange()
-	fx := exchange.NewFanoutExchange()
-	dx.Create(ctx, ex1, x.PolicyStandard)
-	fx.Create(ctx, ex2, x.PolicyStandard)
+	ex1 := exchange.MustExchangeParamsWithNS("shared-name", "iso-ns-a", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("shared-name", "iso-ns-b", exchange.TypeFanout)
+	dx := redissmq.NewDirectExchange()
+	fx := redissmq.NewFanoutExchange()
+	dx.Create(ctx, ex1, exchange.PolicyStandard)
+	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
 	// Delete namespace A only
 	nm := namespace.NewManager()

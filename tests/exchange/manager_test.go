@@ -14,9 +14,9 @@ import (
 	"errors"
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -24,10 +24,10 @@ import (
 func TestManager_CreateAndProperties(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-manager-create", x.TypeDirect)
-	em := exchange.NewManager()
+	params := exchange.MustExchangeParams("test-manager-create", exchange.TypeDirect)
+	em := redissmq.NewExchangeManager()
 
-	if err := em.Create(ctx, params, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, params, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -35,10 +35,10 @@ func TestManager_CreateAndProperties(t *testing.T) {
 	if err != nil {
 		t.Fatalf("properties: %v", err)
 	}
-	if props.Type != x.TypeDirect {
+	if props.Type != exchange.TypeDirect {
 		t.Errorf("type = %v, want direct", props.Type)
 	}
-	if props.Policy != x.PolicyStandard {
+	if props.Policy != exchange.PolicyStandard {
 		t.Errorf("policy = %v, want standard", props.Policy)
 	}
 }
@@ -47,8 +47,8 @@ func TestManager_CreateAndProperties(t *testing.T) {
 func TestManager_Exists(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-manager-exists", x.TypeFanout)
-	em := exchange.NewManager()
+	params := exchange.MustExchangeParams("test-manager-exists", exchange.TypeFanout)
+	em := redissmq.NewExchangeManager()
 
 	exists, err := em.Exists(ctx, params)
 	if err != nil {
@@ -58,7 +58,7 @@ func TestManager_Exists(t *testing.T) {
 		t.Fatal("exchange should not exist before creation")
 	}
 
-	if err := em.Create(ctx, params, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, params, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -75,8 +75,8 @@ func TestManager_Exists(t *testing.T) {
 func TestManager_ValidateType(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	directParams := x.MustExchangeParams("test-manager-validate-type", x.TypeDirect)
-	em := exchange.NewManager()
+	directParams := exchange.MustExchangeParams("test-manager-validate-type", exchange.TypeDirect)
+	em := redissmq.NewExchangeManager()
 
 	// required=false should not error even if missing
 	if err := em.ValidateType(ctx, directParams, false); err != nil {
@@ -84,12 +84,12 @@ func TestManager_ValidateType(t *testing.T) {
 	}
 
 	// required=true should error when missing
-	if err := em.ValidateType(ctx, directParams, true); !errors.Is(err, x.ErrNotFound) {
+	if err := em.ValidateType(ctx, directParams, true); !errors.Is(err, exchange.ErrNotFound) {
 		t.Fatalf("validate type (missing, required=true): got %v, want ErrNotFound", err)
 	}
 
 	// Create as direct
-	if err := em.Create(ctx, directParams, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, directParams, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -99,10 +99,9 @@ func TestManager_ValidateType(t *testing.T) {
 	}
 
 	// Different type should return TypeMismatchError
-	topicParams := x.MustExchangeParams("test-manager-validate-type", x.TypeTopic)
+	topicParams := exchange.MustExchangeParams("test-manager-validate-type", exchange.TypeTopic)
 	err := em.ValidateType(ctx, topicParams, true)
-	var typeErr *x.TypeMismatchError
-	if !errors.As(err, &typeErr) {
+	if !errors.Is(err, exchange.ErrTypeMismatch) {
 		t.Fatalf("validate type mismatch: got %v, want TypeMismatchError", err)
 	}
 }
@@ -117,8 +116,8 @@ func TestManager_ValidateBinding(t *testing.T) {
 	prioQueue := queue.MustQueueParams("test-manager-binding-prio")
 	testutil.CreateQueue(t, ctx, prioQueue, queue.TypePriority, queue.DeliveryPointToPoint)
 
-	directParams := x.MustExchangeParams("test-manager-binding-ex", x.TypeDirect)
-	em := exchange.NewManager()
+	directParams := exchange.MustExchangeParams("test-manager-binding-ex", exchange.TypeDirect)
+	em := redissmq.NewExchangeManager()
 
 	// Exchange doesn't exist yet → nil, nil
 	props, err := em.ValidateBinding(ctx, directParams, fifoQueue)
@@ -130,7 +129,7 @@ func TestManager_ValidateBinding(t *testing.T) {
 	}
 
 	// Create standard direct exchange
-	if err := em.Create(ctx, directParams, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, directParams, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -142,14 +141,13 @@ func TestManager_ValidateBinding(t *testing.T) {
 	if props == nil {
 		t.Fatal("expected exchange properties")
 	}
-	if props.Type != x.TypeDirect {
+	if props.Type != exchange.TypeDirect {
 		t.Errorf("type = %v, want direct", props.Type)
 	}
 
 	// Policy violation – Priority queue cannot bind to Standard exchange
 	_, err = em.ValidateBinding(ctx, directParams, prioQueue)
-	var policyErr *x.PolicyViolationError
-	if !errors.As(err, &policyErr) {
+	if !errors.Is(err, exchange.ErrPolicyViolation) {
 		t.Fatalf("validate binding (priority): got %v, want PolicyViolationError", err)
 	}
 }
@@ -158,10 +156,10 @@ func TestManager_ValidateBinding(t *testing.T) {
 func TestManager_Delete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := x.MustExchangeParams("test-manager-delete", x.TypeTopic)
-	em := exchange.NewManager()
+	params := exchange.MustExchangeParams("test-manager-delete", exchange.TypeTopic)
+	em := redissmq.NewExchangeManager()
 
-	if err := em.Create(ctx, params, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, params, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create: %v", err)
 	}
 
@@ -185,13 +183,13 @@ func TestManager_ListByQueue(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-manager-list-by-queue")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-manager-list-ex", x.TypeDirect)
-	dx := exchange.NewDirectExchange()
+	exchangeParams := exchange.MustExchangeParams("test-manager-list-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
 	if err := dx.BindQueue(ctx, queueParams, exchangeParams, "test.key"); err != nil {
 		t.Fatalf("bind queue: %v", err)
 	}
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 	exchanges, err := em.ListByQueue(ctx, queueParams)
 	if err != nil {
 		t.Fatalf("list by queue: %v", err)
@@ -208,14 +206,14 @@ func TestManager_ListByQueue(t *testing.T) {
 func TestManager_ListAll(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 
-	ex1 := x.MustExchangeParamsWithNS("test-manager-list-all-1", "ns-a", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-manager-list-all-2", "ns-b", x.TypeFanout)
-	if err := em.Create(ctx, ex1, x.PolicyStandard); err != nil {
+	ex1 := exchange.MustExchangeParamsWithNS("test-manager-list-all-1", "ns-a", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-manager-list-all-2", "ns-b", exchange.TypeFanout)
+	if err := em.Create(ctx, ex1, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex1: %v", err)
 	}
-	if err := em.Create(ctx, ex2, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, ex2, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex2: %v", err)
 	}
 
@@ -240,14 +238,14 @@ func TestManager_ListAll(t *testing.T) {
 func TestManager_ListByNamespace(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	em := exchange.NewManager()
+	em := redissmq.NewExchangeManager()
 
-	ex1 := x.MustExchangeParamsWithNS("test-manager-list-ns-1", "ns-list", x.TypeDirect)
-	ex2 := x.MustExchangeParamsWithNS("test-manager-list-ns-2", "ns-list", x.TypeTopic)
-	if err := em.Create(ctx, ex1, x.PolicyStandard); err != nil {
+	ex1 := exchange.MustExchangeParamsWithNS("test-manager-list-ns-1", "ns-list", exchange.TypeDirect)
+	ex2 := exchange.MustExchangeParamsWithNS("test-manager-list-ns-2", "ns-list", exchange.TypeTopic)
+	if err := em.Create(ctx, ex1, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex1: %v", err)
 	}
-	if err := em.Create(ctx, ex2, x.PolicyStandard); err != nil {
+	if err := em.Create(ctx, ex2, exchange.PolicyStandard); err != nil {
 		t.Fatalf("create ex2: %v", err)
 	}
 

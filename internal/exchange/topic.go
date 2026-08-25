@@ -22,7 +22,7 @@ import (
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -45,16 +45,30 @@ func NewTopicStore(store *Store, validator *Validator, codecs *Codecs) *TopicSto
 	}
 }
 
+// Create creates a topic exchange with the given queue policy.
+// Returns ErrTypeMismatch if params.Type() is not TypeTopic.
+func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+	if params.Type() != pubexchange.TypeTopic {
+		return pubexchange.ErrTypeMismatch
+	}
+	return ts.store.Save(ctx, params, policy)
+}
+
 // BindQueue binds a queue to a topic exchange with a binding pattern.
 // The pattern must be a valid AMQP-style topic pattern.
+// The queue and exchange must be in the same namespace.
 func (ts *TopicStore) BindQueue(
 	ctx context.Context,
 	queueParams *queue.QueueParams,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
 ) error {
+	if queueParams.NS() != exchangeParams.Namespace() {
+		return pubexchange.ErrNamespaceMismatch
+	}
+
 	if !validateTopicPattern(pattern) {
-		return x.ErrInvalidPattern
+		return pubexchange.ErrInvalidPattern
 	}
 
 	exKey := keys.Exchange{
@@ -97,7 +111,7 @@ func (ts *TopicStore) BindQueue(
 			return err
 		}
 		if isMember {
-			return x.ErrQueueAlreadyBound
+			return pubexchange.ErrQueueAlreadyBound
 		}
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
@@ -120,14 +134,19 @@ func (ts *TopicStore) BindQueue(
 }
 
 // UnbindQueue removes a queue binding from a topic exchange pattern.
+// The queue and exchange must be in the same namespace.
 func (ts *TopicStore) UnbindQueue(
 	ctx context.Context,
 	queueParams *queue.QueueParams,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
 ) error {
+	if queueParams.NS() != exchangeParams.Namespace() {
+		return pubexchange.ErrNamespaceMismatch
+	}
+
 	if !validateTopicPattern(pattern) {
-		return x.ErrInvalidPattern
+		return pubexchange.ErrInvalidPattern
 	}
 
 	exKey := keys.Exchange{
@@ -166,7 +185,7 @@ func (ts *TopicStore) UnbindQueue(
 			return err
 		}
 		if !isMember {
-			return x.ErrQueueNotBound
+			return pubexchange.ErrQueueNotBound
 		}
 
 		allPatterns, err := tx.SMembers(ctx, exKey.BindingPatterns()).Result()
@@ -213,12 +232,17 @@ func (ts *TopicStore) UnbindQueue(
 }
 
 // MatchQueues returns all queues whose binding patterns match the routing key.
+// It validates that the exchange is a topic exchange before matching.
 func (ts *TopicStore) MatchQueues(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) ([]queue.QueueParams, error) {
-	patterns, err := ts.Patterns(ctx, exchangeParams)
+	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
+		return nil, err
+	}
+
+	patterns, err := ts.patterns(ctx, exchangeParams)
 	if err != nil {
 		return nil, err
 	}
@@ -238,7 +262,7 @@ func (ts *TopicStore) MatchQueues(
 	var queues []queue.QueueParams
 
 	for _, pattern := range matchedPatterns {
-		bound, err := ts.BoundQueues(ctx, exchangeParams, pattern)
+		bound, err := ts.boundQueues(ctx, exchangeParams, pattern)
 		if err != nil {
 			return nil, err
 		}
@@ -255,52 +279,48 @@ func (ts *TopicStore) MatchQueues(
 }
 
 // Patterns returns all binding patterns registered for this topic exchange.
+// It validates that the exchange is a topic exchange.
 func (ts *TopicStore) Patterns(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) ([]string, error) {
-	exKey := keys.Exchange{
-		Namespace: exchangeParams.Namespace(),
-		Name:      exchangeParams.Name(),
+	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
+		return nil, err
 	}
-
-	return redisClient.LoadSetMembers(ctx, exKey.BindingPatterns(), "binding patterns")
+	return ts.patterns(ctx, exchangeParams)
 }
 
 // BoundQueues returns all queues bound to a specific pattern.
+// It validates that the exchange is a topic exchange.
 func (ts *TopicStore) BoundQueues(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
 ) ([]queue.QueueParams, error) {
-	exKey := keys.Exchange{
-		Namespace: exchangeParams.Namespace(),
-		Name:      exchangeParams.Name(),
-	}
-
-	members, err := redisClient.LoadSetMembers(ctx,
-		exKey.PatternQueues(pattern),
-		fmt.Sprintf("queues for pattern %s", pattern))
-	if err != nil {
+	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
-
-	return internalQueue.DecodeQueueParams(members)
+	return ts.boundQueues(ctx, exchangeParams, pattern)
 }
 
 // Bindings returns all pattern to queue mappings.
+// It validates that the exchange is a topic exchange.
 func (ts *TopicStore) Bindings(
 	ctx context.Context,
-	exchangeParams *x.ExchangeParams,
+	exchangeParams *pubexchange.ExchangeParams,
 ) (map[string][]queue.QueueParams, error) {
-	patterns, err := ts.Patterns(ctx, exchangeParams)
+	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
+		return nil, err
+	}
+
+	patterns, err := ts.patterns(ctx, exchangeParams)
 	if err != nil {
 		return nil, err
 	}
 
 	bindings := make(map[string][]queue.QueueParams, len(patterns))
 	for _, pattern := range patterns {
-		queues, err := ts.BoundQueues(ctx, exchangeParams, pattern)
+		queues, err := ts.boundQueues(ctx, exchangeParams, pattern)
 		if err != nil {
 			return nil, err
 		}
@@ -311,7 +331,7 @@ func (ts *TopicStore) Bindings(
 
 // Delete removes a topic exchange and all pattern bindings.
 // Returns error if any patterns have bound queues.
-func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *x.ExchangeParams) error {
+func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *pubexchange.ExchangeParams) error {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -322,7 +342,7 @@ func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *x.ExchangePara
 		return fmt.Errorf("delete: encode exchange: %w", err)
 	}
 
-	allPatterns, err := ts.Patterns(ctx, exchangeParams)
+	allPatterns, err := ts.patterns(ctx, exchangeParams)
 	if err != nil {
 		return err
 	}
@@ -349,7 +369,7 @@ func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *x.ExchangePara
 				return err
 			}
 			if count > 0 {
-				return x.ErrHasBoundQueues
+				return pubexchange.ErrHasBoundQueues
 			}
 		}
 
@@ -369,6 +389,41 @@ func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *x.ExchangePara
 	}
 
 	return redisClient.WithTransaction(ctx, watchKeys, 5, txf)
+}
+
+// Internal helper: returns patterns without type validation.
+// Assumes caller has already validated exchange type.
+func (ts *TopicStore) patterns(
+	ctx context.Context,
+	exchangeParams *pubexchange.ExchangeParams,
+) ([]string, error) {
+	exKey := keys.Exchange{
+		Namespace: exchangeParams.Namespace(),
+		Name:      exchangeParams.Name(),
+	}
+	return redisClient.LoadSetMembers(ctx, exKey.BindingPatterns(), "binding patterns")
+}
+
+// Internal helper: returns bound queues without type validation.
+// Assumes caller has already validated exchange type.
+func (ts *TopicStore) boundQueues(
+	ctx context.Context,
+	exchangeParams *pubexchange.ExchangeParams,
+	pattern string,
+) ([]queue.QueueParams, error) {
+	exKey := keys.Exchange{
+		Namespace: exchangeParams.Namespace(),
+		Name:      exchangeParams.Name(),
+	}
+
+	members, err := redisClient.LoadSetMembers(ctx,
+		exKey.PatternQueues(pattern),
+		fmt.Sprintf("queues for pattern %s", pattern))
+	if err != nil {
+		return nil, err
+	}
+
+	return internalQueue.DecodeQueueParams(members)
 }
 
 // Topic pattern matching logic
@@ -395,38 +450,48 @@ func validateTopicPattern(pattern string) bool {
 	return true
 }
 
+// matchTopicPattern checks if a routing key matches an AMQP topic pattern.
+// It uses a recursive backtracking algorithm that correctly handles
+// '*' (exactly one token) and '#' (zero or more tokens).
 func matchTopicPattern(routingKey, pattern string) bool {
-	tokens := strings.Split(pattern, ".")
-	var reParts []string
-	prevWasHash := false
+	rTokens := strings.Split(routingKey, ".")
+	pTokens := strings.Split(pattern, ".")
+	return matchTopicTokens(rTokens, pTokens)
+}
 
-	for i, token := range tokens {
-		if token == "#" {
-			if i == 0 {
-				reParts = append(reParts, `(?:[^.]+(?:\.[^.]+)*)?`)
-			} else {
-				reParts = append(reParts, `(?:\.[^.]+)*`)
-			}
-			prevWasHash = true
-			continue
-		}
-
-		if i > 0 {
-			if prevWasHash {
-				reParts = append(reParts, `(?:\.)?`)
-			} else {
-				reParts = append(reParts, `\.`)
-			}
-		}
-		prevWasHash = false
-
-		if token == "*" {
-			reParts = append(reParts, `[^.]+`)
-		} else {
-			reParts = append(reParts, regexp.QuoteMeta(token))
-		}
+func matchTopicTokens(r, p []string) bool {
+	// If pattern is exhausted, routing key must also be exhausted.
+	if len(p) == 0 {
+		return len(r) == 0
 	}
 
-	re := regexp.MustCompile(`^` + strings.Join(reParts, "") + `$`)
-	return re.MatchString(routingKey)
+	// If routing key is exhausted, pattern must consist only of '#' tokens.
+	if len(r) == 0 {
+		for _, token := range p {
+			if token != "#" {
+				return false
+			}
+		}
+		return true
+	}
+
+	switch p[0] {
+	case "#":
+		// '#' matches zero or more tokens; try all possibilities.
+		for i := 0; i <= len(r); i++ {
+			if matchTopicTokens(r[i:], p[1:]) {
+				return true
+			}
+		}
+		return false
+	case "*":
+		// '*' matches exactly one token.
+		return matchTopicTokens(r[1:], p[1:])
+	default:
+		// Literal token must match exactly.
+		if r[0] != p[0] {
+			return false
+		}
+		return matchTopicTokens(r[1:], p[1:])
+	}
 }

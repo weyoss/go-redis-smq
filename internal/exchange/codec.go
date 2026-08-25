@@ -18,7 +18,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/codec"
 	"github.com/weyoss/go-redis-smq/internal/exchange/schema"
-	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
+	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 )
 
 // ExchangeParamsCodec handles serialization of ExchangeParams to/from Redis sets.
@@ -30,7 +30,7 @@ func NewExchangeParamsCodec() *ExchangeParamsCodec {
 }
 
 // EncodeSet serializes ExchangeParams to a JSON string for Redis set storage.
-func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *x.ExchangeParams) (string, error) {
+func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *pubexchange.ExchangeParams) (string, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
 		return "", codec.NewEncodingError("exchange params", params.String(), err)
@@ -39,8 +39,8 @@ func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *x.ExchangeP
 }
 
 // DecodeSet deserializes a JSON string from a Redis set back to ExchangeParams.
-func (c *ExchangeParamsCodec) DecodeSet(ctx context.Context, data string) (*x.ExchangeParams, error) {
-	var params x.ExchangeParams
+func (c *ExchangeParamsCodec) DecodeSet(ctx context.Context, data string) (*pubexchange.ExchangeParams, error) {
+	var params pubexchange.ExchangeParams
 	if err := json.Unmarshal([]byte(data), &params); err != nil {
 		return nil, codec.NewDecodingError("exchange params", data, err)
 	}
@@ -59,7 +59,7 @@ func NewExchangePropsCodec() *ExchangePropsCodec {
 }
 
 // EncodeHash serializes ExchangeProps to a Redis hash map.
-func (c *ExchangePropsCodec) EncodeHash(ctx context.Context, props *x.ExchangeProps) (map[string]interface{}, error) {
+func (c *ExchangePropsCodec) EncodeHash(ctx context.Context, props *pubexchange.ExchangeProps) (map[string]interface{}, error) {
 	if props == nil {
 		return nil, codec.NewEncodingError("exchange props", "nil", codec.ErrInvalidFormat)
 	}
@@ -73,19 +73,19 @@ func (c *ExchangePropsCodec) EncodeHash(ctx context.Context, props *x.ExchangePr
 }
 
 // DecodeHash deserializes a Redis hash map back to ExchangeProps.
-func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]string) (*x.ExchangeProps, error) {
+func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]string) (*pubexchange.ExchangeProps, error) {
 	if len(hash) == 0 {
 		return nil, codec.NewDecodingError("exchange props", "empty hash", codec.ErrInvalidFormat)
 	}
 
-	props := &x.ExchangeProps{}
+	props := &pubexchange.ExchangeProps{}
 
 	if v, ok := hash[schema.ExchangeFieldType.Key()]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, codec.NewDecodingError("exchange props", fmt.Sprintf("type=%s", v), err)
 		}
-		props.Type = x.ExchangeType(n)
+		props.Type = pubexchange.ExchangeType(n)
 	}
 
 	if v, ok := hash[schema.ExchangeFieldPolicy.Key()]; ok {
@@ -93,7 +93,7 @@ func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]str
 		if err != nil {
 			return nil, codec.NewDecodingError("exchange props", fmt.Sprintf("policy=%s", v), err)
 		}
-		props.Policy = x.ExchangePolicy(n)
+		props.Policy = pubexchange.ExchangePolicy(n)
 	}
 
 	return props, nil
@@ -101,6 +101,6 @@ func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]str
 
 // Compile-time interface checks
 var (
-	_ codec.SetCodec[*x.ExchangeParams] = (*ExchangeParamsCodec)(nil)
-	_ codec.HashCodec[*x.ExchangeProps] = (*ExchangePropsCodec)(nil)
+	_ codec.SetCodec[*pubexchange.ExchangeParams] = (*ExchangeParamsCodec)(nil)
+	_ codec.HashCodec[*pubexchange.ExchangeProps] = (*ExchangePropsCodec)(nil)
 )
