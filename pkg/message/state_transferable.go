@@ -8,7 +8,7 @@
  *
  */
 
-package msg
+package message
 
 // StateTransferable holds the message lifecycle state in a form suitable
 // for JSON serialization between RedisSMQ components and across language

@@ -21,7 +21,6 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -34,12 +33,12 @@ func TestRequeue_AcknowledgedMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("requeue-me").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("requeue-me").SetQueue(params))
 
 	// Consume to acknowledge
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		received <- struct{}{}
 		return nil
 	})
@@ -49,7 +48,7 @@ func TestRequeue_AcknowledgedMessage(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Requeue the acknowledged message
-	newID, err := message.Requeue(ctx, ids[0])
+	newID, err := redissmq.NewMessageManager().Requeue(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("requeue: %v", err)
 	}
@@ -63,7 +62,7 @@ func TestRequeue_AcknowledgedMessage(t *testing.T) {
 	// Verify new message can be consumed
 	var newConsumed atomic.Int64
 	cons2 := redissmq.NewConsumer()
-	cons2.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons2.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		newConsumed.Add(1)
 		return nil
 	})
@@ -84,13 +83,13 @@ func TestRequeue_RequeueScheduledMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().
+	ids, _ := prod.Produce(ctx, message.New().
 		SetBody("sched-req").
 		SetQueue(params).
 		SetScheduledDelay(1*time.Hour),
 	)
 
-	_, err := message.Requeue(ctx, ids[0])
+	_, err := redissmq.NewMessageManager().Requeue(ctx, ids[0])
 	if err == nil {
 		t.Fatal("expected error: cannot requeue scheduled message")
 	}
@@ -104,10 +103,10 @@ func TestRequeue_PendingMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("pending").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("pending").SetQueue(params))
 
 	// Try to requeue a pending message — should fail
-	_, err := message.Requeue(ctx, ids[0])
+	_, err := redissmq.NewMessageManager().Requeue(ctx, ids[0])
 	if err == nil {
 		t.Fatal("expected error: cannot requeue pending message")
 	}
@@ -117,7 +116,7 @@ func TestRequeue_PendingMessage(t *testing.T) {
 func TestRequeue_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := message.Requeue(ctx, "nonexistent-id")
+	_, err := redissmq.NewMessageManager().Requeue(ctx, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent message")
 	}
@@ -133,7 +132,7 @@ func TestRequeue_PreservesMessage(t *testing.T) {
 
 	prod := testutil.StartProducer(t, ctx)
 	originalBody := map[string]interface{}{"orderId": 123, "amount": 99.99}
-	ids, _ := prod.Produce(ctx, msg.New().
+	ids, _ := prod.Produce(ctx, message.New().
 		SetBody(originalBody).
 		SetQueue(params).
 		SetTTL(5*time.Minute),
@@ -142,7 +141,7 @@ func TestRequeue_PreservesMessage(t *testing.T) {
 	// Consume to acknowledge
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		received <- struct{}{}
 		return nil
 	})
@@ -151,14 +150,16 @@ func TestRequeue_PreservesMessage(t *testing.T) {
 	<-received
 	time.Sleep(200 * time.Millisecond)
 
+	mm := redissmq.NewMessageManager()
+
 	// Requeue
-	newID, err := message.Requeue(ctx, ids[0])
+	newID, err := mm.Requeue(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("requeue: %v", err)
 	}
 
 	// Get the new message
-	newMsg, err := message.Get(ctx, newID)
+	newMsg, err := mm.Get(ctx, newID)
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -191,12 +192,12 @@ func TestRequeue_DoubleRequeue(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("double-requeue").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("double-requeue").SetQueue(params))
 
 	// Consume to acknowledge
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		received <- struct{}{}
 		return nil
 	})
@@ -205,12 +206,14 @@ func TestRequeue_DoubleRequeue(t *testing.T) {
 	<-received
 	time.Sleep(200 * time.Millisecond)
 
+	mm := redissmq.NewMessageManager()
+
 	// Requeue twice
-	newID1, err := message.Requeue(ctx, ids[0])
+	newID1, err := mm.Requeue(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("first requeue: %v", err)
 	}
-	newID2, err := message.Requeue(ctx, ids[0])
+	newID2, err := mm.Requeue(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("second requeue: %v", err)
 	}
@@ -239,7 +242,7 @@ func TestRequeue_DeadLetteredMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().
+	ids, _ := prod.Produce(ctx, message.New().
 		SetBody("dlq-requeue").
 		SetQueue(params).
 		SetRetryThreshold(1). // Fail once, then DLQ
@@ -249,7 +252,7 @@ func TestRequeue_DeadLetteredMessage(t *testing.T) {
 	// Consume and fail to trigger DLQ
 	var attempts atomic.Int64
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		attempts.Add(1)
 		return fmt.Errorf("fail")
 	})
@@ -261,7 +264,7 @@ func TestRequeue_DeadLetteredMessage(t *testing.T) {
 	t.Logf("attempts: %d", attempts.Load())
 
 	// Requeue from DLQ
-	newID, err := message.Requeue(ctx, ids[0])
+	newID, err := redissmq.NewMessageManager().Requeue(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("requeue from DLQ: %v", err)
 	}

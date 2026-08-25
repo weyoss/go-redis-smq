@@ -17,7 +17,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	queue2 "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 

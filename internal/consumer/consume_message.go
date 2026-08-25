@@ -20,7 +20,7 @@ import (
 	consumerEvents "github.com/weyoss/go-redis-smq/internal/consumer/events"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -121,7 +121,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 }
 
 // isExpired checks whether a message has exceeded its TTL.
-func (c *ConsumeMessage) isExpired(m *msg.Transferable) bool {
+func (c *ConsumeMessage) isExpired(m *publicmessage.Transferable) bool {
 	if m.TTL <= 0 {
 		return false
 	}
@@ -130,7 +130,7 @@ func (c *ConsumeMessage) isExpired(m *msg.Transferable) bool {
 
 // handlerContext returns a context with a timeout if the message has a
 // consume timeout configured.
-func (c *ConsumeMessage) handlerContext(ctx context.Context, m *msg.Transferable) (context.Context, context.CancelFunc) {
+func (c *ConsumeMessage) handlerContext(ctx context.Context, m *publicmessage.Transferable) (context.Context, context.CancelFunc) {
 	if m.ConsumeTimeout > 0 {
 		timeout := time.Duration(m.ConsumeTimeout) * time.Millisecond
 		c.log.Debug("applying consume timeout",
@@ -143,6 +143,6 @@ func (c *ConsumeMessage) handlerContext(ctx context.Context, m *msg.Transferable
 }
 
 // invokeHandler calls the user-supplied handler.
-func (c *ConsumeMessage) invokeHandler(ctx context.Context, m *msg.Transferable) error {
+func (c *ConsumeMessage) invokeHandler(ctx context.Context, m *publicmessage.Transferable) error {
 	return c.handler(ctx, m)
 }

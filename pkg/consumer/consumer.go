@@ -13,12 +13,12 @@ package consumer
 import (
 	"context"
 
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Handler is the function signature for processing a message.
-type Handler func(ctx context.Context, m *msg.Transferable) error
+type Handler func(ctx context.Context, m *message.Transferable) error
 
 // Consumer is the public interface implemented by RedisSMQ consumers.
 type Consumer interface {

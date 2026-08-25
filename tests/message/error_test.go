@@ -13,9 +13,9 @@ package message_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -23,7 +23,7 @@ import (
 func TestError_GetNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := message.Get(ctx, "nonexistent-id")
+	_, err := redissmq.NewMessageManager().Get(ctx, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent message")
 	}
@@ -33,7 +33,7 @@ func TestError_GetNotFound(t *testing.T) {
 func TestError_StatusNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := message.Status(ctx, "nonexistent-id")
+	_, err := redissmq.NewMessageManager().Status(ctx, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent message")
 	}
@@ -43,7 +43,7 @@ func TestError_StatusNotFound(t *testing.T) {
 func TestError_StateNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := message.State(ctx, "nonexistent-id")
+	_, err := redissmq.NewMessageManager().State(ctx, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent message")
 	}
@@ -53,7 +53,7 @@ func TestError_StateNotFound(t *testing.T) {
 func TestError_GetAllNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	messages, err := message.GetAll(ctx, []string{"fake-1", "fake-2", "fake-3"})
+	messages, err := redissmq.NewMessageManager().GetAll(ctx, []string{"fake-1", "fake-2", "fake-3"})
 	if err != nil {
 		t.Fatalf("get all: %v", err)
 	}
@@ -66,7 +66,7 @@ func TestError_GetAllNotFound(t *testing.T) {
 func TestError_DeleteNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	result, err := message.Delete(ctx, "nonexistent-id")
+	result, err := redissmq.NewMessageManager().Delete(ctx, "nonexistent-id")
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -79,7 +79,7 @@ func TestError_DeleteNotFound(t *testing.T) {
 func TestError_RequeueNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := message.Requeue(ctx, "nonexistent-id")
+	_, err := redissmq.NewMessageManager().Requeue(ctx, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent message")
 	}
@@ -93,9 +93,9 @@ func TestError_RequeuePending(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("pending").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("pending").SetQueue(params))
 
-	_, err := message.Requeue(ctx, ids[0])
+	_, err := redissmq.NewMessageManager().Requeue(ctx, ids[0])
 	if err == nil {
 		t.Fatal("expected error: cannot requeue pending message")
 	}
@@ -105,11 +105,11 @@ func TestError_RequeuePending(t *testing.T) {
 func TestError_DeleteEmptyList(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	result, err := message.DeleteAll(ctx, []string{})
+	result, err := redissmq.NewMessageManager().DeleteAll(ctx, []string{})
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
-	if result.Status != msg.DeleteStatusOK {
+	if result.Status != message.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 }

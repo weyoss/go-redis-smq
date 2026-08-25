@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -46,7 +46,7 @@ func main() {
 
 	// Produce messages
 	for i := 1; i <= 5; i++ {
-		m := msg.New().
+		m := message.New().
 			SetBody(fmt.Sprintf("Order #%d", i)).
 			SetQueue(ordersQueue).
 			SetTTL(5 * time.Minute).

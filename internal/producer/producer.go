@@ -25,7 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -120,7 +120,7 @@ func (prod *Producer) IsRunning() bool {
 
 func (prod *Producer) ID() string { return prod.id }
 
-func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]string, error) {
+func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMessage) ([]string, error) {
 	prod.mu.RLock()
 	running := prod.running
 	resolver := prod.pubSubResolver
@@ -150,7 +150,7 @@ func (prod *Producer) Produce(ctx context.Context, m *msg.ProducibleMessage) ([]
 	return prod.produceToExchange(ctx, m, exchangeParams, resolver)
 }
 
-func (prod *Producer) produceToQueue(ctx context.Context, m *msg.ProducibleMessage, queueParams *queue.QueueParams, resolver *PubSubTargetResolver) ([]string, error) {
+func (prod *Producer) produceToQueue(ctx context.Context, m *publicmessage.ProducibleMessage, queueParams *queue.QueueParams, resolver *PubSubTargetResolver) ([]string, error) {
 	var targets []string
 	if resolver != nil {
 		targets = resolver.Resolve(queueParams)
@@ -201,7 +201,7 @@ func (prod *Producer) produceToQueue(ctx context.Context, m *msg.ProducibleMessa
 	return []string{id}, nil
 }
 
-func (prod *Producer) produceToExchange(ctx context.Context, m *msg.ProducibleMessage, exchangeParams *x.ExchangeParams, resolver *PubSubTargetResolver) ([]string, error) {
+func (prod *Producer) produceToExchange(ctx context.Context, m *publicmessage.ProducibleMessage, exchangeParams *x.ExchangeParams, resolver *PubSubTargetResolver) ([]string, error) {
 	queues, err := prod.matchExchangeQueues(ctx, exchangeParams, m.ExchangeRoutingKey())
 	if err != nil {
 		prod.log.Error("failed to match exchange queues",
@@ -273,12 +273,12 @@ func (prod *Producer) dispatch(ctx context.Context, envelope *internalMessage.En
 	state := envelope.MessageState()
 	now := time.Now().UnixMilli()
 	if isScheduled {
-		envelope.SetStatus(msg.StatusScheduled)
+		envelope.SetStatus(publicmessage.StatusScheduled)
 		state.SetScheduledAt(nextScheduledTimestamp)
 		state.SetLastScheduledAt(now)
 		state.IncrScheduledTimes()
 	} else {
-		envelope.SetStatus(msg.StatusPending)
+		envelope.SetStatus(publicmessage.StatusPending)
 		state.SetPublishedAt(now)
 	}
 

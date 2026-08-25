@@ -8,13 +8,12 @@
  *
  */
 
-package msg
+package message
 
 import (
 	"strings"
 	"time"
 
-	"github.com/weyoss/go-redis-smq/internal/util/cron"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -25,11 +24,11 @@ import (
 //
 // Example:
 //
-//	msg := msg.New().
+//	m := message.New().
 //	    SetBody(map[string]interface{}{"userId": 123}).
 //	    SetQueue(queueParams).
 //	    SetTTL(5 * time.Minute).
-//	    SetPriority(msg.PriorityHigh)
+//	    SetPriority(message.PriorityHigh)
 type ProducibleMessage struct {
 	createdAt             time.Time
 	ttl                   time.Duration
@@ -63,7 +62,6 @@ func New() *ProducibleMessage {
 }
 
 // SetDefaultConsumeOptions sets the default options for all future messages.
-// Only non-negative values are applied.
 func SetDefaultConsumeOptions(opts ConsumeOptions) {
 	if opts.TTL >= 0 {
 		defaultOptions.TTL = opts.TTL
@@ -165,18 +163,10 @@ func (m *ProducibleMessage) DisablePriority() *ProducibleMessage {
 func (m *ProducibleMessage) ScheduledCron() string { return m.scheduledCron }
 
 // SetScheduledCron sets a CRON expression for scheduled delivery.
-// The expression is validated at set time using the internal CRON validator.
-// Invalid expressions are silently ignored to maintain builder pattern
-// compatibility.
+// No validation is performed here; validation occurs in the internal
+// scheduler if needed.
 func (m *ProducibleMessage) SetScheduledCron(cronExpr string) *ProducibleMessage {
-	expr := strings.TrimSpace(cronExpr)
-	if expr == "" {
-		m.scheduledCron = ""
-		return m
-	}
-	if cron.ValidateCron(expr) == nil {
-		m.scheduledCron = expr
-	}
+	m.scheduledCron = strings.TrimSpace(cronExpr)
 	return m
 }
 

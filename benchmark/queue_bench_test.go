@@ -17,7 +17,7 @@ import (
 
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -54,7 +54,7 @@ func BenchmarkQueue_Browse(b *testing.B) {
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 10_000
 	for i := 0; i < messageCount; i++ {
-		if _, err := prod.Produce(ctx, msg.New().SetBody("benchmark").SetQueue(params)); err != nil {
+		if _, err := prod.Produce(ctx, message.New().SetBody("benchmark").SetQueue(params)); err != nil {
 			b.Fatalf("produce: %v", err)
 		}
 	}

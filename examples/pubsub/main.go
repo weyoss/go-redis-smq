@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -49,7 +49,7 @@ func main() {
 	// Consumer: Email service
 	emailCh := make(chan string, 5)
 	emailConsumer := redissmq.NewConsumer()
-	emailConsumer.ConsumeWithGroup(notifQueue, "email-service", func(ctx context.Context, m *msg.Transferable) error {
+	emailConsumer.ConsumeWithGroup(notifQueue, "email-service", func(ctx context.Context, m *message.Transferable) error {
 		emailCh <- fmt.Sprintf("Email received: %v", m.Body)
 		return nil
 	})
@@ -60,7 +60,7 @@ func main() {
 	// Consumer: SMS service
 	smsCh := make(chan string, 5)
 	smsConsumer := redissmq.NewConsumer()
-	smsConsumer.ConsumeWithGroup(notifQueue, "sms-service", func(ctx context.Context, m *msg.Transferable) error {
+	smsConsumer.ConsumeWithGroup(notifQueue, "sms-service", func(ctx context.Context, m *message.Transferable) error {
 		smsCh <- fmt.Sprintf("SMS received: %v", m.Body)
 		return nil
 	})
@@ -75,7 +75,7 @@ func main() {
 		log.Fatalf("run producer: %v", err)
 	}
 
-	m := msg.New().
+	m := message.New().
 		SetBody("System maintenance at 2 AM").
 		SetQueue(notifQueue)
 

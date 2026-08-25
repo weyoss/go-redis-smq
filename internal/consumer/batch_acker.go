@@ -19,7 +19,6 @@ import (
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
-	mSchema "github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -27,7 +26,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -185,9 +184,9 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 		queue.StatePaused.Int(),
 		queue.StateStopped.Int(),
 		queue.StateLocked.Int(),
-		mSchema.MessageFieldStatus.Key(),
-		msg.StatusAcknowledged.Int(),
-		mSchema.MessageFieldAcknowledgedAt.Key(),
+		internalMessage.MessageFieldStatus.Key(),
+		publicmessage.StatusAcknowledged.Int(),
+		internalMessage.MessageFieldAcknowledgedAt.Key(),
 		qSchema.QueueFieldAcknowledgedMessagesCount.Key(),
 		qSchema.QueueFieldProcessingMessagesCount.Key(),
 	}

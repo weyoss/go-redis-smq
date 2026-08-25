@@ -16,8 +16,7 @@ import (
 
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -220,7 +219,7 @@ func TestEdge_RapidScheduleDelete(t *testing.T) {
 		}
 
 		// Delete it immediately
-		result, err := message.Delete(ctx, ids[0])
+		result, err := redissmq.NewMessageManager().Delete(ctx, ids[0])
 		if err != nil {
 			t.Fatalf("cycle %d delete: %v", i, err)
 		}

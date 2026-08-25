@@ -17,14 +17,16 @@ import (
 
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	internalmessage "github.com/weyoss/go-redis-smq/internal/message"
 	internalproducer "github.com/weyoss/go-redis-smq/internal/producer"
-	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	loggercfg "github.com/weyoss/go-redis-smq/internal/util/logger/cfg"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
-	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
+	publiceventbus "github.com/weyoss/go-redis-smq/pkg/eventbus"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -66,7 +68,7 @@ type userBusAdapter struct {
 	bus *eventbus.EventBus
 }
 
-func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interface{}), eventName string) (publicEventBus.Subscription, error) {
+func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interface{}), eventName string) (publiceventbus.Subscription, error) {
 	sub, err := a.bus.Subscribe(handler, eventName)
 	if err != nil {
 		return nil, err
@@ -102,7 +104,7 @@ func Init(ctx context.Context, cfg Config) error {
 
 	systemCtx, systemStop = context.WithCancel(ctx)
 
-	purgeWorkerStop = internalQueue.StartPurgeWorker(systemCtx)
+	purgeWorkerStop = internalqueue.StartPurgeWorker(systemCtx)
 
 	// Auto-shutdown when the context is cancelled.
 	go func() {
@@ -119,13 +121,13 @@ func Init(ctx context.Context, cfg Config) error {
 // public subscription packages.
 func InitUserEventBus(ctx context.Context) {
 	bus := eventbus.InitUser(ctx)
-	publicEventBus.SetUserBus(&userBusAdapter{bus: bus})
+	publiceventbus.SetUserBus(&userBusAdapter{bus: bus})
 }
 
 // ShutdownUserEventBus clears the public user event bus and shuts down the
 // underlying internal user bus.
 func ShutdownUserEventBus() {
-	publicEventBus.SetUserBus(nil)
+	publiceventbus.SetUserBus(nil)
 	eventbus.ShutdownUser()
 }
 
@@ -212,17 +214,23 @@ func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
 // NewQueueManager creates a new queue manager that implements the public
 // queue manager interface.
 func NewQueueManager() publicqueue.QueueManager {
-	return internalQueue.NewQueueManager()
+	return internalqueue.NewQueueManager()
 }
 
 // NewStateManager creates a new state manager that implements the public
 // state manager interface.
 func NewStateManager() publicqueue.StateManager {
-	return internalQueue.NewStateManager()
+	return internalqueue.NewStateManager()
 }
 
 // NewConsumerGroupManager creates a new consumer group manager that implements
 // the public consumer group manager interface.
 func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
-	return internalQueue.NewConsumerGroupManager()
+	return internalqueue.NewConsumerGroupManager()
+}
+
+// NewMessageManager creates a new message manager that implements the public
+// message manager interface.
+func NewMessageManager() publicmessage.MessageManager {
+	return internalmessage.NewManager()
 }

@@ -19,14 +19,13 @@ import (
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
-	mSchema "github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -146,27 +145,27 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 	}
 
 	staticArgv := []interface{}{
-		strconv.Itoa(int(ActionDelay)),                    // ARGV[1]: ERetryActionDelay
-		strconv.Itoa(int(ActionRequeue)),                  // ARGV[2]: ERetryActionRequeue
-		storeMessages,                                     // ARGV[3]
-		expireStoredMessages,                              // ARGV[4]
-		storedMessagesSize,                                // ARGV[5]
-		mSchema.MessageFieldStatus.Key(),                  // ARGV[6]
-		qSchema.QueueFieldProcessingMessagesCount.Key(),   // ARGV[7]
-		qSchema.QueueFieldDeadLetteredMessagesCount.Key(), // ARGV[8]
-		qSchema.QueueFieldRequeuedMessagesCount.Key(),     // ARGV[9]
-		msg.StatusUnackRequeuing.Int(),                    // ARGV[10]
-		msg.StatusDeadLettered.Int(),                      // ARGV[11]
-		mSchema.MessageFieldDeadLetteredAt.Key(),          // ARGV[12]
-		mSchema.MessageFieldUnacknowledgedAt.Key(),        // ARGV[13]
-		mSchema.MessageFieldLastUnacknowledgedAt.Key(),    // ARGV[14]
-		mSchema.MessageFieldExpired.Key(),                 // ARGV[15]
-		qSchema.QueueFieldOperationalState.Key(),          // ARGV[16]
-		queue.StateActive.Int(),                           // ARGV[17]
-		queue.StatePaused.Int(),                           // ARGV[18]
-		queue.StateStopped.Int(),                          // ARGV[19]
-		queue.StateLocked.Int(),                           // ARGV[20]
-		strconv.Itoa(maxHistorySize),                      // ARGV[21]
+		strconv.Itoa(int(ActionDelay)),                         // ARGV[1]: ERetryActionDelay
+		strconv.Itoa(int(ActionRequeue)),                       // ARGV[2]: ERetryActionRequeue
+		storeMessages,                                          // ARGV[3]
+		expireStoredMessages,                                   // ARGV[4]
+		storedMessagesSize,                                     // ARGV[5]
+		internalMessage.MessageFieldStatus.Key(),               // ARGV[6]
+		qSchema.QueueFieldProcessingMessagesCount.Key(),        // ARGV[7]
+		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),      // ARGV[8]
+		qSchema.QueueFieldRequeuedMessagesCount.Key(),          // ARGV[9]
+		publicmessage.StatusUnackRequeuing.Int(),               // ARGV[10]
+		publicmessage.StatusDeadLettered.Int(),                 // ARGV[11]
+		internalMessage.MessageFieldDeadLetteredAt.Key(),       // ARGV[12]
+		internalMessage.MessageFieldUnacknowledgedAt.Key(),     // ARGV[13]
+		internalMessage.MessageFieldLastUnacknowledgedAt.Key(), // ARGV[14]
+		internalMessage.MessageFieldExpired.Key(),              // ARGV[15]
+		qSchema.QueueFieldOperationalState.Key(),               // ARGV[16]
+		queue.StateActive.Int(),                                // ARGV[17]
+		queue.StatePaused.Int(),                                // ARGV[18]
+		queue.StateStopped.Int(),                               // ARGV[19]
+		queue.StateLocked.Int(),                                // ARGV[20]
+		strconv.Itoa(maxHistorySize),                           // ARGV[21]
 	}
 
 	deadLetteredCount := 0

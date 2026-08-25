@@ -20,7 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -77,7 +77,7 @@ func main() {
 
 	startConsumer := func(queue *queue.QueueParams, label string) {
 		c := redissmq.NewConsumer()
-		c.Consume(queue, func(ctx context.Context, m *msg.Transferable) error {
+		c.Consume(queue, func(ctx context.Context, m *message.Transferable) error {
 			ch <- result{queue: label, body: m.Body}
 			return nil
 		})
@@ -93,7 +93,7 @@ func main() {
 	p.Run(ctx)
 
 	// Test 1: user.created — matches "user.*" and "#"
-	m := msg.New().
+	m := message.New().
 		SetBody("User created").
 		SetTopicExchange(exchangeParams).
 		SetExchangeRoutingKey("user.created")
@@ -105,7 +105,7 @@ func main() {
 	log.Printf("'user.created' → %d queue(s): %v", len(ids), ids)
 
 	// Test 2: order.created — matches "order.#" and "#"
-	m = msg.New().
+	m = message.New().
 		SetBody("Order created").
 		SetTopicExchange(exchangeParams).
 		SetExchangeRoutingKey("order.created")
@@ -117,7 +117,7 @@ func main() {
 	log.Printf("'order.created' → %d queue(s): %v", len(ids), ids)
 
 	// Test 3: system.restart — matches only "#"
-	m = msg.New().
+	m = message.New().
 		SetBody("System restart").
 		SetTopicExchange(exchangeParams).
 		SetExchangeRoutingKey("system.restart")

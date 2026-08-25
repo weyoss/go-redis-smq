@@ -22,7 +22,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 

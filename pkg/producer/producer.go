@@ -20,7 +20,7 @@ package producer
 import (
 	"context"
 
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 )
 
 // Producer is the public interface implemented by RedisSMQ producers.
@@ -38,5 +38,5 @@ type Producer interface {
 	ID() string
 
 	// Produce publishes a message to its configured destination.
-	Produce(ctx context.Context, m *msg.ProducibleMessage) ([]string, error)
+	Produce(ctx context.Context, m *publicmessage.ProducibleMessage) ([]string, error)
 }

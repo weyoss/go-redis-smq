@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -25,7 +25,7 @@ func TestEdge_VeryLongMessageID(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	longID := string(make([]byte, 1000))
-	_, err := message.Get(ctx, longID)
+	_, err := redissmq.NewMessageManager().Get(ctx, longID)
 	if err == nil {
 		t.Fatal("expected error for invalid message ID")
 	}
@@ -39,7 +39,7 @@ func TestEdge_MessageStateAfterTTL(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().
+	ids, _ := prod.Produce(ctx, message.New().
 		SetBody("ttl-state").
 		SetQueue(params).
 		SetTTL(500*time.Millisecond),
@@ -47,7 +47,7 @@ func TestEdge_MessageStateAfterTTL(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	state, err := message.State(ctx, ids[0])
+	state, err := redissmq.NewMessageManager().State(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}

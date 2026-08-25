@@ -8,12 +8,12 @@
  *
  */
 
-package msg
+package message
 
 // ConsumeOptions defines default message consumption behaviour.
 //
-// These defaults are applied to every new message created with msg.New()
-// unless overridden by calling msg.SetDefaultConsumeOptions.
+// These defaults are applied to every new message created with New()
+// unless overridden by calling SetDefaultConsumeOptions.
 type ConsumeOptions struct {
 	// TTL is the default time-to-live in milliseconds.
 	// A value of 0 means messages do not expire.

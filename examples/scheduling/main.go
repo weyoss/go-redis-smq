@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -41,7 +41,7 @@ func main() {
 	// Consumer
 	consumed := make(chan string, 3)
 	c := redissmq.NewConsumer()
-	c.Consume(tasksQueue, func(ctx context.Context, m *msg.Transferable) error {
+	c.Consume(tasksQueue, func(ctx context.Context, m *message.Transferable) error {
 		consumed <- m.Body.(string)
 		return nil
 	})
@@ -52,7 +52,7 @@ func main() {
 	p.Run(ctx)
 
 	// Message 1: Delayed by 2 seconds
-	delayedMsg := msg.New().
+	delayedMsg := message.New().
 		SetBody("Delayed message").
 		SetQueue(tasksQueue).
 		SetScheduledDelay(2 * time.Second)
@@ -64,7 +64,7 @@ func main() {
 	log.Printf("Scheduled delayed message: %v", ids)
 
 	// Message 2: Immediate (no delay)
-	immediateMsg := msg.New().
+	immediateMsg := message.New().
 		SetBody("Immediate message").
 		SetQueue(tasksQueue)
 

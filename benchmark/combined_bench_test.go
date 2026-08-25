@@ -19,7 +19,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -31,7 +31,7 @@ func BenchmarkCombined_10K(b *testing.B) {
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		consumed.Add(1)
 		return nil
 	})
@@ -50,7 +50,7 @@ func BenchmarkCombined_10K(b *testing.B) {
 
 	go func() {
 		for i := 0; i < messageCount; i++ {
-			m := msg.New().SetBody("benchmark").SetQueue(params)
+			m := message.New().SetBody("benchmark").SetQueue(params)
 			if _, err := prod.Produce(ctx, m); err != nil {
 				b.Errorf("produce: %v", err)
 				return
@@ -86,7 +86,7 @@ func BenchmarkCombined_100K(b *testing.B) {
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		consumed.Add(1)
 		return nil
 	})
@@ -105,7 +105,7 @@ func BenchmarkCombined_100K(b *testing.B) {
 
 	go func() {
 		for i := 0; i < messageCount; i++ {
-			m := msg.New().SetBody("benchmark").SetQueue(params)
+			m := message.New().SetBody("benchmark").SetQueue(params)
 			if _, err := prod.Produce(ctx, m); err != nil {
 				b.Errorf("produce: %v", err)
 				return
@@ -143,7 +143,7 @@ func BenchmarkCombined_Concurrent(b *testing.B) {
 	consumerCount := 4
 	for i := 0; i < consumerCount; i++ {
 		cons := redissmq.NewConsumer()
-		cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 			consumed.Add(1)
 			return nil
 		})
@@ -166,7 +166,7 @@ func BenchmarkCombined_Concurrent(b *testing.B) {
 		go func() {
 			prod := testutil.StartProducer(b, ctx)
 			for i := 0; i < messagesPerProducer; i++ {
-				m := msg.New().SetBody("benchmark").SetQueue(params)
+				m := message.New().SetBody("benchmark").SetQueue(params)
 				if _, err := prod.Produce(ctx, m); err != nil {
 					b.Errorf("produce: %v", err)
 					return
@@ -208,7 +208,7 @@ func BenchmarkCombined_PubSub(b *testing.B) {
 	var consumedA, consumedB atomic.Int64
 
 	consA := redissmq.NewConsumer()
-	consA.ConsumeWithGroup(params, "group-a", func(ctx context.Context, m *msg.Transferable) error {
+	consA.ConsumeWithGroup(params, "group-a", func(ctx context.Context, m *message.Transferable) error {
 		consumedA.Add(1)
 		return nil
 	})
@@ -216,7 +216,7 @@ func BenchmarkCombined_PubSub(b *testing.B) {
 	defer consA.Shutdown()
 
 	consB := redissmq.NewConsumer()
-	consB.ConsumeWithGroup(params, "group-b", func(ctx context.Context, m *msg.Transferable) error {
+	consB.ConsumeWithGroup(params, "group-b", func(ctx context.Context, m *message.Transferable) error {
 		consumedB.Add(1)
 		return nil
 	})
@@ -236,7 +236,7 @@ func BenchmarkCombined_PubSub(b *testing.B) {
 
 		go func() {
 			for j := 0; j < messageCount; j++ {
-				m := msg.New().SetBody("benchmark").SetQueue(params)
+				m := message.New().SetBody("benchmark").SetQueue(params)
 				if _, err := prod.Produce(ctx, m); err != nil {
 					b.Errorf("produce: %v", err)
 					return

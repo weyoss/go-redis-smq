@@ -19,14 +19,13 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
-	mSchema "github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -233,32 +232,32 @@ func buildScheduledArgs() []interface{} {
 		queue.StatePaused.Int(),
 		queue.StateStopped.Int(),
 		queue.StateLocked.Int(),
-		msg.StatusPending.Int(),
-		msg.StatusScheduled.Int(),
-		msg.StatusDeadLettered.Int(),
-		mSchema.MessageFieldID.Key(),
-		mSchema.MessageFieldStatus.Key(),
-		mSchema.MessageFieldMessage.Key(),
-		mSchema.MessageFieldScheduledAt.Key(),
-		mSchema.MessageFieldPublishedAt.Key(),
-		mSchema.MessageFieldProcessingStartedAt.Key(),
-		mSchema.MessageFieldDeadLetteredAt.Key(),
-		mSchema.MessageFieldAcknowledgedAt.Key(),
-		mSchema.MessageFieldUnacknowledgedAt.Key(),
-		mSchema.MessageFieldLastUnacknowledgedAt.Key(),
-		mSchema.MessageFieldLastScheduledAt.Key(),
-		mSchema.MessageFieldRequeuedAt.Key(),
-		mSchema.MessageFieldRequeueCount.Key(),
-		mSchema.MessageFieldLastRequeuedAt.Key(),
-		mSchema.MessageFieldLastRetriedAttemptAt.Key(),
-		mSchema.MessageFieldScheduledCronFired.Key(),
-		mSchema.MessageFieldAttempts.Key(),
-		mSchema.MessageFieldScheduledRepeatCount.Key(),
-		mSchema.MessageFieldExpired.Key(),
-		mSchema.MessageFieldEffectiveScheduledDelay.Key(),
-		mSchema.MessageFieldScheduledTimes.Key(),
-		mSchema.MessageFieldScheduledMessageParentID.Key(),
-		mSchema.MessageFieldRequeuedMessageParentID.Key(),
-		mSchema.MessageFieldLastProcessedAt.Key(),
+		publicmessage.StatusPending.Int(),
+		publicmessage.StatusScheduled.Int(),
+		publicmessage.StatusDeadLettered.Int(),
+		internalMessage.MessageFieldID.Key(),
+		internalMessage.MessageFieldStatus.Key(),
+		internalMessage.MessageFieldMessage.Key(),
+		internalMessage.MessageFieldScheduledAt.Key(),
+		internalMessage.MessageFieldPublishedAt.Key(),
+		internalMessage.MessageFieldProcessingStartedAt.Key(),
+		internalMessage.MessageFieldDeadLetteredAt.Key(),
+		internalMessage.MessageFieldAcknowledgedAt.Key(),
+		internalMessage.MessageFieldUnacknowledgedAt.Key(),
+		internalMessage.MessageFieldLastUnacknowledgedAt.Key(),
+		internalMessage.MessageFieldLastScheduledAt.Key(),
+		internalMessage.MessageFieldRequeuedAt.Key(),
+		internalMessage.MessageFieldRequeueCount.Key(),
+		internalMessage.MessageFieldLastRequeuedAt.Key(),
+		internalMessage.MessageFieldLastRetriedAttemptAt.Key(),
+		internalMessage.MessageFieldScheduledCronFired.Key(),
+		internalMessage.MessageFieldAttempts.Key(),
+		internalMessage.MessageFieldScheduledRepeatCount.Key(),
+		internalMessage.MessageFieldExpired.Key(),
+		internalMessage.MessageFieldEffectiveScheduledDelay.Key(),
+		internalMessage.MessageFieldScheduledTimes.Key(),
+		internalMessage.MessageFieldScheduledMessageParentID.Key(),
+		internalMessage.MessageFieldRequeuedMessageParentID.Key(),
+		internalMessage.MessageFieldLastProcessedAt.Key(),
 	}
 }

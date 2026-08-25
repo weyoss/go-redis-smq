@@ -17,8 +17,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -30,13 +29,15 @@ func TestDelete_Single(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("delete-me").SetQueue(params))
+	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("delete-me").SetQueue(params))
 
-	result, err := message.Delete(ctx, ids[0])
+	mm := redissmq.NewMessageManager()
+
+	result, err := mm.Delete(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if result.Status != msg.DeleteStatusOK {
+	if result.Status != publicmessage.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 	if result.Stats.Success != 1 {
@@ -55,15 +56,17 @@ func TestDelete_Multiple(t *testing.T) {
 
 	var ids []string
 	for i := 0; i < 5; i++ {
-		id, _ := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+		id, _ := prod.Produce(ctx, publicmessage.New().SetBody("publicmessage").SetQueue(params))
 		ids = append(ids, id[0])
 	}
 
-	result, err := message.DeleteAll(ctx, ids)
+	mm := redissmq.NewMessageManager()
+
+	result, err := mm.DeleteAll(ctx, ids)
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
-	if result.Status != msg.DeleteStatusOK {
+	if result.Status != publicmessage.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 	if result.Stats.Success != 5 {
@@ -75,7 +78,9 @@ func TestDelete_Multiple(t *testing.T) {
 func TestDelete_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	result, err := message.Delete(ctx, "nonexistent-id")
+	mm := redissmq.NewMessageManager()
+
+	result, err := mm.Delete(ctx, "nonexistent-id")
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -90,11 +95,13 @@ func TestDelete_NotFound(t *testing.T) {
 func TestDelete_EmptyList(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	result, err := message.DeleteAll(ctx, []string{})
+	mm := redissmq.NewMessageManager()
+
+	result, err := mm.DeleteAll(ctx, []string{})
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
-	if result.Status != msg.DeleteStatusOK {
+	if result.Status != publicmessage.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 }
@@ -107,11 +114,13 @@ func TestDelete_MixedFoundAndNotFound(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("real").SetQueue(params))
+	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("real").SetQueue(params))
 
 	searchIDs := []string{ids[0], "fake-id-1", "fake-id-2"}
 
-	result, err := message.DeleteAll(ctx, searchIDs)
+	mm := redissmq.NewMessageManager()
+
+	result, err := mm.DeleteAll(ctx, searchIDs)
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
@@ -134,12 +143,12 @@ func TestDelete_AcknowledgedMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("ack-me").SetQueue(params))
+	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("ack-me").SetQueue(params))
 
 	// Consume the message to acknowledge it
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *publicmessage.Transferable) error {
 		received <- struct{}{}
 		return nil
 	})
@@ -149,8 +158,10 @@ func TestDelete_AcknowledgedMessage(t *testing.T) {
 	<-received
 	time.Sleep(200 * time.Millisecond)
 
+	mm := redissmq.NewMessageManager()
+
 	// Now delete the acknowledged message
-	result, err := message.Delete(ctx, ids[0])
+	result, err := mm.Delete(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
@@ -166,12 +177,14 @@ func TestDelete_DoubleDelete(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("delete-twice").SetQueue(params))
+	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("delete-twice").SetQueue(params))
+
+	mm := redissmq.NewMessageManager()
 
 	// First delete
-	result1, _ := message.Delete(ctx, ids[0])
+	result1, _ := mm.Delete(ctx, ids[0])
 	// Second delete
-	result2, _ := message.Delete(ctx, ids[0])
+	result2, _ := mm.Delete(ctx, ids[0])
 
 	t.Logf("first delete: success=%d, notFound=%d", result1.Stats.Success, result1.Stats.NotFound)
 	t.Logf("second delete: success=%d, notFound=%d", result2.Stats.Success, result2.Stats.NotFound)

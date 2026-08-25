@@ -8,9 +8,7 @@
  *
  */
 
-// Package msg defines message types, statuses, priorities, and related
-// configuration used by the public message API.
-package msg
+package message
 
 // MessageStatus represents the current lifecycle state of a message.
 // Integer values are persisted in Redis and must not be changed.

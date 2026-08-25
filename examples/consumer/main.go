@@ -22,7 +22,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -48,7 +48,7 @@ func main() {
 		consumer.WithHeartbeatTTL(30 * time.Second),
 	)
 
-	c.Consume(ordersQueue, func(ctx context.Context, m *msg.Transferable) error {
+	c.Consume(ordersQueue, func(ctx context.Context, m *message.Transferable) error {
 		log.Printf("Received: %v (ID: %s)", m.Body, m.ID)
 		return nil
 	})

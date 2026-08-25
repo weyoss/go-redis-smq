@@ -18,7 +18,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -40,7 +40,7 @@ func main() {
 	// Consumer
 	consumed := make(chan string, 5)
 	c := redissmq.NewConsumer()
-	c.Consume(ordersQueue, func(ctx context.Context, m *msg.Transferable) error {
+	c.Consume(ordersQueue, func(ctx context.Context, m *message.Transferable) error {
 		consumed <- fmt.Sprintf("%v", m.Body)
 		return nil
 	})
@@ -55,7 +55,7 @@ func main() {
 	}
 
 	for i := 1; i <= 5; i++ {
-		m := msg.New().
+		m := message.New().
 			SetBody(fmt.Sprintf("Order #%d", i)).
 			SetQueue(ordersQueue)
 

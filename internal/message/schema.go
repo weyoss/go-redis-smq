@@ -8,7 +8,7 @@
  *
  */
 
-package schema
+package message
 
 import "strconv"
 

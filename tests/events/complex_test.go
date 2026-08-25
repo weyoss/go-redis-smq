@@ -24,7 +24,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/producer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )

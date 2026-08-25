@@ -20,7 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -58,7 +58,7 @@ func main() {
 	// Consumers
 	orderCh := make(chan string, 1)
 	orderConsumer := redissmq.NewConsumer()
-	orderConsumer.Consume(ordersQueue, func(ctx context.Context, m *msg.Transferable) error {
+	orderConsumer.Consume(ordersQueue, func(ctx context.Context, m *message.Transferable) error {
 		orderCh <- fmt.Sprintf("Orders queue: %v", m.Body)
 		return nil
 	})
@@ -66,7 +66,7 @@ func main() {
 
 	eventCh := make(chan string, 1)
 	eventConsumer := redissmq.NewConsumer()
-	eventConsumer.Consume(eventsQueue, func(ctx context.Context, m *msg.Transferable) error {
+	eventConsumer.Consume(eventsQueue, func(ctx context.Context, m *message.Transferable) error {
 		eventCh <- fmt.Sprintf("Events queue: %v", m.Body)
 		return nil
 	})
@@ -76,7 +76,7 @@ func main() {
 	p := redissmq.NewProducer()
 	p.Run(ctx)
 
-	m := msg.New().
+	m := message.New().
 		SetBody(map[string]interface{}{"orderId": 123}).
 		SetDirectExchange(exchangeParams).
 		SetExchangeRoutingKey("order.created")

@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 )
 
 // CloneMessage creates a deep copy of a MessageEnvelope for requeue operations.
-//
+// Matches TypeScript _fromMessage logic:
 //   - Creates a new ProducibleMessage with the same properties
 //   - Resets scheduled parameters on the new message
 //   - Creates a fresh MessageState with a new ID
@@ -38,7 +38,7 @@ func cloneMessage(source *Envelope, preserveState bool) *Envelope {
 	producibleMsg := source.ProducibleMessage()
 
 	// Create new message with same properties
-	newMsg := msg.New()
+	newMsg := publicmessage.New()
 	newMsg.SetTTL(producibleMsg.TTL())
 	newMsg.SetRetryThreshold(producibleMsg.RetryThreshold())
 	newMsg.SetRetryDelay(producibleMsg.RetryDelay())
@@ -122,7 +122,7 @@ func cloneMessage(source *Envelope, preserveState bool) *Envelope {
 		envelope.SetStatus(source.Status())
 	} else {
 		// Fresh state for requeue
-		envelope.SetStatus(msg.StatusNew)
+		envelope.SetStatus(publicmessage.StatusNew)
 
 		// Mark the requeue parent relationship
 		state := envelope.MessageState()

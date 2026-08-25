@@ -14,11 +14,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 )
 
 func TestMessage_StateTimestampAccessors(t *testing.T) {
-	state := msg.NewMessageState()
+	state := publicmessage.NewMessageState()
 	now := time.Now().UnixMilli()
 
 	state.SetAcknowledgedAt(now)
@@ -58,15 +58,15 @@ func TestMessage_StateTimestampAccessors(t *testing.T) {
 }
 
 func TestMessage_PriorityStringAndIsValid(t *testing.T) {
-	cases := map[msg.MessagePriority]string{
-		msg.PriorityHighest:     "highest",
-		msg.PriorityVeryHigh:    "very_high",
-		msg.PriorityHigh:        "high",
-		msg.PriorityAboveNormal: "above_normal",
-		msg.PriorityNormal:      "normal",
-		msg.PriorityLow:         "low",
-		msg.PriorityVeryLow:     "very_low",
-		msg.PriorityLowest:      "lowest",
+	cases := map[publicmessage.MessagePriority]string{
+		publicmessage.PriorityHighest:     "highest",
+		publicmessage.PriorityVeryHigh:    "very_high",
+		publicmessage.PriorityHigh:        "high",
+		publicmessage.PriorityAboveNormal: "above_normal",
+		publicmessage.PriorityNormal:      "normal",
+		publicmessage.PriorityLow:         "low",
+		publicmessage.PriorityVeryLow:     "very_low",
+		publicmessage.PriorityLowest:      "lowest",
 	}
 
 	for priority, expected := range cases {
@@ -78,45 +78,45 @@ func TestMessage_PriorityStringAndIsValid(t *testing.T) {
 		}
 	}
 
-	if msg.MessagePriority(99).String() != "unknown" {
-		t.Errorf("invalid priority string = %q", msg.MessagePriority(99).String())
+	if publicmessage.MessagePriority(99).String() != "unknown" {
+		t.Errorf("invalid priority string = %q", publicmessage.MessagePriority(99).String())
 	}
-	if msg.MessagePriority(99).IsValid() {
+	if publicmessage.MessagePriority(99).IsValid() {
 		t.Error("invalid priority should not be valid")
 	}
 }
 
 func TestMessage_StatusStringAndPredicates(t *testing.T) {
-	if !msg.StatusAcknowledged.IsTerminal() || !msg.StatusDeadLettered.IsTerminal() {
+	if !publicmessage.StatusAcknowledged.IsTerminal() || !publicmessage.StatusDeadLettered.IsTerminal() {
 		t.Error("acknowledged and dead lettered should be terminal")
 	}
-	if !msg.StatusPending.IsPending() {
+	if !publicmessage.StatusPending.IsPending() {
 		t.Error("pending should be pending")
 	}
-	if !msg.StatusProcessing.IsProcessing() {
+	if !publicmessage.StatusProcessing.IsProcessing() {
 		t.Error("processing should be processing")
 	}
-	if !msg.StatusAcknowledged.IsRequeuable() || !msg.StatusDeadLettered.IsRequeuable() {
+	if !publicmessage.StatusAcknowledged.IsRequeuable() || !publicmessage.StatusDeadLettered.IsRequeuable() {
 		t.Error("acknowledged and dead lettered should be requeuable")
 	}
 
-	for _, status := range []msg.MessageStatus{
-		msg.StatusNew, msg.StatusPending, msg.StatusProcessing, msg.StatusScheduled,
-		msg.StatusAcknowledged, msg.StatusUnackRequeuing, msg.StatusUnackDelaying,
-		msg.StatusDeadLettered,
+	for _, status := range []publicmessage.MessageStatus{
+		publicmessage.StatusNew, publicmessage.StatusPending, publicmessage.StatusProcessing, publicmessage.StatusScheduled,
+		publicmessage.StatusAcknowledged, publicmessage.StatusUnackRequeuing, publicmessage.StatusUnackDelaying,
+		publicmessage.StatusDeadLettered,
 	} {
 		if !status.IsValid() {
 			t.Errorf("%v should be valid", status)
 		}
 	}
 
-	if msg.MessageStatus(99).IsValid() {
+	if publicmessage.MessageStatus(99).IsValid() {
 		t.Error("invalid status should not be valid")
 	}
 }
 
 func TestMessage_StateAccessors(t *testing.T) {
-	state := msg.NewMessageState()
+	state := publicmessage.NewMessageState()
 
 	state.IncrAttempts()
 	if state.Attempts() != 1 {

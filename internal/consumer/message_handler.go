@@ -22,11 +22,11 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/lock"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-type Handler func(ctx context.Context, m *msg.Transferable) error
+type Handler func(ctx context.Context, m *publicmessage.Transferable) error
 
 type MessageHandler struct {
 	mu             sync.RWMutex

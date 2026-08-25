@@ -18,9 +18,8 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
-	queue2 "github.com/weyoss/go-redis-smq/pkg/queue"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // Scenario: Full message lifecycle — produce → consume → ack → get → requeue → consume
@@ -28,25 +27,27 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := queue2.MustQueueParams("test-complex-lifecycle")
-	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-lifecycle")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Produce
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("lifecycle").SetQueue(params))
+	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("lifecycle").SetQueue(params))
 	originalID := ids[0]
 	t.Logf("produced: %s", originalID)
 
+	mm := redissmq.NewMessageManager()
+
 	// Verify status is pending
-	status, _ := message.Status(ctx, originalID)
-	if status != msg.StatusPending {
+	status, _ := mm.Status(ctx, originalID)
+	if status != publicmessage.StatusPending {
 		t.Errorf("status after produce = %s, want PENDING", status.String())
 	}
 
 	// Consume and acknowledge
 	received := make(chan string, 1)
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *publicmessage.Transferable) error {
 		received <- m.ID
 		return nil
 	})
@@ -65,14 +66,14 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Verify message still exists (can be retrieved)
-	m, err := message.Get(ctx, originalID)
+	m, err := redissmq.NewMessageManager().Get(ctx, originalID)
 	if err != nil {
 		t.Fatalf("get after ack: %v", err)
 	}
 	t.Logf("message status after ack: %s", m.Status.String())
 
 	// Requeue
-	newID, err := message.Requeue(ctx, originalID)
+	newID, err := mm.Requeue(ctx, originalID)
 	if err != nil {
 		t.Fatalf("requeue: %v", err)
 	}
@@ -81,7 +82,7 @@ func TestComplex_FullLifecycle(t *testing.T) {
 	// Verify new message can be consumed
 	var newConsumed atomic.Int64
 	cons2 := redissmq.NewConsumer()
-	cons2.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons2.Consume(params, func(ctx context.Context, m *publicmessage.Transferable) error {
 		newConsumed.Add(1)
 		return nil
 	})
@@ -98,20 +99,22 @@ func TestComplex_FullLifecycle(t *testing.T) {
 func TestComplex_HighVolumeDelete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := queue2.MustQueueParams("test-complex-high-vol-del")
-	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-high-vol-del")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
 	count := 50
 	var ids []string
 	for i := 0; i < count; i++ {
-		id, _ := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+		id, _ := prod.Produce(ctx, publicmessage.New().SetBody("publicmessage").SetQueue(params))
 		ids = append(ids, id[0])
 	}
 
+	mm := redissmq.NewMessageManager()
+
 	// Delete all
-	result, err := message.DeleteAll(ctx, ids)
+	result, err := mm.DeleteAll(ctx, ids)
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
@@ -126,17 +129,19 @@ func TestComplex_StateTransitions(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	params := queue2.MustQueueParams("test-complex-states")
-	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-states")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
 	// Produce immediate message
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("state-test").SetQueue(params))
+	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("state-test").SetQueue(params))
 	id := ids[0]
 
+	mm := redissmq.NewMessageManager()
+
 	// Check initial state
-	state, _ := message.State(ctx, id)
+	state, _ := mm.State(ctx, id)
 	if state.Attempts != 0 {
 		t.Errorf("initial attempts = %d, want 0", state.Attempts)
 	}
@@ -144,7 +149,7 @@ func TestComplex_StateTransitions(t *testing.T) {
 	// Consume and acknowledge
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *publicmessage.Transferable) error {
 		received <- struct{}{}
 		return nil
 	})
@@ -154,7 +159,7 @@ func TestComplex_StateTransitions(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 
 	// Check state after ack
-	state, _ = message.State(ctx, id)
+	state, _ = mm.State(ctx, id)
 	t.Logf("state after ack: attempts=%d, expired=%v", state.Attempts, state.Expired)
 }
 
@@ -162,26 +167,26 @@ func TestComplex_StateTransitions(t *testing.T) {
 func TestComplex_MultiQueueBrowse(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	q1 := queue2.MustQueueParams("test-complex-browse-q1")
-	q2 := queue2.MustQueueParams("test-complex-browse-q2")
-	testutil.CreateQueue(t, ctx, q1, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
-	testutil.CreateQueue(t, ctx, q2, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
+	q1 := publicqueue.MustQueueParams("test-complex-browse-q1")
+	q2 := publicqueue.MustQueueParams("test-complex-browse-q2")
+	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
 	// Produce to both queues
 	for i := 0; i < 3; i++ {
-		prod.Produce(ctx, msg.New().SetBody("q1").SetQueue(q1))
+		prod.Produce(ctx, publicmessage.New().SetBody("q1").SetQueue(q1))
 	}
 	for i := 0; i < 5; i++ {
-		prod.Produce(ctx, msg.New().SetBody("q2").SetQueue(q2))
+		prod.Produce(ctx, publicmessage.New().SetBody("q2").SetQueue(q2))
 	}
 
 	qm := redissmq.NewQueueManager()
 
 	// Browse each queue independently
-	r1, _ := qm.BrowseMessages(ctx, q1, &queue2.BrowseParams{Filter: queue2.BrowsePublished})
-	r2, _ := qm.BrowseMessages(ctx, q2, &queue2.BrowseParams{Filter: queue2.BrowsePublished})
+	r1, _ := qm.BrowseMessages(ctx, q1, &publicqueue.BrowseParams{Filter: publicqueue.BrowsePublished})
+	r2, _ := qm.BrowseMessages(ctx, q2, &publicqueue.BrowseParams{Filter: publicqueue.BrowsePublished})
 
 	if r1.Total != 3 {
 		t.Errorf("q1 total = %d, want 3", r1.Total)
@@ -195,36 +200,38 @@ func TestComplex_MultiQueueBrowse(t *testing.T) {
 func TestComplex_ScheduledLifecycle(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := queue2.MustQueueParams("test-complex-sched-life")
-	testutil.CreateQueue(t, ctx, params, queue2.TypeFIFO, queue2.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-sched-life")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
 	// Produce scheduled message
-	ids, _ := prod.Produce(ctx, msg.New().
+	ids, _ := prod.Produce(ctx, publicmessage.New().
 		SetBody("scheduled-life").
 		SetQueue(params).
 		SetScheduledDelay(1*time.Hour),
 	)
 	id := ids[0]
 
+	mm := redissmq.NewMessageManager()
+
 	// Check status is scheduled
-	status, _ := message.Status(ctx, id)
-	if status != msg.StatusScheduled {
+	status, _ := mm.Status(ctx, id)
+	if status != publicmessage.StatusScheduled {
 		t.Errorf("status = %s, want SCHEDULED", status.String())
 	}
 
 	// Get the message — should be retrievable while scheduled
-	m, err := message.Get(ctx, id)
+	m, err := mm.Get(ctx, id)
 	if err != nil {
 		t.Fatalf("get scheduled: %v", err)
 	}
-	if m.Status != msg.StatusScheduled {
+	if m.Status != publicmessage.StatusScheduled {
 		t.Errorf("message status = %s, want SCHEDULED", m.Status.String())
 	}
 
 	// Delete the scheduled message
-	result, err := message.Delete(ctx, id)
+	result, err := mm.Delete(ctx, id)
 	if err != nil {
 		t.Fatalf("delete scheduled: %v", err)
 	}
@@ -233,7 +240,7 @@ func TestComplex_ScheduledLifecycle(t *testing.T) {
 	}
 
 	// Verify it's gone
-	_, err = message.Get(ctx, id)
+	_, err = mm.Get(ctx, id)
 	if err == nil {
 		t.Fatal("message should be deleted")
 	}
@@ -243,8 +250,8 @@ func TestComplex_ScheduledLifecycle(t *testing.T) {
 func TestComplex_AllProperties(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := queue2.MustQueueParams("test-complex-all-props")
-	testutil.CreateQueue(t, ctx, params, queue2.TypePriority, queue2.DeliveryPointToPoint)
+	params := publicqueue.MustQueueParams("test-complex-all-props")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypePriority, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
@@ -255,10 +262,10 @@ func TestComplex_AllProperties(t *testing.T) {
 		"currency": "USD",
 	}
 
-	ids, err := prod.Produce(ctx, msg.New().
+	ids, err := prod.Produce(ctx, publicmessage.New().
 		SetBody(complexBody).
 		SetQueue(params).
-		SetPriority(msg.PriorityHigh).
+		SetPriority(publicmessage.PriorityHigh).
 		SetTTL(30*time.Minute).
 		SetRetryThreshold(5).
 		SetRetryDelay(15*time.Second).
@@ -268,7 +275,9 @@ func TestComplex_AllProperties(t *testing.T) {
 		t.Fatalf("produce: %v", err)
 	}
 
-	m, err := message.Get(ctx, ids[0])
+	mm := redissmq.NewMessageManager()
+
+	m, err := mm.Get(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -286,7 +295,7 @@ func TestComplex_AllProperties(t *testing.T) {
 	if m.ConsumeTimeout != 60000 {
 		t.Errorf("consume timeout = %d, want 60000", m.ConsumeTimeout)
 	}
-	if m.Priority == nil || *m.Priority != msg.PriorityHigh {
+	if m.Priority == nil || *m.Priority != publicmessage.PriorityHigh {
 		t.Error("priority not set correctly")
 	}
 	t.Logf("message ID: %s", m.ID)

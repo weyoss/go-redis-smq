@@ -8,7 +8,7 @@
  *
  */
 
-package msg
+package message
 
 import (
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"

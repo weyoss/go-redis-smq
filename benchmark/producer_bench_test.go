@@ -19,7 +19,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -37,7 +37,7 @@ func BenchmarkProducer_10K(b *testing.B) {
 	start := time.Now()
 
 	for i := 0; i < messageCount; i++ {
-		m := msg.New().SetBody("benchmark-message").SetQueue(params)
+		m := message.New().SetBody("benchmark-message").SetQueue(params)
 		if _, err := prod.Produce(ctx, m); err != nil {
 			b.Fatalf("produce %d: %v", i, err)
 		}
@@ -64,7 +64,7 @@ func BenchmarkProducer_100K(b *testing.B) {
 	start := time.Now()
 
 	for i := 0; i < messageCount; i++ {
-		m := msg.New().SetBody("benchmark-message").SetQueue(params)
+		m := message.New().SetBody("benchmark-message").SetQueue(params)
 		if _, err := prod.Produce(ctx, m); err != nil {
 			b.Fatalf("produce %d: %v", i, err)
 		}
@@ -101,7 +101,7 @@ func BenchmarkProducer_BodySizes(b *testing.B) {
 			start := time.Now()
 
 			for i := 0; i < messageCount; i++ {
-				m := msg.New().SetBody(size.body).SetQueue(params)
+				m := message.New().SetBody(size.body).SetQueue(params)
 				if _, err := prod.Produce(ctx, m); err != nil {
 					b.Fatalf("produce: %v", err)
 				}
@@ -134,7 +134,7 @@ func BenchmarkProducer_ViaExchange(b *testing.B) {
 	start := time.Now()
 
 	for i := 0; i < messageCount; i++ {
-		m := msg.New().
+		m := message.New().
 			SetBody("benchmark").
 			SetDirectExchange(exchangeParams).
 			SetExchangeRoutingKey("bench.key")
@@ -170,7 +170,7 @@ func BenchmarkProducer_MultiProducer(b *testing.B) {
 			defer wg.Done()
 			prod := testutil.StartProducer(b, ctx)
 			for i := 0; i < messagesPerProducer; i++ {
-				m := msg.New().SetBody("benchmark").SetQueue(params)
+				m := message.New().SetBody("benchmark").SetQueue(params)
 				if _, err := prod.Produce(ctx, m); err != nil {
 					b.Errorf("produce: %v", err)
 					return

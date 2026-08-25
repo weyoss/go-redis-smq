@@ -19,7 +19,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -33,14 +33,14 @@ func BenchmarkConsumer_10K(b *testing.B) {
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 10_000
 	for i := 0; i < messageCount; i++ {
-		if _, err := prod.Produce(ctx, msg.New().SetBody("benchmark").SetQueue(params)); err != nil {
+		if _, err := prod.Produce(ctx, message.New().SetBody("benchmark").SetQueue(params)); err != nil {
 			b.Fatalf("produce: %v", err)
 		}
 	}
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		consumed.Add(1)
 		return nil
 	})
@@ -85,14 +85,14 @@ func BenchmarkConsumer_100K(b *testing.B) {
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 100_000
 	for i := 0; i < messageCount; i++ {
-		if _, err := prod.Produce(ctx, msg.New().SetBody("benchmark").SetQueue(params)); err != nil {
+		if _, err := prod.Produce(ctx, message.New().SetBody("benchmark").SetQueue(params)); err != nil {
 			b.Fatalf("produce: %v", err)
 		}
 	}
 
 	var consumed atomic.Int64
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		consumed.Add(1)
 		return nil
 	})
@@ -135,7 +135,7 @@ func BenchmarkConsumer_MultiConsumer(b *testing.B) {
 	prod := testutil.StartProducer(b, ctx)
 	messageCount := 50_000
 	for i := 0; i < messageCount; i++ {
-		if _, err := prod.Produce(ctx, msg.New().SetBody("benchmark").SetQueue(params)); err != nil {
+		if _, err := prod.Produce(ctx, message.New().SetBody("benchmark").SetQueue(params)); err != nil {
 			b.Fatalf("produce: %v", err)
 		}
 	}
@@ -145,7 +145,7 @@ func BenchmarkConsumer_MultiConsumer(b *testing.B) {
 
 	for i := 0; i < consumerCount; i++ {
 		cons := redissmq.NewConsumer()
-		cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 			consumed.Add(1)
 			return nil
 		})

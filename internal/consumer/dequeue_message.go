@@ -18,7 +18,6 @@ import (
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
-	mSchema "github.com/weyoss/go-redis-smq/internal/message/schema"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -26,7 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -141,7 +140,7 @@ func (d *DequeueMessage) unacknowledgePoppedMessage(ctx context.Context, message
 	}
 
 	// Build a minimal envelope so the unacknowledger can construct the Lua arguments.
-	msg := msg.New().SetBody("").SetQueue(d.queue)
+	msg := publicmessage.New().SetBody("").SetQueue(d.queue)
 	msg.SetConsumeTimeout(0)
 	envelope := internalMessage.NewEnvelope(msg)
 	envelope.MessageState().SetID(messageID)
@@ -238,13 +237,13 @@ func (d *DequeueMessage) checkout(ctx context.Context, messageID string) (*inter
 	reply, err := redisClient.Eval(ctx, scripts.CheckoutMessage,
 		[]string{msgKey, qKey.Properties()},
 		[]interface{}{
-			mSchema.MessageFieldProcessingStartedAt.Key(),
-			mSchema.MessageFieldLastProcessedAt.Key(),
+			internalMessage.MessageFieldProcessingStartedAt.Key(),
+			internalMessage.MessageFieldLastProcessedAt.Key(),
 			time.Now().UnixMilli(),
-			mSchema.MessageFieldStatus.Key(),
-			msg.StatusProcessing.Int(),
-			msg.StatusPending.Int(),
-			mSchema.MessageFieldAttempts.Key(),
+			internalMessage.MessageFieldStatus.Key(),
+			publicmessage.StatusProcessing.Int(),
+			publicmessage.StatusPending.Int(),
+			internalMessage.MessageFieldAttempts.Key(),
 			qSchema.QueueFieldProcessingMessagesCount.Key(),
 			qSchema.QueueFieldPendingMessagesCount.Key(),
 			qSchema.QueueFieldOperationalState.Key(),

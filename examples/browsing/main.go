@@ -19,7 +19,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -58,7 +58,7 @@ func main() {
 	}
 
 	for i := 1; i <= 10; i++ {
-		m := msg.New().
+		m := message.New().
 			SetBody(fmt.Sprintf("Message #%d", i)).
 			SetQueue(browseQueue)
 
@@ -70,7 +70,7 @@ func main() {
 	}
 
 	// Produce a scheduled message
-	scheduledMsg := msg.New().
+	scheduledMsg := message.New().
 		SetBody("Scheduled message").
 		SetQueue(browseQueue).
 		SetScheduledDelay(1 * time.Hour)
@@ -84,7 +84,7 @@ func main() {
 	// Consume 5 messages (they'll be acknowledged)
 	c := redissmq.NewConsumer()
 	consumed := make(chan string, 5)
-	c.Consume(browseQueue, func(ctx context.Context, m *msg.Transferable) error {
+	c.Consume(browseQueue, func(ctx context.Context, m *message.Transferable) error {
 		consumed <- m.ID
 		return nil
 	})

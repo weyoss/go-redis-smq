@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -28,9 +28,9 @@ func TestGet_ByID(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("hello").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("hello").SetQueue(params))
 
-	m, err := message.Get(ctx, ids[0])
+	m, err := redissmq.NewMessageManager().Get(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -46,7 +46,7 @@ func TestGet_ByID(t *testing.T) {
 func TestGet_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	_, err := message.Get(ctx, "nonexistent-id")
+	_, err := redissmq.NewMessageManager().Get(ctx, "nonexistent-id")
 	if err == nil {
 		t.Fatal("expected error for non-existent message")
 	}
@@ -63,11 +63,11 @@ func TestGet_Multiple(t *testing.T) {
 
 	var ids []string
 	for i := 0; i < 5; i++ {
-		id, _ := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+		id, _ := prod.Produce(ctx, message.New().SetBody("msg").SetQueue(params))
 		ids = append(ids, id[0])
 	}
 
-	messages, err := message.GetAll(ctx, ids)
+	messages, err := redissmq.NewMessageManager().GetAll(ctx, ids)
 	if err != nil {
 		t.Fatalf("get all: %v", err)
 	}
@@ -84,13 +84,13 @@ func TestGet_Status(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("status-test").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("status-test").SetQueue(params))
 
-	status, err := message.Status(ctx, ids[0])
+	status, err := redissmq.NewMessageManager().Status(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("status: %v", err)
 	}
-	if status != msg.StatusPending {
+	if status != message.StatusPending {
 		t.Errorf("status = %s, want PENDING", status.String())
 	}
 }
@@ -103,9 +103,9 @@ func TestGet_State(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("state-test").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("state-test").SetQueue(params))
 
-	state, err := message.State(ctx, ids[0])
+	state, err := redissmq.NewMessageManager().State(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("state: %v", err)
 	}
@@ -125,7 +125,7 @@ func TestGet_WithMetadata(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, err := prod.Produce(ctx, msg.New().
+	ids, err := prod.Produce(ctx, message.New().
 		SetBody("metadata").
 		SetQueue(params).
 		SetTTL(5*time.Minute).
@@ -136,7 +136,7 @@ func TestGet_WithMetadata(t *testing.T) {
 		t.Fatalf("produce: %v", err)
 	}
 
-	m, err := message.Get(ctx, ids[0])
+	m, err := redissmq.NewMessageManager().Get(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestGet_ScheduledMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().
+	ids, _ := prod.Produce(ctx, message.New().
 		SetBody("scheduled").
 		SetQueue(params).
 		SetScheduledDelay(1*time.Hour).
@@ -167,11 +167,11 @@ func TestGet_ScheduledMessage(t *testing.T) {
 		SetScheduledRepeat(3),
 	)
 
-	m, err := message.Get(ctx, ids[0])
+	m, err := redissmq.NewMessageManager().Get(ctx, ids[0])
 	if err != nil {
 		t.Fatalf("get: %v", err)
 	}
-	if m.Status != msg.StatusScheduled {
+	if m.Status != message.StatusScheduled {
 		t.Errorf("status = %s, want SCHEDULED", m.Status.String())
 	}
 }
@@ -184,12 +184,12 @@ func TestGet_MixedFoundAndNotFound(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, msg.New().SetBody("real").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("real").SetQueue(params))
 
 	// Mix of real and fake IDs
 	searchIDs := []string{ids[0], "fake-id-1", "fake-id-2"}
 
-	messages, err := message.GetAll(ctx, searchIDs)
+	messages, err := redissmq.NewMessageManager().GetAll(ctx, searchIDs)
 	if err != nil {
 		t.Fatalf("get all: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestGet_MixedFoundAndNotFound(t *testing.T) {
 func TestGet_GetAllEmptyList(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	messages, err := message.GetAll(ctx, []string{})
+	messages, err := redissmq.NewMessageManager().GetAll(ctx, []string{})
 	if err != nil {
 		t.Fatalf("get all: %v", err)
 	}

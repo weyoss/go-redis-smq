@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq/internal/util/cron"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -22,17 +22,17 @@ import (
 // Tracks message lifecycle and provides scheduling logic.
 // This is an internal runtime type, not exposed in the public API.
 type Envelope struct {
-	producibleMessage *msg.ProducibleMessage
-	messageState      *msg.MessageState
-	status            msg.MessageStatus
+	producibleMessage *publicmessage.ProducibleMessage
+	messageState      *publicmessage.MessageState
+	status            publicmessage.MessageStatus
 	destinationQueue  *publicqueue.QueueParams
 	consumerGroupID   string
 }
 
 // NewEnvelope creates a new message envelope.
 // Initializes message state with a unique ID and applies any scheduled delay.
-func NewEnvelope(message *msg.ProducibleMessage) *Envelope {
-	state := msg.NewMessageState()
+func NewEnvelope(message *publicmessage.ProducibleMessage) *Envelope {
+	state := publicmessage.NewMessageState()
 	if message.ScheduledDelay() != nil {
 		state.SetEffectiveScheduledDelay(message.ScheduledDelay().Milliseconds())
 	}
@@ -40,18 +40,22 @@ func NewEnvelope(message *msg.ProducibleMessage) *Envelope {
 	return &Envelope{
 		producibleMessage: message,
 		messageState:      state,
-		status:            msg.StatusNew,
+		status:            publicmessage.StatusNew,
 	}
 }
 
 // ProducibleMessage returns the original message configuration.
-func (e *Envelope) ProducibleMessage() *msg.ProducibleMessage { return e.producibleMessage }
+func (e *Envelope) ProducibleMessage() *publicmessage.ProducibleMessage {
+	return e.producibleMessage
+}
 
 // MessageState returns the message lifecycle state.
-func (e *Envelope) MessageState() *msg.MessageState { return e.messageState }
+func (e *Envelope) MessageState() *publicmessage.MessageState {
+	return e.messageState
+}
 
 // SetMessageState replaces the message state.
-func (e *Envelope) SetMessageState(state *msg.MessageState) *Envelope {
+func (e *Envelope) SetMessageState(state *publicmessage.MessageState) *Envelope {
 	e.messageState = state
 	return e
 }
@@ -60,16 +64,18 @@ func (e *Envelope) SetMessageState(state *msg.MessageState) *Envelope {
 func (e *Envelope) ID() string { return e.messageState.ID() }
 
 // Status returns the current message status.
-func (e *Envelope) Status() msg.MessageStatus { return e.status }
+func (e *Envelope) Status() publicmessage.MessageStatus { return e.status }
 
 // SetStatus updates the message status.
-func (e *Envelope) SetStatus(status msg.MessageStatus) *Envelope {
+func (e *Envelope) SetStatus(status publicmessage.MessageStatus) *Envelope {
 	e.status = status
 	return e
 }
 
 // DestinationQueue returns the resolved destination queue.
-func (e *Envelope) DestinationQueue() *publicqueue.QueueParams { return e.destinationQueue }
+func (e *Envelope) DestinationQueue() *publicqueue.QueueParams {
+	return e.destinationQueue
+}
 
 // SetDestinationQueue sets the destination queue (called once during routing).
 func (e *Envelope) SetDestinationQueue(q *publicqueue.QueueParams) *Envelope {
@@ -227,17 +233,17 @@ func (e *Envelope) NextScheduledTimestamp() int64 {
 }
 
 // ToParams converts the envelope to a serializable params struct.
-func (e *Envelope) ToParams() *msg.Params {
+func (e *Envelope) ToParams() *publicmessage.Params {
 	return e.producibleMessage.ToParams(e.destinationQueue, e.consumerGroupID)
 }
 
 // ToTransferable converts the envelope to a transferable representation
 // suitable for serialization and cross-system transfer.
 // Matches TypeScript IMessageTransferable format.
-func (e *Envelope) ToTransferable() *msg.Transferable {
+func (e *Envelope) ToTransferable() *publicmessage.Transferable {
 	params := e.ToParams()
 
-	return &msg.Transferable{
+	return &publicmessage.Transferable{
 		ID:                    e.messageState.ID(),
 		CreatedAt:             params.CreatedAt,
 		TTL:                   params.TTL,

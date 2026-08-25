@@ -18,23 +18,19 @@ import (
 	"strconv"
 	"time"
 
-	mSchema "github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// Store provides Redis-backed message persistence and lifecycle operations.
 type Store struct {
 	envelopeCodec *EnvelopeCodec
 	stateCodec    *StateCodec
 }
 
-// NewStore creates a new Store with the given codecs.
-// Passing nil will use default codecs.
 func NewStore(envelopeCodec *EnvelopeCodec, stateCodec *StateCodec) *Store {
 	if envelopeCodec == nil {
 		envelopeCodec = NewEnvelopeCodec()
@@ -48,15 +44,14 @@ func NewStore(envelopeCodec *EnvelopeCodec, stateCodec *StateCodec) *Store {
 	}
 }
 
-// GetStatus returns the current status of a message.
-func (s *Store) GetStatus(ctx context.Context, messageID string) (msg.MessageStatus, error) {
+func (s *Store) GetStatus(ctx context.Context, messageID string) (publicmessage.MessageStatus, error) {
 	statusStr, err := redis.LoadHashField(ctx,
 		keys.System{}.Message(messageID),
-		mSchema.MessageFieldStatus.Key(),
+		MessageFieldStatus.Key(),
 		"message status",
 	)
 	if err != nil {
-		return 0, msg.ErrNotFound
+		return 0, publicmessage.ErrNotFound
 	}
 
 	status, err := strconv.Atoi(statusStr)
@@ -64,34 +59,31 @@ func (s *Store) GetStatus(ctx context.Context, messageID string) (msg.MessageSta
 		return 0, fmt.Errorf("parse message status: %w", err)
 	}
 
-	return msg.MessageStatus(status), nil
+	return publicmessage.MessageStatus(status), nil
 }
 
-// GetState returns the lifecycle state of a message.
-func (s *Store) GetState(ctx context.Context, messageID string) (*msg.MessageState, error) {
+func (s *Store) GetState(ctx context.Context, messageID string) (*publicmessage.MessageState, error) {
 	hash, err := redis.LoadHash(ctx, keys.System{}.Message(messageID), "message state")
 	if err != nil {
-		return nil, msg.ErrNotFound
+		return nil, publicmessage.ErrNotFound
 	}
 	return s.stateCodec.DecodeHash(ctx, hash)
 }
 
-// GetMessage returns a single message envelope by its ID.
 func (s *Store) GetMessage(ctx context.Context, messageID string) (*Envelope, error) {
 	hash, err := redis.LoadHash(ctx, keys.System{}.Message(messageID), "message")
 	if err != nil {
-		return nil, msg.ErrNotFound
+		return nil, publicmessage.ErrNotFound
 	}
 	return s.envelopeCodec.DecodeHash(ctx, hash)
 }
 
-// GetMessages returns multiple message envelopes. Missing messages are skipped.
 func (s *Store) GetMessages(ctx context.Context, messageIDs []string) ([]*Envelope, error) {
 	envelopes := make([]*Envelope, 0, len(messageIDs))
 	for _, id := range messageIDs {
 		env, err := s.GetMessage(ctx, id)
 		if err != nil {
-			if errors.Is(err, msg.ErrNotFound) {
+			if errors.Is(err, publicmessage.ErrNotFound) {
 				continue
 			}
 			return nil, err
@@ -101,12 +93,11 @@ func (s *Store) GetMessages(ctx context.Context, messageIDs []string) ([]*Envelo
 	return envelopes, nil
 }
 
-// DeleteMessages deletes one or more messages. Returns summary statistics.
-func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID string) (*msg.DeleteResponse, error) {
-	response := &msg.DeleteResponse{Status: msg.DeleteStatusNotDeleted}
+func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID string) (*publicmessage.DeleteResponse, error) {
+	response := &publicmessage.DeleteResponse{Status: publicmessage.DeleteStatusNotDeleted}
 
 	if len(messageIDs) == 0 {
-		response.Status = msg.DeleteStatusOK
+		response.Status = publicmessage.DeleteStatusOK
 		return response, nil
 	}
 
@@ -161,21 +152,20 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 	}
 
 	if response.Stats.Processed == response.Stats.Success && response.Stats.Processed > 0 {
-		response.Status = msg.DeleteStatusOK
+		response.Status = publicmessage.DeleteStatusOK
 	} else if response.Stats.Success > 0 {
-		response.Status = msg.DeleteStatusPartialSuccess
+		response.Status = publicmessage.DeleteStatusPartialSuccess
 	}
 
 	return response, nil
 }
 
-// deleteMessageGroup deletes messages for a specific queue/group.
 func (s *Store) deleteMessageGroup(
 	ctx context.Context,
 	queue *publicqueue.QueueParams,
 	messages []*Envelope,
 	lockID string,
-) (*msg.DeleteStats, error) {
+) (*publicmessage.DeleteStats, error) {
 	qKey := keys.Queue{Namespace: queue.NS(), Name: queue.Name()}
 
 	luaKeys := []string{
@@ -202,14 +192,14 @@ func (s *Store) deleteMessageGroup(
 		publicqueue.TypePriority.Int(),
 		publicqueue.TypeLIFO.Int(),
 		publicqueue.TypeFIFO.Int(),
-		mSchema.MessageFieldStatus.Key(),
-		msg.StatusProcessing.Int(),
-		msg.StatusAcknowledged.Int(),
-		msg.StatusPending.Int(),
-		msg.StatusScheduled.Int(),
-		msg.StatusDeadLettered.Int(),
-		msg.StatusUnackDelaying.Int(),
-		msg.StatusUnackRequeuing.Int(),
+		MessageFieldStatus.Key(),
+		publicmessage.StatusProcessing.Int(),
+		publicmessage.StatusAcknowledged.Int(),
+		publicmessage.StatusPending.Int(),
+		publicmessage.StatusScheduled.Int(),
+		publicmessage.StatusDeadLettered.Int(),
+		publicmessage.StatusUnackDelaying.Int(),
+		publicmessage.StatusUnackRequeuing.Int(),
 		qSchema.QueueFieldOperationalState.Key(),
 		publicqueue.StateLocked.Int(),
 		qSchema.QueueFieldLockID.Key(),
@@ -245,7 +235,7 @@ func (s *Store) deleteMessageGroup(
 		return nil, fmt.Errorf("unexpected script reply: %v", reply)
 	}
 
-	return &msg.DeleteStats{
+	return &publicmessage.DeleteStats{
 		Processed: toInt(arr[0]),
 		Success:   toInt(arr[1]),
 		NotFound:  toInt(arr[2]),
@@ -253,8 +243,6 @@ func (s *Store) deleteMessageGroup(
 	}, nil
 }
 
-// RequeueMessage creates a new message from an acknowledged or dead-lettered
-// message and returns the new message ID.
 func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, error) {
 	original, err := s.GetMessage(ctx, messageID)
 	if err != nil {
@@ -262,7 +250,7 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 	}
 
 	if !original.Status().IsRequeuable() {
-		return "", msg.ErrNotRequeuable
+		return "", publicmessage.ErrNotRequeuable
 	}
 
 	destQueue := original.DestinationQueue()
@@ -324,34 +312,34 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 		publicqueue.StateLocked.Int(),
 
 		// Message Status Constants (ARGV[14-15])
-		msg.StatusScheduled.Int(),
-		msg.StatusPending.Int(),
+		publicmessage.StatusScheduled.Int(),
+		publicmessage.StatusPending.Int(),
 
 		// Message Property Keys (ARGV[16-39]) - 24 keys
-		mSchema.MessageFieldID.Key(),
-		mSchema.MessageFieldStatus.Key(),
-		mSchema.MessageFieldMessage.Key(),
-		mSchema.MessageFieldScheduledAt.Key(),
-		mSchema.MessageFieldPublishedAt.Key(),
-		mSchema.MessageFieldProcessingStartedAt.Key(),
-		mSchema.MessageFieldDeadLetteredAt.Key(),
-		mSchema.MessageFieldAcknowledgedAt.Key(),
-		mSchema.MessageFieldUnacknowledgedAt.Key(),
-		mSchema.MessageFieldLastUnacknowledgedAt.Key(),
-		mSchema.MessageFieldLastScheduledAt.Key(),
-		mSchema.MessageFieldRequeuedAt.Key(),
-		mSchema.MessageFieldRequeueCount.Key(),
-		mSchema.MessageFieldLastRequeuedAt.Key(),
-		mSchema.MessageFieldLastRetriedAttemptAt.Key(),
-		mSchema.MessageFieldScheduledCronFired.Key(),
-		mSchema.MessageFieldAttempts.Key(),
-		mSchema.MessageFieldScheduledRepeatCount.Key(),
-		mSchema.MessageFieldExpired.Key(),
-		mSchema.MessageFieldEffectiveScheduledDelay.Key(),
-		mSchema.MessageFieldScheduledTimes.Key(),
-		mSchema.MessageFieldScheduledMessageParentID.Key(),
-		mSchema.MessageFieldRequeuedMessageParentID.Key(),
-		mSchema.MessageFieldLastProcessedAt.Key(),
+		MessageFieldID.Key(),
+		MessageFieldStatus.Key(),
+		MessageFieldMessage.Key(),
+		MessageFieldScheduledAt.Key(),
+		MessageFieldPublishedAt.Key(),
+		MessageFieldProcessingStartedAt.Key(),
+		MessageFieldDeadLetteredAt.Key(),
+		MessageFieldAcknowledgedAt.Key(),
+		MessageFieldUnacknowledgedAt.Key(),
+		MessageFieldLastUnacknowledgedAt.Key(),
+		MessageFieldLastScheduledAt.Key(),
+		MessageFieldRequeuedAt.Key(),
+		MessageFieldRequeueCount.Key(),
+		MessageFieldLastRequeuedAt.Key(),
+		MessageFieldLastRetriedAttemptAt.Key(),
+		MessageFieldScheduledCronFired.Key(),
+		MessageFieldAttempts.Key(),
+		MessageFieldScheduledRepeatCount.Key(),
+		MessageFieldExpired.Key(),
+		MessageFieldEffectiveScheduledDelay.Key(),
+		MessageFieldScheduledTimes.Key(),
+		MessageFieldScheduledMessageParentID.Key(),
+		MessageFieldRequeuedMessageParentID.Key(),
+		MessageFieldLastProcessedAt.Key(),
 
 		"", // ARGV[40] operationLockId
 
@@ -376,13 +364,12 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 	}
 
 	if n == 0 {
-		return "", msg.ErrNotFound
+		return "", publicmessage.ErrNotFound
 	}
 
 	return newID, nil
 }
 
-// GetUnacknowledgmentHistory returns the unacknowledgment history for a message.
 func (s *Store) GetUnacknowledgmentHistory(ctx context.Context, messageID string) ([]string, error) {
 	key := keys.System{}.Message(messageID)
 	exists, err := redis.Client().Exists(ctx, key).Result()
@@ -390,7 +377,7 @@ func (s *Store) GetUnacknowledgmentHistory(ctx context.Context, messageID string
 		return nil, fmt.Errorf("check message exists: %w", err)
 	}
 	if exists == 0 {
-		return nil, msg.ErrNotFound
+		return nil, publicmessage.ErrNotFound
 	}
 
 	historyKey := keys.System{}.MessageAcknowledgementHistory(messageID)
@@ -402,7 +389,6 @@ func (s *Store) GetUnacknowledgmentHistory(ctx context.Context, messageID string
 	return records, nil
 }
 
-// toInt converts an interface{} (typically int64) to int.
 func toInt(v interface{}) int {
 	if n, ok := v.(int64); ok {
 		return int(n)

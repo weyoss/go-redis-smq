@@ -18,7 +18,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -31,7 +31,7 @@ func TestBrowse_PublishedMessages(t *testing.T) {
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5; i++ {
-		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+		prod.Produce(ctx, publicmessage.New().SetBody("msg").SetQueue(params))
 	}
 
 	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
@@ -54,7 +54,7 @@ func TestBrowse_PendingMessages(t *testing.T) {
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
-		prod.Produce(ctx, msg.New().SetBody("pending").SetQueue(params))
+		prod.Produce(ctx, publicmessage.New().SetBody("pending").SetQueue(params))
 	}
 
 	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
@@ -77,7 +77,7 @@ func TestBrowse_ScheduledMessages(t *testing.T) {
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
-		prod.Produce(ctx, msg.New().SetBody("scheduled").SetQueue(params).SetScheduledDelay(1*time.Hour))
+		prod.Produce(ctx, publicmessage.New().SetBody("scheduled").SetQueue(params).SetScheduledDelay(1*time.Hour))
 	}
 
 	result, err := redissmq.NewQueueManager().BrowseMessages(ctx, params, &publicqueue.BrowseParams{
@@ -120,13 +120,13 @@ func TestBrowse_AcknowledgedMessages(t *testing.T) {
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 3; i++ {
-		prod.Produce(ctx, msg.New().SetBody("ack-browse").SetQueue(params))
+		prod.Produce(ctx, publicmessage.New().SetBody("ack-browse").SetQueue(params))
 	}
 
 	// Consume all messages
 	consumed := make(chan struct{}, 3)
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *publicmessage.Transferable) error {
 		consumed <- struct{}{}
 		return nil
 	})
@@ -173,7 +173,7 @@ func TestBrowse_Pagination(t *testing.T) {
 
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 10; i++ {
-		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+		prod.Produce(ctx, publicmessage.New().SetBody("msg").SetQueue(params))
 	}
 
 	qm := redissmq.NewQueueManager()

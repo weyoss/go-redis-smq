@@ -8,7 +8,7 @@
  *
  */
 
-package msg
+package message
 
 import "errors"
 

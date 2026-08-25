@@ -17,13 +17,12 @@ import (
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
-	mSchema "github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -126,12 +125,12 @@ func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 		qSchema.QueueFieldDelayedMessagesCount.Key(),
 		qSchema.QueueFieldPendingMessagesCount.Key(),
 		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),
-		mSchema.MessageFieldStatus.Key(),
-		msg.StatusPending.Int(),
-		msg.StatusDeadLettered.Int(),
-		mSchema.MessageFieldDeadLetteredAt.Key(),
-		msg.StatusUnackDelaying.Int(),
-		mSchema.MessageFieldLastRetriedAttemptAt.Key(),
+		internalMessage.MessageFieldStatus.Key(),
+		publicmessage.StatusPending.Int(),
+		publicmessage.StatusDeadLettered.Int(),
+		internalMessage.MessageFieldDeadLetteredAt.Key(),
+		publicmessage.StatusUnackDelaying.Int(),
+		internalMessage.MessageFieldLastRetriedAttemptAt.Key(),
 		queue.TypeLIFO.Int(),
 		queue.TypeFIFO.Int(),
 		qSchema.QueueFieldOperationalState.Key(),

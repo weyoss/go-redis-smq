@@ -8,7 +8,7 @@
  *
  */
 
-package msg
+package message
 
 import (
 	"time"
@@ -20,7 +20,7 @@ import (
 //
 // It holds timestamps, counters, parent relationships, and scheduling
 // information for a message. The state is serialized to a Redis hash using
-// the integer field keys defined in the message schema.
+// integer field keys defined in the internal message schema.
 type MessageState struct {
 	id                       string
 	scheduledAt              *time.Time

@@ -19,7 +19,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -49,7 +49,7 @@ func main() {
 		}),
 	)
 
-	c.Consume(batchQueue, func(ctx context.Context, m *msg.Transferable) error {
+	c.Consume(batchQueue, func(ctx context.Context, m *message.Transferable) error {
 		consumed <- m.ID
 		return nil
 	})
@@ -62,7 +62,7 @@ func main() {
 	// Produce 100 messages
 	start := time.Now()
 	for i := 1; i <= 100; i++ {
-		m := msg.New().
+		m := message.New().
 			SetBody(fmt.Sprintf("Message #%d", i)).
 			SetQueue(batchQueue)
 

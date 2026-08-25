@@ -20,7 +20,7 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-	"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -77,7 +77,7 @@ func main() {
 
 	startConsumer := func(queue *queue.QueueParams, label string) {
 		c := redissmq.NewConsumer()
-		c.Consume(queue, func(ctx context.Context, m *msg.Transferable) error {
+		c.Consume(queue, func(ctx context.Context, m *message.Transferable) error {
 			ch <- result{queue: label, body: m.Body}
 			return nil
 		})
@@ -93,7 +93,7 @@ func main() {
 	p.Run(ctx)
 
 	// Send one message — goes to ALL bound queues
-	m := msg.New().
+	m := message.New().
 		SetBody(map[string]interface{}{
 			"alert":   "System maintenance in 5 minutes",
 			"urgency": "high",

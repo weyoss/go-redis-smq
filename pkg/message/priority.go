@@ -8,7 +8,7 @@
  *
  */
 
-package msg
+package message
 
 // MessagePriority represents the priority level of a message.
 //
