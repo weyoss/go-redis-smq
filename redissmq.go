@@ -24,7 +24,6 @@ import (
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	loggercfg "github.com/weyoss/go-redis-smq/internal/util/logger/cfg"
 	publicconfig "github.com/weyoss/go-redis-smq/pkg/config"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publiceventbus "github.com/weyoss/go-redis-smq/pkg/eventbus"
@@ -102,8 +101,6 @@ func Init(ctx context.Context, cfg Config) error {
 	if err := internalconfig.Init(ctx); err != nil {
 		return fmt.Errorf("redissmq: config init failed: %w", err)
 	}
-
-	logger.Init(loggercfg.Provider())
 
 	systemCtx, systemStop = context.WithCancel(ctx)
 
