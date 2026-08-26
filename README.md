@@ -46,7 +46,7 @@ import (
     "context"
     "log"
 
-	"github.com/redis/go-redis/v9"
+    "github.com/redis/go-redis/v9"
     "github.com/weyoss/go-redis-smq"
 )
 
@@ -98,7 +98,7 @@ fmt.Printf("Produced: %v\n", ids)
 ```go
 consumer := redissmq.NewConsumer()
 consumer.Consume(params, func(ctx context.Context, m *message.Transferable) error {
-    fmt.Printf("Received: %v\n", string(m.Body.(string)))
+    fmt.Printf("Received: %v\n", m.Body)
     return nil
 })
 if err := consumer.Run(ctx); err != nil {
@@ -109,13 +109,21 @@ defer consumer.Shutdown()
 
 ## 🏗️ Architecture
 
-RedisSMQ uses a clean, layered architecture:
+RedisSMQ is built around a small set of core concepts:
 
-- **Public packages (`pkg/...`)** contain only interfaces, types, and documentation. They never import internal code.
-- **Internal packages (`internal/...`)** hold concrete Redis‑backed implementations.
-- **Root `redissmq` package** is the composition root. It provides factory functions that return concrete implementations behind public interfaces. Use these factories to obtain managers, producers, consumers, exchanges, etc.
+- **Queues** – store messages and define ordering (FIFO, LIFO, priority) and delivery model (point‑to‑point, pub/sub).
+- **Exchanges** – route messages to one or more queues based on routing rules (direct, topic, fanout).
+- **Producers** – publish messages to queues or exchanges.
+- **Consumers** – subscribe to queues and process messages with a handler.
+- **Messages** – the data units transferred through the system.
+- **Namespaces** – logical isolation boundaries for queues and exchanges.
+- **Configuration** – runtime settings shared across connected instances.
 
-### Factory Functions
+The `redissmq` package is the entry point: it initialises the runtime and provides factory functions for all components.
+
+### Getting Components
+
+Use the root package to create concrete implementations behind the public interfaces:
 
 | Factory                              | Returns                      |
 |--------------------------------------|------------------------------|
@@ -132,19 +140,12 @@ RedisSMQ uses a clean, layered architecture:
 | `redissmq.NewConsumer()`             | `consumer.Consumer`          |
 | `redissmq.NewConfigManager()`        | `config.Manager`             |
 
-## 📚 API Overview
+## 📚 Documentation
 
-The public API is split across packages:
+- [Go API Guides](docs/README.md) – quick start, queues, messages, exchanges, configuration, events, and more
+- [Language‑agnostic Concepts](https://github.com/weyoss/redis-smq-docs) – architecture, reliability, delivery models
 
-- **System** – `Init`, `Shutdown`
-- **Queues** – `Create`, `Pause`, `Resume`, `Stop`, `SetRateLimit`, `BrowseMessages`, `ListAll`
-- **Messages** – `Get`, `Delete`, `Requeue`
-- **Producers** – `Run`, `Produce` (direct or via exchanges)
-- **Consumers** – `Consume`, `ConsumeWithGroup`, `Run`, `Shutdown`
-- **Exchanges** – Direct, Topic, Fanout with bindings
-- **Namespaces** – `List`, `Delete`, `ListQueues`, `ListExchanges`
-- **Configuration** – runtime config via `config.Manager`
-- **Events** – public event bus for monitoring
+For a complete list of guides, see the [documentation index](docs/README.md).
 
 ## 🔗 Interoperability
 
