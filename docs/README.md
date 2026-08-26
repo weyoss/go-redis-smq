@@ -33,16 +33,6 @@ For language‑agnostic concepts (architecture, queues, exchanges, reliability, 
 
 - [Error Handling](error-handling.md) — Error types and handling patterns
 
-## Architecture
-
-RedisSMQ uses a clean layered architecture:
-
-- **Public packages (`pkg/...`)** — interfaces, types, and documentation only.
-- **Internal packages (`internal/...`)** — concrete Redis-backed implementations.
-- **Root `redissmq` package** — composition root and factory functions.
-
-All managers, producers, consumers, exchanges, and other components are obtained via factory functions in `redissmq` (e.g., `redissmq.NewQueueManager()`, `redissmq.NewProducer()`). Public packages are designed to be used without importing internal code.
-
 ## Additional Resources
 
 - [BUILD.md](../BUILD.md) — build, test, and coverage instructions
