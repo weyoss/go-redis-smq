@@ -16,8 +16,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )

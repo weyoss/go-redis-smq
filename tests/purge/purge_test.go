@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -120,10 +120,10 @@ func TestPurge_AcknowledgedMessages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 1000
-	config.Save(ctx, cfg)
+	internalconfig.Save(ctx, cfg)
 
 	params := publicqueue.MustQueueParams("test-purge-ack")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
@@ -167,10 +167,10 @@ func TestPurge_DeadLetteredMessages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 25*time.Second)
 	defer cancel()
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
 	cfg.MessageAudit.DeadLetteredMessages.QueueSize = 1000
-	config.Save(ctx, cfg)
+	internalconfig.Save(ctx, cfg)
 
 	params := publicqueue.MustQueueParams("test-purge-dlq")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)

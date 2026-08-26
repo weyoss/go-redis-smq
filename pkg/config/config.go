@@ -1,3 +1,4 @@
+// pkg/config/config.go
 /*
  * Copyright (c) 2026
  * Weyoss <weyoss@outlook.com>
@@ -8,257 +9,35 @@
  *
  */
 
-// Package config provides public APIs for reading, saving, reloading, and
-// resetting RedisSMQ system configuration.
-//
-// Configuration is stored in Redis and shared across all connected
-// instances. Changes are propagated automatically over the internal event
-// bus using version-controlled updates.
 package config
 
-import (
-	"context"
-	"encoding/json"
-	"fmt"
-	"sync"
-	"sync/atomic"
+import "sync/atomic"
 
-	internalConfig "github.com/weyoss/go-redis-smq/internal/config"
-	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
-	"github.com/weyoss/go-redis-smq/internal/errs"
-	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
-	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
-	"github.com/weyoss/go-redis-smq/pkg/config/cfg"
-)
+// currentConfig holds the most recent configuration snapshot.
+// It is updated by the internal configuration manager whenever the
+// configuration is loaded, saved, reset, or reloaded.
+var currentConfig atomic.Pointer[Config]
 
-var (
-	instance atomic.Pointer[cfg.Config]
-	mu       sync.Mutex
-	codec    = internalConfig.NewCodec()
-)
+func init() {
+	// Start with factory defaults until the real configuration is loaded.
+	currentConfig.Store(DefaultConfig())
+}
 
-// Init initializes the configuration singleton.
+// Set replaces the current in‑memory configuration snapshot.
 //
-// It is safe to call multiple times; subsequent calls are no-ops. If no
-// configuration exists in Redis, default configuration is saved.
-func Init(ctx context.Context) error {
-	if instance.Load() != nil {
-		return nil
+// It is intended to be called only by the internal configuration manager
+// (from the root redissmq package) to keep public packages synchronised
+// with the latest configuration.
+func Set(c *Config) {
+	if c != nil {
+		currentConfig.Store(c)
 	}
-
-	mu.Lock()
-	defer mu.Unlock()
-
-	if instance.Load() != nil {
-		return nil
-	}
-
-	c := loadOrDefault(ctx)
-	if c == nil {
-		return fmt.Errorf("config: failed to load configuration")
-	}
-
-	instance.Store(c)
-	subscribeToUpdates()
-	return nil
 }
 
-// Get returns the current configuration.
+// Get returns the current configuration snapshot.
 //
-// It panics if Init has not been called.
-func Get() *cfg.Config {
-	c := instance.Load()
-	if c == nil {
-		panic("config: not initialized — call config.Init() first")
-	}
-	return c
-}
-
-// Close releases the configuration singleton.
-func Close() {
-	mu.Lock()
-	defer mu.Unlock()
-	instance.Swap(nil)
-}
-
-// Save persists the given configuration and publishes an update event.
-//
-// Use config.Get() to obtain the current config, modify fields as needed,
-// then pass the result to Save. The config replaces the entire stored
-// configuration.
-//
-// It returns the new configuration version.
-func Save(ctx context.Context, c *cfg.Config) (int, error) {
-	mu.Lock()
-	defer mu.Unlock()
-
-	current := instance.Load()
-	if current == nil {
-		return 0, cfg.ErrNotInitialized
-	}
-
-	version, err := save(ctx, c, current.Version)
-	if err != nil {
-		return 0, err
-	}
-
-	c.Version = version
-	instance.Store(c)
-
-	internalConfigEvents.PublishUpdated(ctx, c, version)
-
-	return version, nil
-}
-
-// Reset restores the configuration to factory defaults.
-func Reset(ctx context.Context) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	current := instance.Load()
-	if current == nil {
-		return cfg.ErrNotInitialized
-	}
-
-	defaults := cfg.DefaultConfig()
-	version, err := save(ctx, defaults, current.Version)
-	if err != nil {
-		return err
-	}
-
-	defaults.Version = version
-	instance.Store(defaults)
-
-	internalConfigEvents.PublishUpdated(ctx, defaults, version)
-
-	return nil
-}
-
-// Reload reloads the configuration from Redis.
-//
-// If the configuration cannot be loaded, default configuration is saved and
-// used instead.
-func Reload(ctx context.Context) error {
-	mu.Lock()
-	defer mu.Unlock()
-
-	if instance.Load() == nil {
-		return cfg.ErrNotInitialized
-	}
-
-	key := keys.System{}.Config()
-	hash, err := redisClient.LoadHash(ctx, key, "config")
-	if err != nil {
-		defaults := cfg.DefaultConfig()
-		version, saveErr := save(ctx, defaults, 0)
-		if saveErr != nil {
-			return fmt.Errorf("reload config: save defaults: %w", saveErr)
-		}
-		defaults.Version = version
-		instance.Store(defaults)
-		return nil
-	}
-
-	c, err := codec.DecodeHash(ctx, hash)
-	if err != nil {
-		return fmt.Errorf("reload config: decode: %w", err)
-	}
-
-	instance.Store(c)
-	return nil
-}
-
-// loadOrDefault loads the configuration from Redis or saves defaults.
-func loadOrDefault(ctx context.Context) *cfg.Config {
-	key := keys.System{}.Config()
-
-	hash, err := redisClient.LoadHash(ctx, key, "config")
-	if err != nil {
-		return saveDefaults(ctx, 0)
-	}
-
-	c, err := codec.DecodeHash(ctx, hash)
-	if err != nil {
-		currentVersion := 0
-		if v, ok := hash[internalConfig.ConfigFieldVersion]; ok {
-			_, _ = fmt.Sscanf(v, "%d", &currentVersion)
-		}
-		return saveDefaults(ctx, currentVersion)
-	}
-
-	return c
-}
-
-// saveDefaults saves default configuration and returns it.
-func saveDefaults(ctx context.Context, expectedVersion int) *cfg.Config {
-	defaults := cfg.DefaultConfig()
-	version, err := save(ctx, defaults, expectedVersion)
-	if err != nil {
-		fmt.Printf("config: failed to save defaults: %v\n", err)
-	}
-	defaults.Version = version
-	return defaults
-}
-
-// subscribeToUpdates subscribes to configuration updates on the system event
-// bus using the internal subscription helper. The callback updates the
-// in-memory configuration when a newer version arrives.
-func subscribeToUpdates() {
-	_, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
-		mu.Lock()
-		defer mu.Unlock()
-
-		c := instance.Load()
-		if c == nil {
-			return
-		}
-
-		if p.Version > c.Version {
-			c.Version = p.Version
-			c.Namespace = p.Config.Namespace
-			c.Logger = p.Config.Logger
-			c.MessageAudit = p.Config.MessageAudit
-		}
-	})
-	if err != nil {
-		fmt.Printf("config: failed to subscribe to configuration updates: %v\n", err)
-	}
-}
-
-// save persists the configuration using the Lua script.
-func save(ctx context.Context, c *cfg.Config, currentVersion int) (int, error) {
-	key := keys.System{}.Config()
-
-	configData, err := json.Marshal(c)
-	if err != nil {
-		return 0, fmt.Errorf("marshal config: %w", err)
-	}
-
-	reply, err := redisClient.Eval(ctx, scripts.SaveConfig,
-		[]string{key},
-		[]interface{}{
-			internalConfig.ConfigFieldVersion,
-			internalConfig.ConfigFieldData,
-			currentVersion,
-			string(configData),
-		},
-	)
-	if err != nil {
-		return 0, fmt.Errorf("save config: %w", err)
-	}
-
-	if replyStr, ok := reply.(string); ok {
-		if replyStr == "VERSION_MISMATCH" {
-			return 0, cfg.ErrVersionMismatch
-		}
-		return 0, fmt.Errorf("%w: %s", errs.ErrUnexpectedScriptReply, replyStr)
-	}
-
-	version, err := redisClient.Int64(reply)
-	if err != nil {
-		return 0, err
-	}
-
-	return int(version), nil
+// It may be nil if the configuration has not yet been initialised; callers
+// should handle that case if necessary.
+func Get() *Config {
+	return currentConfig.Load()
 }

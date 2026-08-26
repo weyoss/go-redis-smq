@@ -13,8 +13,8 @@ package config_test
 import (
 	"testing"
 
+	"github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 // Scenario: Full config lifecycle — get, modify, save, verify, modify again

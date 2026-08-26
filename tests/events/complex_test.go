@@ -19,9 +19,9 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/config"
 	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publicEventBus "github.com/weyoss/go-redis-smq/pkg/eventbus"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"

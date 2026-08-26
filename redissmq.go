@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"sync"
 
+	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalexchange "github.com/weyoss/go-redis-smq/internal/exchange"
@@ -24,7 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	loggercfg "github.com/weyoss/go-redis-smq/internal/util/logger/cfg"
-	"github.com/weyoss/go-redis-smq/pkg/config"
+	publicconfig "github.com/weyoss/go-redis-smq/pkg/config"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	publiceventbus "github.com/weyoss/go-redis-smq/pkg/eventbus"
 	publicexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
@@ -98,7 +99,7 @@ func Init(ctx context.Context, cfg Config) error {
 	// Always initialise and start the system bus.
 	eventbus.InitSystem(ctx)
 
-	if err := config.Init(ctx); err != nil {
+	if err := internalconfig.Init(ctx); err != nil {
 		return fmt.Errorf("redissmq: config init failed: %w", err)
 	}
 
@@ -191,7 +192,7 @@ func Shutdown() {
 	l.Info("RedisSMQ shut down complete")
 
 	logger.Shutdown()
-	config.Close()
+	internalconfig.Close()
 	redis.Close()
 
 	initialized = false
@@ -259,4 +260,10 @@ func NewFanoutExchange() publicexchange.FanoutExchange {
 // topic exchange interface.
 func NewTopicExchange() publicexchange.TopicExchange {
 	return internalexchange.NewManager().Topic()
+}
+
+// NewConfigManager returns the singleton configuration manager that implements
+// the public config.Manager interface.
+func NewConfigManager() publicconfig.Manager {
+	return internalconfig.DefaultManager()
 }

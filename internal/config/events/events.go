@@ -15,7 +15,7 @@
 package events
 
 import (
-	"github.com/weyoss/go-redis-smq/pkg/config/cfg"
+	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 // EventUpdated is the name of the configuration updated event.
@@ -31,6 +31,6 @@ const EventUpdated = "configuration.updated"
 //
 //	(config: IRedisSMQParsedConfig, version: number) => void
 type UpdatedPayload struct {
-	Config  *cfg.Config `json:"config"`
-	Version int         `json:"version"`
+	Config  *pubconfig.Config `json:"config"`
+	Version int               `json:"version"`
 }

@@ -13,7 +13,7 @@ package config_test
 import (
 	"testing"
 
-	"github.com/weyoss/go-redis-smq/pkg/config/cfg"
+	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 // Note: config.Get() panics if called before Init.
@@ -24,7 +24,7 @@ import (
 func TestError_ErrorVariablesExist(t *testing.T) {
 	// Compile-time check that error sentinels exist.
 	// These are tested indirectly through Save operations in save_test.go.
-	_ = cfg.ErrVersionMismatch
-	_ = cfg.ErrNotInitialized
-	_ = cfg.ErrInvalidConfig
+	_ = config.ErrVersionMismatch
+	_ = config.ErrNotInitialized
+	_ = config.ErrInvalidConfig
 }

@@ -1,26 +1,14 @@
-/*
- * Copyright (c) 2026
- * Weyoss <weyoss@outlook.com>
- * https://github.com/weyoss
- *
- * This source code is licensed under the MIT license found in the LICENSE file
- * in the root directory of this source tree.
- *
- */
-
-// internal/util/logger/cfg/config.go
-
-// Package cfg wires the application configuration into the logger's ConfigProvider.
 package cfg
 
 import (
 	"log/slog"
 
+	"github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	appconfig "github.com/weyoss/go-redis-smq/pkg/config"
 )
 
-// Provider returns a logger.ConfigProvider backed by the application config.
+// Provider returns a logger.ConfigProvider backed by the internal
+// configuration manager.
 func Provider() logger.ConfigProvider {
 	return adapter{}
 }
@@ -28,7 +16,7 @@ func Provider() logger.ConfigProvider {
 type adapter struct{}
 
 func (adapter) Get() logger.Config {
-	c := appconfig.Get()
+	c := config.Get()
 	level := slog.Level(c.Logger.Options.LogLevel)
 	if level < slog.LevelDebug || level > slog.LevelError {
 		level = slog.LevelInfo

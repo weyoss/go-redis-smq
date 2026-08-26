@@ -38,7 +38,7 @@ func main() {
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 1000
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
 	cfg.MessageAudit.DeadLetteredMessages.QueueSize = 1000
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := redissmq.NewConfigManager().Save(ctx, cfg); err != nil {
 		log.Fatalf("save config: %v", err)
 	}
 

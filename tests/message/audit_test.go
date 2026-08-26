@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -28,11 +28,11 @@ import (
 func TestAudit_AcknowledgedQueueSize(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 3
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 0
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -75,11 +75,11 @@ func TestAudit_DeadLetteredQueueSize(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
 	cfg.MessageAudit.DeadLetteredMessages.QueueSize = 2
 	cfg.MessageAudit.DeadLetteredMessages.Expire = 0
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -126,11 +126,11 @@ func TestAudit_DeadLetteredQueueSize(t *testing.T) {
 func TestAudit_AcknowledgedExpire(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 100
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 10 // 10 seconds
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -183,11 +183,11 @@ func TestAudit_AcknowledgedExpire(t *testing.T) {
 func TestAudit_DeadLetteredExpire(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
 	cfg.MessageAudit.DeadLetteredMessages.QueueSize = 100
 	cfg.MessageAudit.DeadLetteredMessages.Expire = 10 // 10 seconds
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -243,11 +243,11 @@ func TestAudit_DeadLetteredExpire(t *testing.T) {
 func TestAudit_UnlimitedQueueSize(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 0 // Unlimited
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 0
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -288,11 +288,11 @@ func TestAudit_UnlimitedQueueSize(t *testing.T) {
 func TestAudit_NeverExpires(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 100
 	cfg.MessageAudit.AcknowledgedMessages.Expire = 0 // Never
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -334,10 +334,10 @@ func TestAudit_UnacknowledgmentHistory_WithAudit(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
 	defer cancel()
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.UnacknowledgementHistory.Enabled = true
 	cfg.MessageAudit.UnacknowledgementHistory.MaxSize = 100
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 
@@ -399,10 +399,10 @@ func TestAudit_UnacknowledgmentHistory_MaxSize(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.UnacknowledgementHistory.Enabled = true
 	cfg.MessageAudit.UnacknowledgementHistory.MaxSize = 3
-	if _, err := config.Save(ctx, cfg); err != nil {
+	if _, err := internalconfig.Save(ctx, cfg); err != nil {
 		t.Fatalf("save config: %v", err)
 	}
 

@@ -43,4 +43,15 @@ var (
 
 	// ErrPolicyViolation indicates a queue doesn't satisfy the exchange's queue policy.
 	ErrPolicyViolation = errors.New("queue policy violation")
+
+	// Parameter validation errors
+
+	// ErrNameRequired indicates the exchange name was empty.
+	ErrNameRequired = errors.New("exchange name is required")
+
+	// ErrInvalidName indicates the exchange name failed validation.
+	ErrInvalidName = errors.New("invalid exchange name")
+
+	// ErrInvalidNamespace indicates the namespace failed validation.
+	ErrInvalidNamespace = errors.New("invalid namespace")
 )

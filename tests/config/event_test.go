@@ -14,8 +14,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 // Scenario: Config update persists across saves

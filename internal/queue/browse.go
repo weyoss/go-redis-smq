@@ -14,9 +14,9 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/weyoss/go-redis-smq/internal/config"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 

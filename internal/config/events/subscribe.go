@@ -16,7 +16,7 @@ import (
 	"encoding/json"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/config/cfg"
+	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 func decodeArg(arg interface{}, target interface{}) error {
@@ -33,14 +33,14 @@ func SubscribeUpdated(handler func(UpdatedPayload)) (*eventbus.Subscription, err
 		if len(args) < 2 {
 			return
 		}
-		var config cfg.Config
+		var cfg config.Config
 		var version int
-		if err := decodeArg(args[0], &config); err != nil {
+		if err := decodeArg(args[0], &cfg); err != nil {
 			return
 		}
 		if err := decodeArg(args[1], &version); err != nil {
 			return
 		}
-		handler(UpdatedPayload{Config: &config, Version: version})
+		handler(UpdatedPayload{Config: &cfg, Version: version})
 	}, EventUpdated)
 }

@@ -14,9 +14,9 @@ import (
 	"testing"
 
 	redissmq "github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/config"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 

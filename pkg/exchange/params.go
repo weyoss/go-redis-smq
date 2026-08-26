@@ -12,22 +12,10 @@ package exchange
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/redis"
-)
-
-var (
-	// ErrNameRequired indicates the exchange name was empty.
-	ErrNameRequired = errors.New("exchange name is required")
-
-	// ErrInvalidName indicates the exchange name failed validation.
-	ErrInvalidName = errors.New("invalid exchange name")
-
-	// ErrInvalidNamespace indicates the namespace failed validation.
-	ErrInvalidNamespace = errors.New("invalid namespace")
 )
 
 // ExchangeParams uniquely identifies an exchange and its routing type.
@@ -107,7 +95,7 @@ func (p *ExchangeParams) Clone() *ExchangeParams {
 }
 
 // String returns the fully qualified exchange name.
-// Uses the format "name@namespace" for non-default namespaces.
+// Uses the format "name@namespace".
 func (p *ExchangeParams) String() string {
 	return p.name + "@" + p.ns
 }

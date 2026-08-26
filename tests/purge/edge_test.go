@@ -16,8 +16,8 @@ import (
 	"time"
 
 	redissmq "github.com/weyoss/go-redis-smq"
+	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -225,10 +225,10 @@ func TestEdge_PurgeAcknowledgedGone(t *testing.T) {
 	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
 	defer cancel()
 
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 	cfg.MessageAudit.AcknowledgedMessages.QueueSize = 1000
-	config.Save(ctx, cfg)
+	internalconfig.Save(ctx, cfg)
 
 	params := queue.MustQueueParams("test-edge-ack-gone")
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)

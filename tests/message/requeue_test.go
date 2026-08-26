@@ -18,8 +18,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -234,9 +234,9 @@ func TestRequeue_DeadLetteredMessage(t *testing.T) {
 	defer cancel()
 
 	// Enable dead-letter audit
-	cfg := config.Get()
+	cfg := internalconfig.Get()
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
-	config.Save(ctx, cfg)
+	internalconfig.Save(ctx, cfg)
 
 	params := queue.MustQueueParams("test-requeue-dlq")
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)

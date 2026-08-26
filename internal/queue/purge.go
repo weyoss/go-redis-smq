@@ -19,11 +19,11 @@ import (
 
 	"github.com/google/uuid"
 	rdb "github.com/redis/go-redis/v9"
+	"github.com/weyoss/go-redis-smq/internal/config"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 

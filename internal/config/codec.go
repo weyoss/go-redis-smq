@@ -16,7 +16,7 @@ import (
 	"fmt"
 
 	"github.com/weyoss/go-redis-smq/internal/codec"
-	"github.com/weyoss/go-redis-smq/pkg/config/cfg"
+	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 const (
@@ -30,7 +30,7 @@ func NewCodec() *Codec {
 	return &Codec{}
 }
 
-func (c *Codec) EncodeHash(ctx context.Context, cfg *cfg.Config) (map[string]interface{}, error) {
+func (c *Codec) EncodeHash(ctx context.Context, cfg *pubconfig.Config) (map[string]interface{}, error) {
 	if cfg == nil {
 		return nil, codec.NewEncodingError("config", "nil", codec.ErrInvalidFormat)
 	}
@@ -46,7 +46,7 @@ func (c *Codec) EncodeHash(ctx context.Context, cfg *cfg.Config) (map[string]int
 	}, nil
 }
 
-func (c *Codec) DecodeHash(ctx context.Context, hash map[string]string) (*cfg.Config, error) {
+func (c *Codec) DecodeHash(ctx context.Context, hash map[string]string) (*pubconfig.Config, error) {
 	if len(hash) == 0 {
 		return nil, codec.NewDecodingError("config", "empty hash", codec.ErrInvalidFormat)
 	}
@@ -56,7 +56,7 @@ func (c *Codec) DecodeHash(ctx context.Context, hash map[string]string) (*cfg.Co
 		return nil, codec.NewDecodingError("config", "missing data field", codec.ErrInvalidFormat)
 	}
 
-	var cfg cfg.Config
+	var cfg pubconfig.Config
 	if err := json.Unmarshal([]byte(data), &cfg); err != nil {
 		return nil, codec.NewDecodingError("config", "json", err)
 	}
@@ -68,4 +68,4 @@ func (c *Codec) DecodeHash(ctx context.Context, hash map[string]string) (*cfg.Co
 	return &cfg, nil
 }
 
-var _ codec.HashCodec[*cfg.Config] = (*Codec)(nil)
+var _ codec.HashCodec[*pubconfig.Config] = (*Codec)(nil)

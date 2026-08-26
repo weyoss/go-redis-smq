@@ -15,9 +15,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/weyoss/go-redis-smq/internal/config"
 	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 // Scenario: Subscribe to config updated event

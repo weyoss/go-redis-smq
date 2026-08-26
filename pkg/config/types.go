@@ -8,11 +8,7 @@
  *
  */
 
-// Package cfg defines the public configuration structures used by RedisSMQ.
-//
-// These types are returned by config.Get() and can be modified before being
-// passed to config.Save().
-package cfg
+package config
 
 // Config holds the application configuration.
 type Config struct {
@@ -88,41 +84,4 @@ type AuditHistoryConfig struct {
 	// MaxSize is the maximum number of history records per message.
 	// A value of 0 means unlimited.
 	MaxSize int `json:"maxSize"`
-}
-
-// DefaultConfig returns the factory default configuration.
-//
-// The defaults are:
-//   - Namespace: "default"
-//   - Logger: disabled, timestamps enabled, colors enabled, level INFO
-//   - Message audit: all categories disabled
-//   - Unacknowledgment history max size: 100
-func DefaultConfig() *Config {
-	return &Config{
-		Namespace: "default",
-		Logger: LoggerConfig{
-			Enabled: false,
-			Options: LoggerOptionsConfig{
-				IncludeTimestamp: true,
-				Colorize:         true,
-				LogLevel:         1,
-			},
-		},
-		MessageAudit: MessageAudit{
-			AcknowledgedMessages: AuditMessagesConfig{
-				Enabled:   false,
-				QueueSize: 0,
-				Expire:    0,
-			},
-			DeadLetteredMessages: AuditMessagesConfig{
-				Enabled:   false,
-				QueueSize: 0,
-				Expire:    0,
-			},
-			UnacknowledgementHistory: AuditHistoryConfig{
-				Enabled: false,
-				MaxSize: 100,
-			},
-		},
-	}
 }
