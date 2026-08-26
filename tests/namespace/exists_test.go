@@ -16,7 +16,6 @@ import (
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -27,7 +26,7 @@ func TestExists_WithQueues(t *testing.T) {
 	params := queue.MustQueueParamsWithNS("test-exists-q", "existing-ns")
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, err := nm.Exists(ctx, "existing-ns")
 	if err != nil {
 		t.Fatalf("exists: %v", err)
@@ -45,7 +44,7 @@ func TestExists_WithExchanges(t *testing.T) {
 	dx := redissmq.NewDirectExchange()
 	dx.Create(ctx, exParams, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, err := nm.Exists(ctx, "exchange-ns")
 	if err != nil {
 		t.Fatalf("exists: %v", err)
@@ -59,7 +58,7 @@ func TestExists_WithExchanges(t *testing.T) {
 func TestExists_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, err := nm.Exists(ctx, "nonexistent-ns")
 	if err != nil {
 		t.Fatalf("exists: %v", err)
@@ -76,7 +75,7 @@ func TestExists_AfterDelete(t *testing.T) {
 	params := queue.MustQueueParamsWithNS("test-exists-del-q", "temp-ns")
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	nm.Delete(ctx, "temp-ns")
 
 	exists, err := nm.Exists(ctx, "temp-ns")
@@ -92,7 +91,7 @@ func TestExists_AfterDelete(t *testing.T) {
 func TestExists_EmptyName(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	_, err := nm.Exists(ctx, "")
 	if err == nil {
 		t.Fatal("expected error for empty namespace name")

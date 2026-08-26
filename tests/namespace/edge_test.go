@@ -17,7 +17,6 @@ import (
 
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -32,7 +31,7 @@ func TestEdge_VeryLongName(t *testing.T) {
 		t.Fatalf("create with long namespace: %v", err)
 	}
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, _ := nm.Exists(ctx, longNS)
 	if !exists {
 		t.Error("namespace with long name should exist")
@@ -50,7 +49,7 @@ func TestEdge_SpecialCharacters(t *testing.T) {
 		t.Fatalf("create with special chars namespace: %v", err)
 	}
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, _ := nm.Exists(ctx, specialNS)
 	if !exists {
 		t.Error("namespace with special chars should exist")
@@ -61,7 +60,7 @@ func TestEdge_SpecialCharacters(t *testing.T) {
 func TestEdge_RapidCreateDelete(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 
 	qm := redissmq.NewQueueManager()
 	for i := 0; i < 10; i++ {
@@ -87,7 +86,7 @@ func TestEdge_MinimumNameLength(t *testing.T) {
 		t.Fatalf("create with single char namespace: %v", err)
 	}
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, _ := nm.Exists(ctx, "a")
 	if !exists {
 		t.Error("single char namespace should exist")
@@ -98,7 +97,7 @@ func TestEdge_MinimumNameLength(t *testing.T) {
 func TestEdge_ManyNamespaces(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	count := 20
 
 	qm := redissmq.NewQueueManager()
@@ -135,7 +134,7 @@ func TestEdge_AllValidCharacters(t *testing.T) {
 		t.Fatalf("create with valid chars namespace: %v", err)
 	}
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	exists, _ := nm.Exists(ctx, validNS)
 	if !exists {
 		t.Error("namespace with all valid chars should exist")

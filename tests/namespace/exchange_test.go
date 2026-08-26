@@ -16,7 +16,6 @@ import (
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -126,7 +125,7 @@ func TestExchange_ListAfterDeletingNamespace(t *testing.T) {
 	dx := redissmq.NewDirectExchange()
 	dx.Create(ctx, ex1, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	nm.Delete(ctx, "temp-ex-ns")
 
 	em := redissmq.NewExchangeManager()

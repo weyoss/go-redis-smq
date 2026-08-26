@@ -16,7 +16,6 @@ import (
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -29,7 +28,7 @@ func TestDelete_WithQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "deletable-ns")
 	if err != nil {
 		t.Fatalf("delete: %v", err)
@@ -56,7 +55,7 @@ func TestDelete_WithExchanges(t *testing.T) {
 	dx.Create(ctx, ex1, exchange.PolicyStandard)
 	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "exchange-del-ns")
 	if err != nil {
 		t.Fatalf("delete: %v", err)
@@ -84,7 +83,7 @@ func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 	dx := redissmq.NewDirectExchange()
 	dx.Create(ctx, exParams, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "mixed-ns")
 	if err != nil {
 		t.Fatalf("delete: %v", err)
@@ -106,7 +105,7 @@ func TestDelete_WithQueuesAndExchanges(t *testing.T) {
 func TestDelete_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "nonexistent-ns")
 	if err == nil {
 		t.Fatal("expected error for non-existent namespace")
@@ -117,7 +116,7 @@ func TestDelete_NotFound(t *testing.T) {
 func TestDelete_EmptyName(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "")
 	if err == nil {
 		t.Fatal("expected error for empty namespace name")
@@ -132,7 +131,7 @@ func TestDelete_DefaultNamespace(t *testing.T) {
 	params := publicqueue.MustQueueParams("test-del-default")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "default")
 	if err != nil {
 		t.Fatalf("delete default namespace: %v", err)

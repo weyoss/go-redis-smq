@@ -15,7 +15,6 @@ import (
 
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -101,7 +100,7 @@ func TestDiscovery_ListNamespaces(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	namespaces, err := nm.List(ctx)
 	if err != nil {
 		t.Fatalf("list namespaces: %v", err)
@@ -133,7 +132,7 @@ func TestDiscovery_DeleteNamespace(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "deletable-ns")
 	if err != nil {
 		t.Fatalf("delete namespace: %v", err)
@@ -152,7 +151,7 @@ func TestDiscovery_DeleteNamespace(t *testing.T) {
 func TestDiscovery_DeleteNamespace_NotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "nonexistent-ns")
 	if err == nil {
 		t.Fatal("expected error for non-existent namespace")

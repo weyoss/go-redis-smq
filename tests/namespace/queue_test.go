@@ -15,7 +15,6 @@ import (
 
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -122,7 +121,7 @@ func TestQueue_ListAfterDeletingNamespace(t *testing.T) {
 	q1 := publicqueue.MustQueueParamsWithNS("test-ns-del-q", "temp-queue-ns")
 	testutil.CreateQueue(t, ctx, q1, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	nm.Delete(ctx, "temp-queue-ns")
 
 	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "temp-queue-ns")

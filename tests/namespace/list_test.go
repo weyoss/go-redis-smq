@@ -16,7 +16,6 @@ import (
 	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -24,7 +23,7 @@ import (
 func TestList_Empty(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	namespaces, err := nm.List(ctx)
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -42,7 +41,7 @@ func TestList_WithQueues(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	namespaces, err := nm.List(ctx)
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -72,7 +71,7 @@ func TestList_WithExchanges(t *testing.T) {
 	dx.Create(ctx, ex1, exchange.PolicyStandard)
 	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	namespaces, err := nm.List(ctx)
 	if err != nil {
 		t.Fatalf("list: %v", err)
@@ -99,7 +98,7 @@ func TestList_AfterDelete(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	nm.Delete(ctx, "ns-to-delete")
 
 	namespaces, err := nm.List(ctx)
@@ -132,7 +131,7 @@ func TestList_MixedResources(t *testing.T) {
 	dx := redissmq.NewDirectExchange()
 	dx.Create(ctx, ex1, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	namespaces, err := nm.List(ctx)
 	if err != nil {
 		t.Fatalf("list: %v", err)

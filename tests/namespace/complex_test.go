@@ -16,7 +16,6 @@ import (
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -24,7 +23,7 @@ import (
 func TestComplex_FullLifecycle(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 
 	// Create resources in namespace
 	q1 := publicqueue.MustQueueParamsWithNS("lifecycle-q", "lifecycle-ns")
@@ -115,7 +114,7 @@ func TestComplex_MultipleNamespaces(t *testing.T) {
 	tx := redissmq.NewTopicExchange()
 	tx.Create(ctx, ex3, exchange.PolicyStandard)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 
 	// Verify all three namespaces exist
 	namespaces, _ := nm.List(ctx)
@@ -168,7 +167,7 @@ func TestComplex_CrossNamespaceIsolation(t *testing.T) {
 	fx.Create(ctx, ex2, exchange.PolicyStandard)
 
 	// Delete namespace A only
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	nm.Delete(ctx, "iso-ns-a")
 
 	// Namespace B should still have its resources

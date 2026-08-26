@@ -13,15 +13,15 @@ package namespace_test
 import (
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	"github.com/weyoss/go-redis-smq/pkg/namespace"
 )
 
 // Scenario: Invalid namespace name (starts with number)
 func TestError_InvalidName_StartsWithNumber(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	_, err := nm.Exists(ctx, "3invalid")
 	if err == nil {
 		t.Fatal("expected error for namespace starting with number")
@@ -32,7 +32,7 @@ func TestError_InvalidName_StartsWithNumber(t *testing.T) {
 func TestError_InvalidName_Uppercase(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	_, err := nm.Exists(ctx, "Invalid")
 	// Uppercase is converted to lowercase by ValidateKey
 	t.Logf("uppercase namespace: %v", err)
@@ -42,7 +42,7 @@ func TestError_InvalidName_Uppercase(t *testing.T) {
 func TestError_EmptyName(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	_, err := nm.Exists(ctx, "")
 	if err == nil {
 		t.Fatal("expected error for empty namespace name")
@@ -53,7 +53,7 @@ func TestError_EmptyName(t *testing.T) {
 func TestError_DeleteNonExistent(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	nm := namespace.NewManager()
+	nm := redissmq.NewNamespaceManager()
 	err := nm.Delete(ctx, "nonexistent-ns")
 	if err == nil {
 		t.Fatal("expected error for non-existent namespace")

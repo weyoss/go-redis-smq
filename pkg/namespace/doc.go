@@ -14,6 +14,6 @@
 // exchanges. Namespace names are validated using Redis key rules (lowercase,
 // letter-first, alphanumeric with hyphens, underscores, and dots).
 //
-// The default namespace is set during bootstrap from configuration. If not
-// configured, it defaults to "default".
+// The concrete implementation is provided by the root redissmq package and
+// is created via redissmq.NewNamespaceManager().
 package namespace
