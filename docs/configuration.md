@@ -1,32 +1,77 @@
 # Configuration
 
-RedisSMQ configuration controls system-wide settings. Configuration is stored in Redis and shared across all connected
-instances.
+RedisSMQ configuration controls system‑wide settings. Configuration is stored in Redis and shared across all connected instances. The public API exposes configuration types and a `Manager` interface; the concrete manager is provided by `redissmq.NewConfigManager()`.
+
+## Obtain the Manager
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/weyoss/go-redis-smq"
+)
+
+ctx := context.Background()
+cfgManager := redissmq.NewConfigManager()
+```
+
+The manager is a singleton owned by RedisSMQ. It is initialised automatically during `redissmq.Init()`.
 
 ## Read Configuration
 
 ```go
-import "github.com/weyoss/go-redis-smq/pkg/config"
-
-cfg := config.Get()
+cfg := cfgManager.Get()
 fmt.Println("Namespace:", cfg.Namespace)
 fmt.Println("Logger enabled:", cfg.Logger.Enabled)
 ```
 
 ## Update Configuration
 
+Always start from `cfgManager.Get()`, modify fields, and save:
+
 ```go
-cfg := config.Get()
+cfg := cfgManager.Get()
 cfg.Logger.Enabled = true
 cfg.Logger.Options.LogLevel = 0 // DEBUG
 cfg.MessageAudit.AcknowledgedMessages.Enabled = true
 
-version, err := config.Save(ctx, cfg)
+version, err := cfgManager.Save(ctx, cfg)
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("New version:", version)
 ```
 
-Always use `config.Get()` as the starting point. `config.Save()` replaces the entire configuration — passing a partial
-struct will zero out unset fields.
+## Reset to Defaults
+
+```go
+if err := cfgManager.Reset(ctx); err != nil {
+    log.Fatal(err)
+}
+```
+
+## Reload from Redis
+
+```go
+if err := cfgManager.Reload(ctx); err != nil {
+    log.Fatal(err)
+}
+```
+
+## Configuration Snapshot
+
+In addition to the manager, the public `config` package maintains a thread‑safe snapshot of the current configuration. It is updated automatically when the configuration changes, and can be used by public packages that need read‑only access without importing internal code.
+
+```go
+import "github.com/weyoss/go-redis-smq/pkg/config"
+
+// Get the latest snapshot
+cfg := config.Get()
+
+// Get the default namespace used by queue/exchange constructors
+ns := config.DefaultNamespace()
+```
 
 ## Configuration Options
 
@@ -69,18 +114,31 @@ type AuditHistoryConfig struct {
 ## Default Configuration
 
 ```go
-defaults := cfg.DefaultConfig()
+defaults := config.DefaultConfig()
 // Namespace: "default"
 // Logger: disabled
 // Message audit: disabled
 ```
 
-## Cross-Instance Sync
+## Cross‑Instance Sync
 
-Configuration changes are published as events. All connected instances receive updates automatically via the event bus.
-Version checking prevents conflicting updates.
+Configuration changes are published as internal events. All connected instances receive updates automatically via the system event bus. Version checking prevents conflicting updates.
+
+If another instance modifies the configuration between your `Get()` and `Save()`, `Save` returns `config.ErrVersionMismatch`. Re‑read and retry:
+
+```go
+cfg := cfgManager.Get()
+cfg.Logger.Enabled = true
+_, err := cfgManager.Save(ctx, cfg)
+if errors.Is(err, config.ErrVersionMismatch) {
+    // re-read and retry
+    cfg = cfgManager.Get()
+    cfg.Logger.Enabled = true
+    _, err = cfgManager.Save(ctx, cfg)
+}
+```
 
 ## Related
 
-- [Configuration Concepts](../../../docs/configuration.md) — How configuration works
+- [Configuration Concepts](https://github.com/weyoss/redis-smq-docs) — How configuration works
 - [Message Browsing](message-browsing.md) — Audit must be enabled for acknowledged/dead-lettered browsing

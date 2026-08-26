@@ -1,28 +1,28 @@
 # Graceful Shutdown
 
-RedisSMQ handles shutdowns without losing messages. In-flight messages are recovered and returned to the pending queue.
+RedisSMQ handles shutdowns without losing messages. In‑flight messages are recovered and returned to the pending queue.
 
 ## System Shutdown
 
 ```go
 func main() {
-ctx := context.Background()
+    ctx := context.Background()
 
-if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
-log.Fatal(err)
-}
-defer redissmq.Shutdown()
+    if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
+        log.Fatal(err)
+    }
+    defer redissmq.Shutdown()
 
-// ... use producers and consumers ...
+    // ... use producers and consumers ...
 }
 ```
 
 `redissmq.Shutdown()` shuts down in order:
 
-1. All consumers — in-flight messages returned to pending
+1. All consumers — in‑flight messages returned to pending
 2. All producers — pending publishes complete
-3. Configuration singleton
-4. Event bus
+3. Configuration manager
+4. Event buses (system and user, if started)
 5. Redis connections
 
 ## Individual Shutdown
@@ -39,23 +39,23 @@ producer.Shutdown(ctx)
 
 ```go
 func main() {
-ctx, cancel := context.WithCancel(context.Background())
-defer cancel()
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
 
-if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
-log.Fatal(err)
-}
-defer redissmq.Shutdown()
+    if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
+        log.Fatal(err)
+    }
+    defer redissmq.Shutdown()
 
-sigCh := make(chan os.Signal, 1)
-signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+    sigCh := make(chan os.Signal, 1)
+    signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 
-go func () {
-<-sigCh
-cancel()
-}()
+    go func() {
+        <-sigCh
+        cancel()
+    }()
 
-// ... use producers and consumers with ctx ...
+    // ... use producers and consumers with ctx ...
 }
 ```
 
@@ -65,7 +65,7 @@ If a consumer crashes without a clean shutdown:
 
 - Heartbeats stop
 - A background reaper detects the dead consumer
-- In-flight messages are recovered automatically
+- In‑flight messages are recovered automatically
 
 No messages are lost.
 
@@ -73,9 +73,10 @@ No messages are lost.
 
 - Use `defer redissmq.Shutdown()` in `main()`
 - Handle OS signals for graceful shutdown
-- Don't force exit — let cleanup complete
+- Don’t force exit — let cleanup complete
 - Shut down RedisSMQ before closing Redis connections
+- If you started the public event bus with `redissmq.InitUserEventBus(ctx)`, it is automatically stopped by `redissmq.Shutdown()`; you do not need to call `redissmq.ShutdownUserEventBus()` separately unless you want to stop it earlier.
 
 ## Related
 
-- [Graceful Shutdown Concepts](../../../docs/graceful-shutdown.md) — How shutdown works
+- [Graceful Shutdown Concepts](https://github.com/weyoss/redis-smq-docs) — How shutdown works

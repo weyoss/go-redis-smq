@@ -6,9 +6,14 @@ Browse messages in a queue by category. Paginate through results.
 
 ```go
 import (
-"github.com/weyoss/go-redis-smq/pkg/queue"
-"github.com/weyoss/go-redis-smq/pkg/queue/q"
+    "context"
+    "log"
+
+    "github.com/weyoss/go-redis-smq"
+    "github.com/weyoss/go-redis-smq/pkg/queue"
 )
+
+qm := redissmq.NewQueueManager()
 ```
 
 ### Published Messages
@@ -16,10 +21,10 @@ import (
 All messages in the queue:
 
 ```go
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowsePublished,
-Offset: 0,
-Count:  100,
+result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+    Filter: queue.BrowsePublished,
+    Offset: 0,
+    Count:  100,
 })
 ```
 
@@ -28,8 +33,8 @@ Count:  100,
 Messages waiting to be consumed:
 
 ```go
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowsePending,
+result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+    Filter: queue.BrowsePending,
 })
 ```
 
@@ -40,8 +45,8 @@ For FIFO/LIFO queues, ordered by arrival. For priority queues, ordered by priori
 Messages waiting for future delivery:
 
 ```go
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowseScheduled,
+result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+    Filter: queue.BrowseScheduled,
 })
 ```
 
@@ -50,8 +55,8 @@ Filter: q.BrowseScheduled,
 Successfully processed messages. Requires audit enabled:
 
 ```go
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowseAcknowledged,
+result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+    Filter: queue.BrowseAcknowledged,
 })
 ```
 
@@ -62,35 +67,54 @@ Returns an error if `MessageAudit.AcknowledgedMessages` is not enabled.
 Failed messages. Requires audit enabled:
 
 ```go
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowseDeadLettered,
+result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+    Filter: queue.BrowseDeadLettered,
 })
 ```
 
 Returns an error if `MessageAudit.DeadLetteredMessages` is not enabled.
+
+## Enable Message Audit
+
+Before browsing acknowledged or dead-lettered messages, enable the corresponding audit category via the configuration manager:
+
+```go
+import (
+    "github.com/weyoss/go-redis-smq"
+    "github.com/weyoss/go-redis-smq/pkg/config"
+)
+
+cfgManager := redissmq.NewConfigManager()
+cfg := cfgManager.Get()
+cfg.MessageAudit.AcknowledgedMessages.Enabled = true
+cfg.MessageAudit.DeadLetteredMessages.Enabled = true
+if _, err := cfgManager.Save(ctx, cfg); err != nil {
+    log.Fatal(err)
+}
+```
 
 ## Pagination
 
 ```go
 offset := int64(0)
 for {
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowsePublished,
-Offset: offset,
-Count:  50,
-})
-if err != nil {
-log.Fatal(err)
-}
+    result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+        Filter: queue.BrowsePublished,
+        Offset: offset,
+        Count:  50,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
 
-for _, id := range result.IDs {
-fmt.Println(id)
-}
+    for _, id := range result.IDs {
+        fmt.Println(id)
+    }
 
-if !result.HasMore {
-break
-}
-offset += result.Count
+    if !result.HasMore {
+        break
+    }
+    offset += result.Count
 }
 ```
 
@@ -98,11 +122,11 @@ offset += result.Count
 
 ```go
 type BrowseResult struct {
-IDs     []string // Message IDs in this page
-Total   int64    // Total messages in this category
-Offset  int64    // Current offset
-Count   int64    // Number of IDs in this page
-HasMore bool     // Whether more pages exist
+    IDs     []string // Message IDs in this page
+    Total   int64    // Total messages in this category
+    Offset  int64    // Current offset
+    Count   int64    // Number of IDs in this page
+    HasMore bool     // Whether more pages exist
 }
 ```
 
@@ -120,5 +144,4 @@ HasMore bool     // Whether more pages exist
 ## Related
 
 - [Message Management](message-management.md) — Get, delete, requeue by ID
-- [Message Audit](../../../docs/message-audit.md) — Enabling audit
 - [Configuration](configuration.md) — Audit settings

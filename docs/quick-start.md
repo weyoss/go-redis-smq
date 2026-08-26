@@ -34,13 +34,12 @@ func main() {
 
 ```go
 import (
-"github.com/weyoss/go-redis-smq/pkg/queue"
-"github.com/weyoss/go-redis-smq/pkg/queue/q"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-ordersQueue := q.MustQueueParams("orders")
-if err := queue.Create(ctx, ordersQueue, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
-log.Fatal(err)
+ordersQueue := queue.MustQueueParams("orders")
+if err := redissmq.NewQueueManager().Create(ctx, ordersQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
+	log.Fatal(err)
 }
 ```
 
@@ -48,18 +47,19 @@ log.Fatal(err)
 
 ```go
 import (
-"github.com/weyoss/go-redis-smq/pkg/message/msg"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 )
 
 producer := redissmq.NewProducer()
 if err := producer.Run(ctx); err != nil {
-log.Fatal(err)
+	log.Fatal(err)
 }
+defer producer.Shutdown(ctx)
 
-m := msg.New().SetBody("Hello World").SetQueue(ordersQueue)
+m := message.New().SetBody("Hello World").SetQueue(ordersQueue)
 ids, err := producer.Produce(ctx, m)
 if err != nil {
-log.Fatal(err)
+	log.Fatal(err)
 }
 log.Printf("Sent: %v", ids)
 ```
@@ -68,14 +68,15 @@ log.Printf("Sent: %v", ids)
 
 ```go
 consumer := redissmq.NewConsumer()
-consumer.Consume(ordersQueue, func (ctx context.Context, m *msg.Transferable) error {
-log.Printf("Received: %v", m.Body)
-return nil // return error to trigger retry
+consumer.Consume(ordersQueue, func(ctx context.Context, m *message.Transferable) error {
+	log.Printf("Received: %v", m.Body)
+	return nil // return error to trigger retry
 })
 
 if err := consumer.Run(ctx); err != nil {
-log.Fatal(err)
+	log.Fatal(err)
 }
+defer consumer.Shutdown()
 ```
 
 ## 6. Shutdown
@@ -90,4 +91,4 @@ log.Fatal(err)
 - [Producing Messages](producing-messages.md) — All publish options
 - [Consuming Messages](consuming-messages.md) — All consume options
 - [Queue Management](queue-management.md) — Queue CRUD, state, rate limiting
-- [Shared Concepts](../../../docs/README.md) — Language-agnostic documentation
+- [Shared Concepts](https://github.com/weyoss/redis-smq-docs) — Language-agnostic documentation

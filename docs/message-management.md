@@ -2,31 +2,57 @@
 
 Retrieve, delete, and requeue messages by ID.
 
-## Retrieve Messages
+## Obtain the Message Manager
 
 ```go
 import (
-"github.com/weyoss/go-redis-smq/pkg/message"
-"github.com/weyoss/go-redis-smq/pkg/message/msg"
+    "context"
+    "log"
+
+    "github.com/weyoss/go-redis-smq"
 )
 
+mm := redissmq.NewMessageManager()
+```
+
+The manager is created via the root `redissmq` package and implements the public `message.Manager` interface.
+
+## Retrieve Messages
+
+```go
+import "github.com/weyoss/go-redis-smq/pkg/message"
+
 // Single message
-m, err := message.Get(ctx, "msg-123")
+m, err := mm.Get(ctx, "msg-123")
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("Body:", m.Body)
 fmt.Println("Status:", m.Status)
 
 // Multiple messages
-msgs, err := message.GetAll(ctx, []string{"msg-1", "msg-2"})
+msgs, err := mm.GetAll(ctx, []string{"msg-1", "msg-2"})
+if err != nil {
+    log.Fatal(err)
+}
 for _, m := range msgs {
-fmt.Println(m.ID, m.Status)
+    fmt.Println(m.ID, m.Status)
 }
 ```
 
 ## Inspect Messages
 
 ```go
-status, err := message.Status(ctx, "msg-123")
-state, err := message.State(ctx, "msg-123")
+status, err := mm.Status(ctx, "msg-123")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("Status:", status)
+
+state, err := mm.State(ctx, "msg-123")
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("Attempts:", state.Attempts)
 fmt.Println("Expired:", state.Expired)
 ```
@@ -35,11 +61,17 @@ fmt.Println("Expired:", state.Expired)
 
 ```go
 // Single
-result, err := message.Delete(ctx, "msg-123")
+result, err := mm.Delete(ctx, "msg-123")
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("Deleted:", result.Stats.Success)
 
 // Multiple
-result, err := message.DeleteAll(ctx, []string{"msg-1", "msg-2"})
+result, err = mm.DeleteAll(ctx, []string{"msg-1", "msg-2"})
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Printf("Deleted: %d/%d\n", result.Stats.Success, result.Stats.Processed)
 ```
 
@@ -48,7 +80,10 @@ fmt.Printf("Deleted: %d/%d\n", result.Stats.Success, result.Stats.Processed)
 Requeue creates a copy of an acknowledged or dead-lettered message:
 
 ```go
-newID, err := message.Requeue(ctx, "msg-123")
+newID, err := mm.Requeue(ctx, "msg-123")
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("Requeued as:", newID)
 ```
 
@@ -59,13 +94,16 @@ Only acknowledged and dead-lettered messages can be requeued. The original is un
 Requires `MessageAudit.UnacknowledgementHistory` to be enabled:
 
 ```go
-history, err := message.UnacknowledgmentHistory(ctx, "msg-123")
+history, err := mm.UnacknowledgmentHistory(ctx, "msg-123")
+if err != nil {
+    log.Fatal(err)
+}
 for _, record := range history {
-fmt.Println(record)
+    fmt.Println(record)
 }
 ```
 
 ## Related
 
 - [Message Browsing](message-browsing.md) — Browse queue messages
-- [Messages](../../../docs/messages.md) — Message lifecycle
+- [Messages](https://github.com/weyoss/redis-smq-docs) — Message lifecycle

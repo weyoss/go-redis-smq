@@ -45,6 +45,7 @@ package main
 import (
     "context"
     "log"
+
     "github.com/weyoss/go-redis-smq"
 )
 
@@ -62,11 +63,10 @@ func main() {
 ```go
 import (
     "github.com/weyoss/go-redis-smq/pkg/queue"
-    "github.com/weyoss/go-redis-smq/pkg/queue/q"
 )
 
-params := q.MustQueueParams("orders")
-if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != nil {
+params := queue.MustQueueParams("orders")
+if err := redissmq.NewQueueManager().Create(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
     log.Fatal(err)
 }
 ```
@@ -75,14 +75,16 @@ if err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint); err != 
 
 ```go
 import (
-    "github.com/weyoss/go-redis-smq/pkg/message/msg"
+    "github.com/weyoss/go-redis-smq/pkg/message"
 )
 
 producer := redissmq.NewProducer()
-producer.Run(ctx)
+if err := producer.Run(ctx); err != nil {
+    log.Fatal(err)
+}
 defer producer.Shutdown(ctx)
 
-m := msg.New().SetBody([]byte("Hello World")).SetQueue(params)
+m := message.New().SetBody("Hello World").SetQueue(params)
 ids, err := producer.Produce(ctx, m)
 if err != nil {
     log.Fatal(err)
@@ -94,9 +96,9 @@ fmt.Printf("Produced: %v\n", ids)
 
 ```go
 consumer := redissmq.NewConsumer()
-consumer.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-    fmt.Printf("Received: %v\n", string(m.Body))
-    return nil // acknowledge
+consumer.Consume(params, func(ctx context.Context, m *message.Transferable) error {
+    fmt.Printf("Received: %v\n", string(m.Body.(string)))
+    return nil
 })
 if err := consumer.Run(ctx); err != nil {
     log.Fatal(err)
@@ -104,9 +106,34 @@ if err := consumer.Run(ctx); err != nil {
 defer consumer.Shutdown()
 ```
 
+## 🏗️ Architecture
+
+RedisSMQ uses a clean, layered architecture:
+
+- **Public packages (`pkg/...`)** contain only interfaces, types, and documentation. They never import internal code.
+- **Internal packages (`internal/...`)** hold concrete Redis‑backed implementations.
+- **Root `redissmq` package** is the composition root. It provides factory functions that return concrete implementations behind public interfaces. Use these factories to obtain managers, producers, consumers, exchanges, etc.
+
+### Factory Functions
+
+| Factory                              | Returns                      |
+|--------------------------------------|------------------------------|
+| `redissmq.NewQueueManager()`         | `queue.QueueManager`         |
+| `redissmq.NewStateManager()`         | `queue.StateManager`         |
+| `redissmq.NewConsumerGroupManager()` | `queue.ConsumerGroupManager` |
+| `redissmq.NewMessageManager()`       | `message.MessageManager`     |
+| `redissmq.NewExchangeManager()`      | `exchange.Manager`           |
+| `redissmq.NewDirectExchange()`       | `exchange.DirectExchange`    |
+| `redissmq.NewFanoutExchange()`       | `exchange.FanoutExchange`    |
+| `redissmq.NewTopicExchange()`        | `exchange.TopicExchange`     |
+| `redissmq.NewNamespaceManager()`     | `namespace.Manager`          |
+| `redissmq.NewProducer()`             | `producer.Producer`          |
+| `redissmq.NewConsumer()`             | `consumer.Consumer`          |
+| `redissmq.NewConfigManager()`        | `config.Manager`             |
+
 ## 📚 API Overview
 
-The Go library provides idiomatic, context‑aware APIs for:
+The public API is split across packages:
 
 - **System** – `Init`, `Shutdown`
 - **Queues** – `Create`, `Pause`, `Resume`, `Stop`, `SetRateLimit`, `BrowseMessages`, `ListAll`
@@ -115,9 +142,8 @@ The Go library provides idiomatic, context‑aware APIs for:
 - **Consumers** – `Consume`, `ConsumeWithGroup`, `Run`, `Shutdown`
 - **Exchanges** – Direct, Topic, Fanout with bindings
 - **Namespaces** – `List`, `Delete`, `ListQueues`, `ListExchanges`
-- **Configuration** – Runtime config management
-
-See the [full Go documentation](docs/README.md) for details.
+- **Configuration** – runtime config via `config.Manager`
+- **Events** – public event bus for monitoring
 
 ## 🔗 Interoperability
 
@@ -128,10 +154,6 @@ Because the Go and TypeScript implementations share the same protocol, you can:
 - Use the same Redis instance for both stacks.
 
 The REST API and Web UI (from the TypeScript repo) work seamlessly with Go‑created queues.
-
-## 🛠️ Administration & Monitoring
-
-The [RedisSMQ REST API and Web UI](https://github.com/weyoss/redis-smq) (from the TypeScript implementation) are fully compatible with queues created by this Go client.
 
 ## 🧩 Compatibility
 

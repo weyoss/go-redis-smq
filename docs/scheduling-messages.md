@@ -1,60 +1,49 @@
-# Scheduling Messages
+# Go Documentation
 
-Schedule messages for future delivery using delays, CRON expressions, or repeating patterns.
+Welcome to the Go implementation of RedisSMQ. These guides cover the public API, configuration, and operational patterns.
 
-## One-Time Delay
+For language‑agnostic concepts (architecture, queues, exchanges, reliability, etc.), see the
+[RedisSMQ documentation](https://github.com/weyoss/redis-smq-docs).
 
-```go
-m := msg.New().
-SetQueue(queueParams).
-SetBody(data).
-SetScheduledDelay(30 * time.Second)
-```
+## Getting Started
 
-## CRON Schedule
+- [Quick Start](quick-start.md) — Install, initialize, send and receive your first message
+- [Configuration](configuration.md) — System configuration API and manager
+- [Graceful Shutdown](graceful-shutdown.md) — Clean shutdown patterns
 
-```go
-m := msg.New().
-SetQueue(queueParams).
-SetBody(data).
-SetScheduledCron("0 30 9 * * 1-5") // Weekdays at 9:30 AM
-```
+## Core Operations
 
-Invalid CRON expressions are silently ignored.
+- [Producing Messages](producing-messages.md) — How to publish messages
+- [Consuming Messages](consuming-messages.md) — How to subscribe and process messages
+- [Queue Management](queue-management.md) — Create, inspect, delete queues
+- [Queue State Management](queue-state-management.md) — Pause, resume, stop queues
+- [Queue Rate Limiting](queue-rate-limiting.md) — Control consumption speed
+- [Message Management](message-management.md) — Retrieve, delete, and requeue messages
+- [Message Browsing](message-browsing.md) — Browse published, pending, scheduled, and audited messages
+- [Exchange Management](exchange-management.md) — Direct, topic, and fanout exchanges
+- [Scheduling Messages](scheduling-messages.md) — Delays, CRON, and repeating delivery
+- [Consumer Groups](consumer-groups.md) — Pub/Sub consumer groups
+- [Namespaces](namespaces.md) — Namespace management
 
-## Repeating Delivery
+## Events & Monitoring
 
-```go
-m := msg.New().
-SetQueue(queueParams).
-SetBody(data).
-SetScheduledDelay(10 * time.Second). // First after 10s
-SetScheduledRepeat(5).                     // Repeat 5 times
-SetScheduledRepeatPeriod(60 * time.Second) // Every 60s
-```
+- [Event Bus](event-bus.md) — Real‑time public system events
 
-A repeat count of `0` means repeat indefinitely.
+## Operations
 
-## Clear Scheduling
+- [Error Handling](error-handling.md) — Error types and handling patterns
 
-```go
-m.ResetScheduledParams()
-```
+## Architecture
 
-## Browse Scheduled Messages
+RedisSMQ uses a clean layered architecture:
 
-```go
-result, err := queue.BrowseMessages(ctx, params, &q.BrowseParams{
-Filter: q.BrowseScheduled,
-Offset: 0,
-Count:  100,
-})
-```
+- **Public packages (`pkg/...`)** — interfaces, types, and documentation only.
+- **Internal packages (`internal/...`)** — concrete Redis-backed implementations.
+- **Root `redissmq` package** — composition root and factory functions.
 
-See [Message Browsing](message-browsing.md) for details.
+All managers, producers, consumers, exchanges, and other components are obtained via factory functions in `redissmq` (e.g., `redissmq.NewQueueManager()`, `redissmq.NewProducer()`). Public packages are designed to be used without importing internal code.
 
-## Related
+## Additional Resources
 
-- [Scheduling Messages Concepts](../../../docs/scheduling-messages.md) — How scheduling works
-- [Producing Messages](producing-messages.md) — Publishing messages
-- [Message Browsing](message-browsing.md) — Viewing scheduled messages
+- [BUILD.md](../BUILD.md) — build, test, and coverage instructions
+- [redis-smq-docs](https://github.com/weyoss/redis-smq-docs) — language-agnostic concepts

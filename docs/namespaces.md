@@ -1,32 +1,47 @@
 # Namespaces
 
-Namespaces isolate queues and exchanges. Use them to separate environments or applications within the same Redis
-instance.
+Namespaces isolate queues and exchanges. Use them to separate environments or applications within the same Redis instance.
+
+## Obtain the Namespace Manager
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/weyoss/go-redis-smq"
+)
+
+nm := redissmq.NewNamespaceManager()
+```
+
+The manager is created via the root `redissmq` package and implements the public `namespace.Manager` interface.
 
 ## Default Namespace
 
-The default namespace comes from [configuration](configuration.md). When a queue operation uses an empty namespace, the
-default is applied:
+The default namespace comes from [configuration](configuration.md). When a queue or exchange operation uses an empty namespace, the default is applied automatically by the constructors in `pkg/queue` and `pkg/exchange`:
 
 ```go
-// Uses default namespace from config
-params := q.MustQueueParams("orders")
+import "github.com/weyoss/go-redis-smq/pkg/queue"
+
+// Uses default namespace from configuration
+params := queue.MustQueueParams("orders")
 ```
 
 ## Explicit Namespace
 
 ```go
 // Uses "production" namespace regardless of default
-params := q.MustQueueParamsWithNS("orders", "production")
+params := queue.MustQueueParamsWithNS("orders", "production")
 ```
 
 ## Listing Namespaces
 
 ```go
-import "github.com/weyoss/go-redis-smq/pkg/namespace"
-
-nm := namespace.NewManager()
 namespaces, err := nm.List(ctx)
+if err != nil {
+    log.Fatal(err)
+}
 // ["production", "staging", "analytics"]
 ```
 
@@ -42,13 +57,24 @@ Deleting a namespace removes all queues and exchanges within it.
 
 ```go
 queues, err := nm.ListQueues(ctx, "production")
+if err != nil {
+    log.Fatal(err)
+}
+
 exchanges, err := nm.ListExchanges(ctx, "production")
+if err != nil {
+    log.Fatal(err)
+}
 ```
 
 ## Check if a Namespace Exists
 
 ```go
 exists, err := nm.Exists(ctx, "production")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println("Exists:", exists)
 ```
 
 ## Valid Names

@@ -2,120 +2,163 @@
 
 Create, inspect, and manage queues. Control state and rate limiting.
 
-## Create a Queue
+## Obtain Queue Managers
 
 ```go
 import (
-"github.com/weyoss/go-redis-smq/pkg/queue"
-"github.com/weyoss/go-redis-smq/pkg/queue/q"
+    "context"
+    "log"
+
+    "github.com/weyoss/go-redis-smq"
+    "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-params := q.MustQueueParams("orders")
+qm := redissmq.NewQueueManager()          // returns queue.QueueManager
+sm := redissmq.NewStateManager()          // returns queue.StateManager
+cgm := redissmq.NewConsumerGroupManager() // returns queue.ConsumerGroupManager
+```
+
+All managers are concrete implementations behind public interfaces. They are created once and can be used across your application.
+
+## Create a Queue
+
+```go
+params := queue.MustQueueParams("orders")
 
 // Standard queue
-err := queue.Create(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint)
+err := qm.Create(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 // With rate limit
-rl := q.MustRateLimitParams(100, time.Minute)
-err := queue.CreateWithRateLimit(ctx, params, q.TypeFIFO, q.DeliveryPointToPoint, rl)
+rl := queue.MustRateLimitParams(100, time.Minute)
+err = qm.CreateWithRateLimit(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint, rl)
 
 // With namespace
-params := q.MustQueueParamsWithNS("orders", "production")
-err := queue.Create(ctx, params, q.TypeLIFO, q.DeliveryPubSub)
+params = queue.MustQueueParamsWithNS("orders", "production")
+err = qm.Create(ctx, params, queue.TypeLIFO, queue.DeliveryPubSub)
 ```
 
 ## Queue Types
 
-| Constant         | Description               |
-|------------------|---------------------------|
-| `q.TypeFIFO`     | First in, first out       |
-| `q.TypeLIFO`     | Last in, first out        |
-| `q.TypePriority` | Ordered by priority level |
+| Constant             | Description               |
+|----------------------|---------------------------|
+| `queue.TypeFIFO`     | First in, first out       |
+| `queue.TypeLIFO`     | Last in, first out        |
+| `queue.TypePriority` | Ordered by priority level |
 
 ## Delivery Models
 
-| Constant                 | Description                  |
-|--------------------------|------------------------------|
-| `q.DeliveryPointToPoint` | One consumer per message     |
-| `q.DeliveryPubSub`       | Broadcast to consumer groups |
+| Constant                     | Description                  |
+|------------------------------|------------------------------|
+| `queue.DeliveryPointToPoint` | One consumer per message     |
+| `queue.DeliveryPubSub`       | Broadcast to consumer groups |
 
 ## Inspect a Queue
 
 ```go
-props, err := queue.Properties(ctx, params)
+props, err := qm.Properties(ctx, params)
+if err != nil {
+    log.Fatal(err)
+}
 fmt.Println("Type:", props.Type)
 fmt.Println("State:", props.OperationalState)
 fmt.Println("Messages:", props.MessagesCount)
 fmt.Println("Pending:", props.PendingMessagesCount)
 
-exists, err := queue.Exists(ctx, params)
+exists, err := qm.Exists(ctx, params)
+if err != nil {
+    log.Fatal(err)
+}
 ```
 
 ## Delete a Queue
 
 ```go
-err := queue.Delete(ctx, params)
+err := qm.Delete(ctx, params)
 ```
 
 ## Discovery
 
 ```go
-all, err := queue.ListAll(ctx)
-byNS, err := queue.ListByNamespace(ctx, "production")
+all, err := qm.ListAll(ctx)
+if err != nil {
+    log.Fatal(err)
+}
+
+byNS, err := qm.ListByNamespace(ctx, "production")
+if err != nil {
+    log.Fatal(err)
+}
 ```
 
 ## State Management
 
-```go
-import "github.com/weyoss/go-redis-smq/pkg/queue"
+Use the state manager obtained from `redissmq.NewStateManager()`.
 
+```go
 // Pause
-transition, err := queue.Pause(ctx, params, nil)
+transition, err := sm.Pause(ctx, params, nil)
 
 // Resume
-transition, err := queue.Resume(ctx, params, nil)
+transition, err = sm.Resume(ctx, params, nil)
 
 // Stop
-transition, err := queue.Stop(ctx, params, nil)
+transition, err = sm.Stop(ctx, params, nil)
 
 // Get current state
-transition, err := queue.Current(ctx, params)
+transition, err = sm.Current(ctx, params)
 
 // Get state history
-history, err := queue.History(ctx, params)
+history, err := sm.History(ctx, params)
 ```
 
-See [Queue State Management](../../../docs/queue-state-management.md) for concepts.
+See [Queue State Management](queue-state-management.md) for details.
 
 ## Rate Limiting
 
 ```go
 // Set
-rl := q.MustRateLimitParams(100, time.Minute)
-err := queue.SetRateLimit(ctx, params, rl)
+rl := queue.MustRateLimitParams(100, time.Minute)
+err := qm.SetRateLimit(ctx, params, rl)
 
 // Get
-rl, err := queue.RateLimit(ctx, params)
+rl, err = qm.RateLimit(ctx, params)
 
 // Clear
-err := queue.ClearRateLimit(ctx, params)
+err = qm.ClearRateLimit(ctx, params)
 ```
 
-See [Queue Rate Limiting](../../../docs/queue-rate-limiting.md) for concepts.
+See [Queue Rate Limiting](queue-rate-limiting.md) for details.
 
 ## Validation
 
-```go
-import "github.com/weyoss/go-redis-smq/pkg/queue"
+The queue manager provides validation methods:
 
-err := queue.MustExist(ctx, params) // Queue must exist
-err := queue.MustBeOperational(ctx, params) // Active or Paused
-err := queue.CanEnqueue(ctx, params) // Can accept messages
-err := queue.CanDequeue(ctx, params) // Can deliver messages
+```go
+err := qm.MustExist(ctx, params)           // Queue must exist
+err = qm.MustBeOperational(ctx, params)    // Active or Paused
+err = qm.CanEnqueue(ctx, params)           // Can accept messages
+err = qm.CanDequeue(ctx, params)           // Can deliver messages
+```
+
+## Consumer Groups
+
+For Pub/Sub queues, use the consumer group manager:
+
+```go
+// Create a group
+result, err := cgm.Save(ctx, params, "email-service")
+
+// Delete a group
+err = cgm.Delete(ctx, params, "email-service")
+
+// List groups
+groups, err := cgm.List(ctx, params)
 ```
 
 ## Related
 
-- [Queues](../../../docs/queues.md) — Queue types and behavior
-- [Queue Delivery Models](../../../docs/queue-delivery-models.md) — Point-to-Point vs Pub/Sub
+- [Queues](https://github.com/weyoss/redis-smq-docs) — Queue types and behavior
+- [Queue Delivery Models](https://github.com/weyoss/redis-smq-docs) — Point-to-Point vs Pub/Sub
 - [Message Browsing](message-browsing.md) — Browse queue messages
+- [Queue State Management](queue-state-management.md) — Pause, resume, stop
+- [Queue Rate Limiting](queue-rate-limiting.md) — Rate limits

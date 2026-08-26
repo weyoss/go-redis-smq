@@ -7,7 +7,7 @@ Manage consumer groups for Pub/Sub queues. Groups enable multiple services to ea
 ```go
 import "github.com/weyoss/go-redis-smq/pkg/queue"
 
-cgm := queue.NewConsumerGroupManager()
+cgm := redissmq.NewConsumerGroupManager()
 
 result, err := cgm.Save(ctx, queueParams, "email-service")
 // result == 1 if created, 0 if already exists
@@ -33,16 +33,15 @@ groups, err := cgm.List(ctx, queueParams)
 ## Using Groups with Consumers
 
 ```go
-consumer.ConsumeWithGroup(queueParams, "email-service", func (ctx context.Context, m *msg.Transferable) error {
-// Only one consumer in this group gets the message
-return nil
+consumer.ConsumeWithGroup(queueParams, "email-service", func(ctx context.Context, m *msg.Transferable) error {
+    // Only one consumer in this group gets the message
+    return nil
 })
 ```
 
 ## Ephemeral Groups
 
-If a consumer subscribes without specifying a group ID on a Pub/Sub queue, an ephemeral group is created automatically
-and deleted on shutdown:
+If a consumer subscribes without specifying a group ID on a Pub/Sub queue, an ephemeral group is created automatically and deleted on shutdown:
 
 ```go
 consumer.Consume(queueParams, handler) // ephemeral group created
@@ -50,6 +49,6 @@ consumer.Consume(queueParams, handler) // ephemeral group created
 
 ## Related
 
-- [Consumer Groups Concepts](../../../docs/consumer-groups.md) — How groups work
-- [Queue Delivery Models](../../../docs/queue-delivery-models.md) — Point-to-Point vs Pub/Sub
+- [Consumer Groups Concepts](https://github.com/weyoss/redis-smq-docs) — How groups work
+- [Queue Delivery Models](https://github.com/weyoss/redis-smq-docs) — Point-to-Point vs Pub/Sub
 - [Consuming Messages](consuming-messages.md) — Subscribing with groups

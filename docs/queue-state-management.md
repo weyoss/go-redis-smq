@@ -2,16 +2,30 @@
 
 Control and track the operational state of queues. Pause processing, stop queues entirely, resume normal operation, and view state history.
 
+## Obtain State Manager
+
+```go
+import (
+    "context"
+    "log"
+
+    "github.com/weyoss/go-redis-smq"
+    "github.com/weyoss/go-redis-smq/pkg/queue"
+)
+
+sm := redissmq.NewStateManager()
+```
+
+The state manager implements the public `queue.StateManager` interface and is used for all state transition operations.
+
 ## Quick Start
 
 ```go
-import "github.com/weyoss/go-redis-smq/pkg/queue"
-
 // Pause a queue (uses default reason MANUAL)
-transition, err := queue.Pause(ctx, params, nil)
+transition, err := sm.Pause(ctx, params, nil)
 
 // Resume a queue
-transition, err := queue.Resume(ctx, params, nil)
+transition, err = sm.Resume(ctx, params, nil)
 ```
 
 ## States
@@ -30,8 +44,8 @@ transition, err := queue.Resume(ctx, params, nil)
 Temporarily stops processing while accepting new messages:
 
 ```go
-transition, err := queue.Pause(ctx, params, &q.StateTransitionOptions{
-    Reason:      ptr(q.ReasonManual),       // user‑facing constant
+transition, err := sm.Pause(ctx, params, &queue.StateTransitionOptions{
+    Reason:      ptr(queue.ReasonManual),
     Description: ptr("Scheduled database maintenance"),
 })
 ```
@@ -41,8 +55,8 @@ transition, err := queue.Pause(ctx, params, &q.StateTransitionOptions{
 Resumes processing from Paused or Stopped state:
 
 ```go
-transition, err := queue.Resume(ctx, params, &q.StateTransitionOptions{
-    Reason: ptr(q.ReasonManual),
+transition, err := sm.Resume(ctx, params, &queue.StateTransitionOptions{
+    Reason: ptr(queue.ReasonManual),
 })
 ```
 
@@ -51,8 +65,8 @@ transition, err := queue.Resume(ctx, params, &q.StateTransitionOptions{
 Completely halts the queue:
 
 ```go
-transition, err := queue.Stop(ctx, params, &q.StateTransitionOptions{
-    Reason:      ptr(q.ReasonEmergency),
+transition, err := sm.Stop(ctx, params, &queue.StateTransitionOptions{
+    Reason:      ptr(queue.ReasonEmergency),
     Description: ptr("Critical system error"),
 })
 ```
@@ -60,19 +74,22 @@ transition, err := queue.Stop(ctx, params, &q.StateTransitionOptions{
 ### Get Current State
 
 ```go
-transition, err := queue.Current(ctx, params)
+transition, err := sm.Current(ctx, params)
 if err != nil {
     log.Fatal(err)
 }
 fmt.Println("State:", transition.To)
 fmt.Println("Since:", time.UnixMilli(transition.Timestamp))
-fmt.Println("Reason:", transition.Reason)  // QueueStateTransitionReason (string)
+fmt.Println("Reason:", transition.Reason)
 ```
 
 ### Get State History
 
 ```go
-history, err := queue.History(ctx, params)
+history, err := sm.History(ctx, params)
+if err != nil {
+    log.Fatal(err)
+}
 for _, t := range history {
     from := "INITIAL"
     if t.From != nil {
@@ -86,14 +103,14 @@ for _, t := range history {
 
 Each state change can include:
 
-| Option        | Type                           | Description                         |
-|---------------|--------------------------------|-------------------------------------|
-| `Reason`      | `*StateTransitionReason`       | Why the state changed (user‑facing constant) |
-| `Description` | `*string`                      | Human-readable explanation          |
-| `Metadata`    | `map[string]interface{}`       | Arbitrary key-value data            |
+| Option        | Type                           | Description                                  |
+|---------------|--------------------------------|----------------------------------------------|
+| `Reason`      | `*queue.StateTransitionReason` | Why the state changed (user‑facing constant) |
+| `Description` | `*string`                      | Human-readable explanation                   |
+| `Metadata`    | `map[string]interface{}`       | Arbitrary key-value data                     |
 
-**Available user‑facing reasons** (constants from package `q`):  
-`q.ReasonManual`, `q.ReasonScheduled`, `q.ReasonEmergency`, `q.ReasonPerformance`, `q.ReasonError`, `q.ReasonConfigChange`, `q.ReasonTesting`, `q.ReasonOther`.
+**Available user‑facing reasons** (constants from package `queue`):  
+`queue.ReasonManual`, `queue.ReasonScheduled`, `queue.ReasonEmergency`, `queue.ReasonPerformance`, `queue.ReasonError`, `queue.ReasonConfigChange`, `queue.ReasonTesting`, `queue.ReasonOther`.
 
 System‑internal reasons (`ReasonSystemInit`, `ReasonPurgeStart`, etc.) are not accessible through the public API.
 
@@ -106,7 +123,7 @@ Stopped → Active
 Locked  → Active, Stopped
 ```
 
-Invalid transitions return `ErrInvalidTransition`.
+Invalid transitions return `queue.ErrInvalidTransition`.
 
 ## Lock and Unlock
 
@@ -114,49 +131,26 @@ Locks are used internally for maintenance operations. Users typically interact v
 
 ```go
 // Lock a queue (requires owner and lock ID)
-transition, err := queue.Lock(ctx, params, q.LockOwnerPurgeJob, "purge-123", nil)
+transition, err := sm.Lock(ctx, params, queue.LockOwnerPurgeJob, "purge-123", nil)
 
 // Unlock a queue (must match owner and lock ID)
-transition, err := queue.Unlock(ctx, params, q.LockOwnerPurgeJob, "purge-123", nil)
-```
-
-## Using with StateManager
-
-The `StateManager` provides the same methods with an explicit instance:
-
-```go
-sm := queue.NewStateManager()
-
-transition, err := sm.Pause(ctx, params, nil)
-transition, err := sm.Current(ctx, params)
-history, err := sm.History(ctx, params)
-```
-
-Package-level convenience functions use a default `StateManager` internally.
-
-## Listening to State Changes
-
-State changes are published as events:
-
-```go
-import queueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
-
-sub, _ := queueEvents.SubscribeStateChanged(func(p queueEvents.StateChangedPayload) {
-    fmt.Printf("Queue %s → %s\n", p.Queue.String(), p.Transition.To)
-})
-defer sub.Unsubscribe()
+transition, err = sm.Unlock(ctx, params, queue.LockOwnerPurgeJob, "purge-123", nil)
 ```
 
 ## Error Handling
 
+Sentinel errors are exported directly from the `queue` package.
+
 ```go
-transition, err := queue.Pause(ctx, params, nil)
+transition, err := sm.Pause(ctx, params, nil)
 if err != nil {
     switch {
-    case errors.Is(err, q.ErrNotFound):
+    case errors.Is(err, queue.ErrNotFound):
         log.Println("Queue not found")
-    case errors.Is(err, q.ErrInvalidTransition):
+    case errors.Is(err, queue.ErrInvalidTransition):
         log.Println("Invalid state transition")
+    case errors.Is(err, queue.ErrNotLocked):
+        log.Println("Queue is not locked")
     default:
         log.Printf("Unexpected error: %v", err)
     }
@@ -167,7 +161,6 @@ See [Error Handling](error-handling.md) for all state-related errors.
 
 ## Related
 
-- [Queue State Management Concepts](../../../docs/queue-state-management.md) — How state management works
+- [Queue State Management Concepts](https://github.com/weyoss/redis-smq-docs) — How state management works
 - [Queue Management](queue-management.md) — Queue CRUD operations
 - [Error Handling](error-handling.md) — Error types
-

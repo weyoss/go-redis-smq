@@ -2,39 +2,50 @@
 
 Create and manage exchanges for message routing. Direct, topic, and fanout exchanges are supported.
 
+All exchange implementations are created via factory functions in `redissmq`. The public `exchange` package contains only interfaces and types.
+
+## Obtain Exchange Managers
+
+```go
+import (
+    "github.com/weyoss/go-redis-smq"
+    "github.com/weyoss/go-redis-smq/pkg/exchange"
+)
+
+em := redissmq.NewExchangeManager()      // returns exchange.Manager
+dx := redissmq.NewDirectExchange()       // returns exchange.DirectExchange
+fx := redissmq.NewFanoutExchange()       // returns exchange.FanoutExchange
+tx := redissmq.NewTopicExchange()        // returns exchange.TopicExchange
+```
+
 ## Direct Exchange
 
 Routes messages by exact routing key match.
 
 ```go
-import (
-"github.com/weyoss/go-redis-smq/pkg/exchange"
-"github.com/weyoss/go-redis-smq/pkg/exchange/x"
-)
+dx := redissmq.NewDirectExchange()
 
-dx := exchange.NewDirectExchange(nil)
-
-// Create
-params := x.NewExchangeParams("orders", x.TypeDirect)
-err := dx.Create(ctx, params, x.PolicyStandard)
+// Create a direct exchange
+params := exchange.MustExchangeParams("orders", exchange.TypeDirect)
+err := dx.Create(ctx, params, exchange.PolicyStandard)
 
 // Bind a queue
-err = dx.BindQueue(ctx, queueParams, exchangeParams, "order.created")
+err = dx.BindQueue(ctx, queueParams, params, "order.created")
 
 // Match queues for a routing key
-queues, err := dx.MatchQueues(ctx, exchangeParams, "order.created")
+queues, err := dx.MatchQueues(ctx, params, "order.created")
 
 // List routing keys
-keys, err := dx.RoutingKeys(ctx, exchangeParams)
+keys, err := dx.RoutingKeys(ctx, params)
 
 // List bindings
-bindings, err := dx.Bindings(ctx, exchangeParams)
+bindings, err := dx.Bindings(ctx, params)
 
 // Unbind
-err = dx.UnbindQueue(ctx, queueParams, exchangeParams, "order.created")
+err = dx.UnbindQueue(ctx, queueParams, params, "order.created")
 
 // Delete
-err = dx.Delete(ctx, exchangeParams)
+err = dx.Delete(ctx, params)
 ```
 
 ## Topic Exchange
@@ -42,24 +53,24 @@ err = dx.Delete(ctx, exchangeParams)
 Routes messages by pattern matching with wildcards (`*` and `#`).
 
 ```go
-tx := exchange.NewTopicExchange(nil)
+tx := redissmq.NewTopicExchange()
 
 // Create
-params := x.NewExchangeParams("events", x.TypeTopic)
-err := tx.Create(ctx, params, x.PolicyStandard)
+params := exchange.MustExchangeParams("events", exchange.TypeTopic)
+err := tx.Create(ctx, params, exchange.PolicyStandard)
 
 // Bind with pattern
-err = tx.BindQueue(ctx, queueParams, exchangeParams, "user.*")
-err = tx.BindQueue(ctx, queueParams, exchangeParams, "order.#")
+err = tx.BindQueue(ctx, queueParams, params, "user.*")
+err = tx.BindQueue(ctx, queueParams, params, "order.#")
 
 // Match queues for a routing key
-queues, err := tx.MatchQueues(ctx, exchangeParams, "user.login.success")
+queues, err := tx.MatchQueues(ctx, params, "user.login.success")
 
 // List patterns
-patterns, err := tx.Patterns(ctx, exchangeParams)
+patterns, err := tx.Patterns(ctx, params)
 
 // Delete
-err = tx.Delete(ctx, exchangeParams)
+err = tx.Delete(ctx, params)
 ```
 
 ## Fanout Exchange
@@ -67,29 +78,29 @@ err = tx.Delete(ctx, exchangeParams)
 Broadcasts to all bound queues.
 
 ```go
-fx := exchange.NewFanoutExchange(nil)
+fx := redissmq.NewFanoutExchange()
 
 // Create
-params := x.NewExchangeParams("alerts", x.TypeFanout)
-err := fx.Create(ctx, params, x.PolicyStandard)
+params := exchange.MustExchangeParams("alerts", exchange.TypeFanout)
+err := fx.Create(ctx, params, exchange.PolicyStandard)
 
 // Bind queues
-err = fx.BindQueue(ctx, emailQueue, exchangeParams)
-err = fx.BindQueue(ctx, smsQueue, exchangeParams)
+err = fx.BindQueue(ctx, emailQueue, params)
+err = fx.BindQueue(ctx, smsQueue, params)
 
 // All bound queues receive every message
-queues, err := fx.MatchQueues(ctx, exchangeParams)
+queues, err := fx.MatchQueues(ctx, params)
 
 // Delete
-err = fx.Delete(ctx, exchangeParams)
+err = fx.Delete(ctx, params)
 ```
 
 ## Exchange Policies
 
-| Policy             | Allowed Queue Types |
-|--------------------|---------------------|
-| `x.PolicyStandard` | FIFO, LIFO          |
-| `x.PolicyPriority` | Priority only       |
+| Policy                    | Allowed Queue Types  |
+|---------------------------|----------------------|
+| `exchange.PolicyStandard` | FIFO, LIFO           |
+| `exchange.PolicyPriority` | Priority only        |
 
 ## Namespace Validation
 
@@ -97,8 +108,10 @@ Queues and exchanges must be in the same namespace. Binding across namespaces re
 
 ## Discovery
 
+Use the exchange manager for discovery operations:
+
 ```go
-em := exchange.NewManager()
+em := redissmq.NewExchangeManager()
 
 // All exchanges
 all, err := em.ListAll(ctx)
@@ -112,5 +125,5 @@ byQueue, err := em.ListByQueue(ctx, queueParams)
 
 ## Related
 
-- [Message Exchanges](../../../docs/message-exchanges.md) — Exchange concepts
+- [Message Exchanges](https://github.com/weyoss/redis-smq-docs) — Exchange concepts
 - [Producing Messages](producing-messages.md) — Sending via exchanges
