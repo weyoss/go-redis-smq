@@ -8,6 +8,15 @@
  *
  */
 
+// Package redissmq is the entry point for the RedisSMQ message queue.
+//
+// It provides bootstrap and lifecycle management (Init/Shutdown) for the
+// RedisSMQ runtime, as well as factory functions that return the concrete
+// implementations behind the public interfaces defined in the pkg packages.
+//
+// The package is designed to be imported only by the application's main
+// package or composition root. All other packages should depend on the
+// public interfaces rather than this package.
 package redissmq
 
 import (
@@ -35,12 +44,16 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// Config is the Redis connection configuration.
+// Config is an alias for the Redis client configuration.
+// It is the same type as redis.Config and is re-exported for convenience.
 type Config = redis.Config
 
 var (
-	systemCtx       context.Context
-	systemStop      context.CancelFunc
+	// systemCtx holds the root context for the RedisSMQ runtime.
+	systemCtx context.Context
+	// systemStop cancels the root context.
+	systemStop context.CancelFunc
+	// purgeWorkerStop stops the background purge worker.
 	purgeWorkerStop func()
 
 	lifecycleMu sync.Mutex
@@ -72,6 +85,7 @@ type userBusAdapter struct {
 	bus *eventbus.EventBus
 }
 
+// Subscribe implements publiceventbus.EventBus.
 func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interface{}), eventName string) (publiceventbus.Subscription, error) {
 	sub, err := a.bus.Subscribe(handler, eventName)
 	if err != nil {
@@ -80,7 +94,15 @@ func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interfa
 	return sub, nil
 }
 
-// Init initialises RedisSMQ and starts the internal system event bus.
+// Init initializes the RedisSMQ runtime.
+//
+// It connects to Redis, starts the internal system event bus, loads the
+// configuration, and launches background workers (such as the queue purge
+// worker). The provided context is used as the parent for all internal
+// operations; cancelling it triggers a graceful shutdown.
+//
+// Init is idempotent and can be called multiple times; subsequent calls
+// are no-ops.
 func Init(ctx context.Context, cfg Config) error {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
@@ -114,18 +136,29 @@ func Init(ctx context.Context, cfg Config) error {
 }
 
 // InitUserEventBus starts the public user event bus.
+//
+// The user event bus is separate from the internal system bus and is used
+// to deliver events to external subscribers via the public subscription
+// functions in the pkg packages. It is not started automatically; call this
+// function if you need to use the public event subscription API.
 func InitUserEventBus(ctx context.Context) {
 	bus := eventbus.InitUser(ctx)
 	publiceventbus.SetUserBus(&userBusAdapter{bus: bus})
 }
 
-// ShutdownUserEventBus clears the public user event bus.
+// ShutdownUserEventBus stops the public user event bus and clears the global
+// reference. It can be called independently of the main Shutdown function.
 func ShutdownUserEventBus() {
 	publiceventbus.SetUserBus(nil)
 	eventbus.ShutdownUser()
 }
 
-// Shutdown gracefully stops RedisSMQ.
+// Shutdown gracefully stops the RedisSMQ runtime.
+//
+// It stops the purge worker, shuts down all registered consumers and
+// producers, stops the event buses, releases the configuration, and closes
+// the Redis client. Shutdown is safe to call multiple times and may be
+// followed by another Init to restart the runtime.
 func Shutdown() {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
@@ -180,66 +213,80 @@ func Shutdown() {
 	initialized = false
 }
 
-// NewProducer creates a new producer.
+// NewProducer returns a new producer that implements publicproducer.Producer.
+// The producer is automatically registered for lifecycle management and will
+// be shut down when Shutdown is called.
 func NewProducer() publicproducer.Producer {
 	p := internalproducer.New()
 	registerProducer(p)
 	return p
 }
 
-// NewConsumer creates a new consumer.
+// NewConsumer returns a new consumer that implements publicconsumer.Consumer.
+// The consumer is automatically registered for lifecycle management and will
+// be shut down when Shutdown is called.
 func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
 	c := internalconsumer.New(opts...)
 	registerConsumer(c)
 	return c
 }
 
-// NewQueueManager creates a new queue manager.
+// NewQueueManager returns a new queue manager that implements
+// publicqueue.QueueManager.
 func NewQueueManager() publicqueue.QueueManager {
 	return internalqueue.NewQueueManager()
 }
 
-// NewStateManager creates a new state manager.
+// NewStateManager returns a new state manager that implements
+// publicqueue.StateManager.
 func NewStateManager() publicqueue.StateManager {
 	return internalqueue.NewStateManager()
 }
 
-// NewConsumerGroupManager creates a new consumer group manager.
+// NewConsumerGroupManager returns a new consumer group manager that
+// implements publicqueue.ConsumerGroupManager.
 func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
 	return internalqueue.NewConsumerGroupManager()
 }
 
-// NewMessageManager creates a new message manager.
+// NewMessageManager returns a new message manager that implements
+// publicmessage.MessageManager.
 func NewMessageManager() publicmessage.MessageManager {
 	return internalmessage.NewManager()
 }
 
-// NewExchangeManager creates a new exchange manager.
+// NewExchangeManager returns a new exchange manager that implements
+// publicexchange.Manager.
 func NewExchangeManager() publicexchange.Manager {
 	return internalexchange.NewManager()
 }
 
-// NewDirectExchange creates a new direct exchange.
+// NewDirectExchange returns a new direct exchange that implements
+// publicexchange.DirectExchange.
 func NewDirectExchange() publicexchange.DirectExchange {
 	return internalexchange.NewManager().Direct()
 }
 
-// NewFanoutExchange creates a new fanout exchange.
+// NewFanoutExchange returns a new fanout exchange that implements
+// publicexchange.FanoutExchange.
 func NewFanoutExchange() publicexchange.FanoutExchange {
 	return internalexchange.NewManager().Fanout()
 }
 
-// NewTopicExchange creates a new topic exchange.
+// NewTopicExchange returns a new topic exchange that implements
+// publicexchange.TopicExchange.
 func NewTopicExchange() publicexchange.TopicExchange {
 	return internalexchange.NewManager().Topic()
 }
 
-// NewConfigManager returns the singleton configuration manager.
+// NewConfigManager returns the singleton configuration manager that implements
+// config.Manager.
 func NewConfigManager() config.Manager {
 	return internalconfig.DefaultManager()
 }
 
-// NewNamespaceManager creates a new namespace manager.
+// NewNamespaceManager returns a new namespace manager that implements
+// publicnamespace.Manager.
 func NewNamespaceManager() publicnamespace.Manager {
 	return internalnamespace.NewManager()
 }

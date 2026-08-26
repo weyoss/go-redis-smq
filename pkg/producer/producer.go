@@ -8,13 +8,6 @@
  *
  */
 
-// Package producer provides the public API for creating and managing
-// RedisSMQ producers.
-//
-// A producer is responsible for publishing messages to queues or exchanges.
-// It maintains its own lifecycle, supports automatic shutdown on context
-// cancellation, and exposes methods to produce messages directly or through
-// exchanges.
 package producer
 
 import (

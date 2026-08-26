@@ -10,26 +10,44 @@
 
 // Package exchange provides the public API for managing RedisSMQ exchanges.
 //
-// Exchanges route messages from producers to one or more queues. This package
+// Exchanges route messages from producers to one or more queues. The package
 // defines the exchange types, parameters, policies, errors, and the public
 // interfaces for direct, topic, and fanout exchanges.
 //
-// The concrete implementations are provided by the root redissmq package and
-// are created using factory functions such as redissmq.NewDirectExchange().
+// # Concrete Implementations
 //
-// Example:
+// The package itself contains only interfaces and data types. Concrete
+// implementations are provided by the root redissmq package and are created
+// using the following factory functions:
+//
+//	redissmq.NewExchangeManager()  // returns an exchange.Manager
+//	redissmq.NewDirectExchange()   // returns an exchange.DirectExchange
+//	redissmq.NewFanoutExchange()   // returns an exchange.FanoutExchange
+//	redissmq.NewTopicExchange()    // returns an exchange.TopicExchange
+//
+// # Exchange Types
+//
+// The package supports three exchange types, represented by ExchangeType:
+//
+//   - TypeDirect: routes messages to queues with an exact matching routing key.
+//   - TypeTopic: routes messages using AMQP-style pattern matching (* and #).
+//   - TypeFanout: broadcasts messages to all bound queues, ignoring routing keys.
+//
+// # Policies
+//
+// Each exchange can enforce a queue policy via ExchangePolicy:
+//
+//   - PolicyStandard: allows only FIFO and LIFO queues.
+//   - PolicyPriority: allows only priority queues.
+//
+// # Example
 //
 //	dx := redissmq.NewDirectExchange()
 //	params := exchange.MustExchangeParams("orders", exchange.TypeDirect)
-//	err := dx.Create(ctx, params, exchange.PolicyStandard)
-//	err = dx.BindQueue(ctx, queueParams, params, "order.created")
-//
-// The package includes:
-//
-//   - ExchangeType: the type of routing (direct, fanout, topic)
-//   - ExchangeParams: identifies an exchange and its type
-//   - ExchangeProps: stored configuration of an exchange
-//   - ExchangePolicy: restricts which queue types can bind
-//   - Errors: typed errors for common failures
-//   - Interfaces: Manager, DirectExchange, FanoutExchange, TopicExchange
+//	if err := dx.Create(ctx, params, exchange.PolicyStandard); err != nil {
+//	    log.Fatal(err)
+//	}
+//	if err := dx.BindQueue(ctx, queueParams, params, "order.created"); err != nil {
+//	    log.Fatal(err)
+//	}
 package exchange

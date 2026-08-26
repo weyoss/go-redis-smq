@@ -14,6 +14,21 @@
 // exchanges. Namespace names are validated using Redis key rules (lowercase,
 // letter-first, alphanumeric with hyphens, underscores, and dots).
 //
-// The concrete implementation is provided by the root redissmq package and
-// is created via redissmq.NewNamespaceManager().
+// # Concrete Implementation
+//
+// The package defines the Manager interface and the sentinel errors that
+// namespace operations may return. The concrete implementation is provided by
+// the root redissmq package and is created using
+// redissmq.NewNamespaceManager().
+//
+// # Example
+//
+//	nm := redissmq.NewNamespaceManager()
+//	namespaces, err := nm.List(ctx)
+//	if err != nil {
+//	    log.Fatal(err)
+//	}
+//	for _, ns := range namespaces {
+//	    fmt.Println(ns)
+//	}
 package namespace
