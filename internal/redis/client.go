@@ -42,7 +42,7 @@ var (
 // all Lua scripts into Redis. Safe to call multiple times; returns immediately
 // if already initialized. If a previous call failed, retries initialization.
 // Panics if addr is empty.
-func Init(ctx context.Context, cfg Config) error {
+func Init(ctx context.Context, cfg redis.Options) error {
 	if cfg.Addr == "" {
 		panic("redis: addr is required")
 	}
@@ -122,18 +122,8 @@ func AddHook(hook Hook) {
 }
 
 // dial creates a new Redis client and verifies connectivity.
-func dial(ctx context.Context, cfg Config) (*redis.Client, error) {
-	c := redis.NewClient(&redis.Options{
-		Addr:            cfg.Addr,
-		Password:        cfg.Password,
-		DB:              cfg.DB,
-		PoolSize:        cfg.PoolSize,
-		MinIdleConns:    cfg.MinIdleConns,
-		ConnMaxIdleTime: cfg.ConnMaxIdleTime,
-		ConnMaxLifetime: cfg.ConnMaxLifetime,
-		PoolTimeout:     cfg.PoolTimeout,
-	})
-
+func dial(ctx context.Context, cfg redis.Options) (*redis.Client, error) {
+	c := redis.NewClient(&cfg)
 	if err := c.Ping(ctx).Err(); err != nil {
 		return nil, fmt.Errorf("redis: connect failed: %w", err)
 	}

@@ -16,6 +16,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq"
 )
 
@@ -35,7 +36,7 @@ func RunTestsWithRedis(m *testing.M) {
 	ctx := context.Background()
 	//log.Println("testutil: initializing RedisSMQ...")
 
-	if err := redissmq.Init(ctx, redissmq.Config{Addr: rp.Addr()}); err != nil {
+	if err := redissmq.Init(ctx, redis.Options{Addr: rp.Addr()}); err != nil {
 		rp.Close()
 		log.Printf("redissmq.init: %v\n", err)
 		os.Exit(1)

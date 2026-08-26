@@ -19,7 +19,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/redis/go-redis/v9"
+	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
 )
 
 // RedisProcess manages a real Redis server for integration tests.
@@ -86,7 +87,7 @@ func StartRedisProcess() (*RedisProcess, error) {
 	//log.Println("testutil: Redis is ready")
 
 	ctx := context.Background()
-	if err := redis.Init(ctx, redis.Config{Addr: addr}); err != nil {
+	if err := internalredis.Init(ctx, redis.Options{Addr: addr}); err != nil {
 		cmd.Process.Kill()
 		os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis init: %w", err)
@@ -104,7 +105,7 @@ func (rp *RedisProcess) Close() {
 	//log.Printf("testutil: stopping Redis on %s...", rp.addr)
 
 	// Close the Redis client pool first to release connections.
-	redis.Close()
+	internalredis.Close()
 
 	// Kill the Redis process.
 	rp.cmd.Process.Kill()

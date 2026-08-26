@@ -13,13 +13,14 @@ import (
     "context"
     "log"
 
+	"github.com/redis/go-redis/v9"
     "github.com/weyoss/go-redis-smq"
     "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
     ctx := context.Background()
-    if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
+    if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
         log.Fatal(err)
     }
     defer redissmq.Shutdown()

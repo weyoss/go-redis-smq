@@ -8,7 +8,7 @@ RedisSMQ handles shutdowns without losing messages. In‑flight messages are rec
 func main() {
     ctx := context.Background()
 
-    if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
+    if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
         log.Fatal(err)
     }
     defer redissmq.Shutdown()
@@ -42,7 +42,7 @@ func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    if err := redissmq.Init(ctx, redissmq.Config{Addr: "127.0.0.1:6379"}); err != nil {
+    if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
         log.Fatal(err)
     }
     defer redissmq.Shutdown()

@@ -14,6 +14,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 )
@@ -22,7 +23,7 @@ func initRedisSMQ(t *testing.T) context.Context {
 	t.Helper()
 
 	ctx := context.Background()
-	if err := redissmq.Init(ctx, redissmq.Config{Addr: redisAddr}); err != nil {
+	if err := redissmq.Init(ctx, redis.Options{Addr: redisAddr}); err != nil {
 		t.Fatalf("init redissmq: %v", err)
 	}
 
@@ -47,7 +48,7 @@ func TestSystem_InitIdempotent(t *testing.T) {
 	ctx := initRedisSMQ(t)
 
 	// Second Init should be a no-op.
-	if err := redissmq.Init(ctx, redissmq.Config{Addr: redisAddr}); err != nil {
+	if err := redissmq.Init(ctx, redis.Options{Addr: redisAddr}); err != nil {
 		t.Fatalf("second init: %v", err)
 	}
 }

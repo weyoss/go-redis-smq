@@ -24,6 +24,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/redis/go-redis/v9"
 	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
@@ -32,7 +33,7 @@ import (
 	internalnamespace "github.com/weyoss/go-redis-smq/internal/namespace"
 	internalproducer "github.com/weyoss/go-redis-smq/internal/producer"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
-	"github.com/weyoss/go-redis-smq/internal/redis"
+	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
@@ -43,10 +44,6 @@ import (
 	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
-
-// Config is an alias for the Redis client configuration.
-// It is the same type as redis.Config and is re-exported for convenience.
-type Config = redis.Config
 
 var (
 	// systemCtx holds the root context for the RedisSMQ runtime.
@@ -103,7 +100,7 @@ func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interfa
 //
 // Init is idempotent and can be called multiple times; subsequent calls
 // are no-ops.
-func Init(ctx context.Context, cfg Config) error {
+func Init(ctx context.Context, cfg redis.Options) error {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
 
@@ -111,7 +108,7 @@ func Init(ctx context.Context, cfg Config) error {
 		return nil
 	}
 
-	if err := redis.Init(ctx, cfg); err != nil {
+	if err := internalredis.Init(ctx, cfg); err != nil {
 		return fmt.Errorf("redissmq: redis init failed: %w", err)
 	}
 
@@ -208,7 +205,7 @@ func Shutdown() {
 
 	logger.Shutdown()
 	internalconfig.Close()
-	redis.Close()
+	internalredis.Close()
 
 	initialized = false
 }

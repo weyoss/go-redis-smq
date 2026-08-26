@@ -18,6 +18,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
@@ -41,7 +42,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	if err := redissmq.Init(ctx, redissmq.Config{Addr: addr}); err != nil {
+	if err := redissmq.Init(ctx, redis.Options{Addr: addr}); err != nil {
 		log.Fatal(err)
 	}
 	defer redissmq.Shutdown()
