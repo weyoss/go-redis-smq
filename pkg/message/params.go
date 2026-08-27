@@ -63,7 +63,7 @@ type Params struct {
 
 	// Exchange is the exchange used for routing, if the message was sent
 	// via an exchange.
-	Exchange *exchange.ExchangeParams `json:"exchange,omitempty"`
+	Exchange *exchange.Params `json:"exchange,omitempty"`
 
 	// Queue is the target queue, if the message was sent directly to a
 	// queue.

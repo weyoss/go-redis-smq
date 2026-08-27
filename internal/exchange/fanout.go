@@ -45,7 +45,7 @@ func NewFanoutStore(store *Store, validator *Validator, codecs *Codecs) *FanoutS
 
 // Create creates a fanout exchange with the given queue policy.
 // Returns ErrTypeMismatch if params.Type() is not TypeFanout.
-func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
 	if params.Type() != pubexchange.TypeFanout {
 		return pubexchange.ErrTypeMismatch
 	}
@@ -58,7 +58,7 @@ func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.ExchangeP
 func (fs *FanoutStore) BindQueue(
 	ctx context.Context,
 	queueParams *queue.Params,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
 		return pubexchange.ErrNamespaceMismatch
@@ -129,7 +129,7 @@ func (fs *FanoutStore) BindQueue(
 func (fs *FanoutStore) UnbindQueue(
 	ctx context.Context,
 	queueParams *queue.Params,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
 		return pubexchange.ErrNamespaceMismatch
@@ -188,7 +188,7 @@ func (fs *FanoutStore) UnbindQueue(
 // This is equivalent to BoundQueues for fanout exchanges.
 func (fs *FanoutStore) MatchQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) ([]queue.Params, error) {
 	return fs.BoundQueues(ctx, exchangeParams)
 }
@@ -197,7 +197,7 @@ func (fs *FanoutStore) MatchQueues(
 // It validates that the exchange is a fanout exchange.
 func (fs *FanoutStore) BoundQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) ([]queue.Params, error) {
 	if err := fs.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
@@ -220,7 +220,7 @@ func (fs *FanoutStore) BoundQueues(
 
 // Delete removes a fanout exchange and all its queue bindings.
 // Returns error if the exchange has bound queues.
-func (fs *FanoutStore) Delete(ctx context.Context, exchangeParams *pubexchange.ExchangeParams) error {
+func (fs *FanoutStore) Delete(ctx context.Context, exchangeParams *pubexchange.Params) error {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),

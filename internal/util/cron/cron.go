@@ -8,7 +8,6 @@
  *
  */
 
-// go/internal/util/cron/cron.go
 package cron
 
 import (

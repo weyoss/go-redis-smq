@@ -12,6 +12,7 @@ package redis
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
@@ -51,7 +52,7 @@ func WithTransaction(ctx context.Context, watchKeys []string, maxAttempts int, f
 		if err == nil {
 			return nil
 		}
-		if err != redis.TxFailedErr {
+		if !errors.Is(err, redis.TxFailedErr) {
 			return fmt.Errorf("transaction failed: %w", err)
 		}
 	}

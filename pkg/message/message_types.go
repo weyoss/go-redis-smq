@@ -41,7 +41,7 @@ type ProducibleMessage struct {
 	scheduledDelay        *time.Duration
 	scheduledRepeatPeriod *time.Duration
 	scheduledRepeat       int
-	exchange              *exchange.ExchangeParams
+	exchange              *exchange.Params
 	exchangeRoutingKey    string
 	queue                 *queue.Params
 }
@@ -221,14 +221,14 @@ func (m *ProducibleMessage) ResetScheduledParams() *ProducibleMessage {
 }
 
 // Exchange returns the exchange configuration, if any.
-func (m *ProducibleMessage) Exchange() *exchange.ExchangeParams { return m.exchange }
+func (m *ProducibleMessage) Exchange() *exchange.Params { return m.exchange }
 
 // ExchangeRoutingKey returns the exchange routing key.
 func (m *ProducibleMessage) ExchangeRoutingKey() string { return m.exchangeRoutingKey }
 
 // SetDirectExchange sets a direct exchange for routing.
 // It clears any previously set queue.
-func (m *ProducibleMessage) SetDirectExchange(params *exchange.ExchangeParams) *ProducibleMessage {
+func (m *ProducibleMessage) SetDirectExchange(params *exchange.Params) *ProducibleMessage {
 	m.exchange = params
 	m.queue = nil
 	m.exchangeRoutingKey = ""
@@ -237,7 +237,7 @@ func (m *ProducibleMessage) SetDirectExchange(params *exchange.ExchangeParams) *
 
 // SetFanoutExchange sets a fanout exchange for broadcasting.
 // It clears any previously set queue.
-func (m *ProducibleMessage) SetFanoutExchange(params *exchange.ExchangeParams) *ProducibleMessage {
+func (m *ProducibleMessage) SetFanoutExchange(params *exchange.Params) *ProducibleMessage {
 	m.exchange = params
 	m.queue = nil
 	m.exchangeRoutingKey = ""
@@ -246,7 +246,7 @@ func (m *ProducibleMessage) SetFanoutExchange(params *exchange.ExchangeParams) *
 
 // SetTopicExchange sets a topic exchange for pattern routing.
 // It clears any previously set queue.
-func (m *ProducibleMessage) SetTopicExchange(params *exchange.ExchangeParams) *ProducibleMessage {
+func (m *ProducibleMessage) SetTopicExchange(params *exchange.Params) *ProducibleMessage {
 	m.exchange = params
 	m.queue = nil
 	m.exchangeRoutingKey = ""

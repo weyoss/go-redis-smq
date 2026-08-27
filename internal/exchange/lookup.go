@@ -36,7 +36,7 @@ func NewLookup(codecs *Codecs) *Lookup {
 
 // All returns every exchange across all namespaces.
 // Reads from the global exchanges set.
-func (l *Lookup) All(ctx context.Context) ([]pubexchange.ExchangeParams, error) {
+func (l *Lookup) All(ctx context.Context) ([]pubexchange.Params, error) {
 	members, err := redis.LoadSetMembers(ctx,
 		keys.System{}.AllExchanges(), "all exchanges")
 	if err != nil {
@@ -47,7 +47,7 @@ func (l *Lookup) All(ctx context.Context) ([]pubexchange.ExchangeParams, error) 
 
 // ByNamespace returns all exchanges within a specific namespace.
 // Reads from the namespace-scoped exchanges set.
-func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]pubexchange.ExchangeParams, error) {
+func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]pubexchange.Params, error) {
 	members, err := redis.LoadSetMembers(ctx,
 		keys.Namespace{Name: namespace}.Exchanges(),
 		fmt.Sprintf("exchanges in namespace %s", namespace))
@@ -59,7 +59,7 @@ func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]pubexchan
 
 // ByQueue returns all exchanges bound to a specific queue.
 // Reads from the queue's exchange bindings set.
-func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.Params) ([]pubexchange.ExchangeParams, error) {
+func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.Params) ([]pubexchange.Params, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -76,8 +76,8 @@ func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.Params) ([]pube
 // decodeExchangeParams decodes JSON-encoded exchange params from Redis set members.
 // Malformed entries are silently skipped to maintain compatibility with
 // potentially corrupted data from other language clients.
-func (l *Lookup) decodeExchangeParams(ctx context.Context, members []string) ([]pubexchange.ExchangeParams, error) {
-	params := make([]pubexchange.ExchangeParams, 0, len(members))
+func (l *Lookup) decodeExchangeParams(ctx context.Context, members []string) ([]pubexchange.Params, error) {
+	params := make([]pubexchange.Params, 0, len(members))
 	for _, member := range members {
 		p, err := l.codecs.Params.DecodeSet(ctx, member)
 		if err != nil {

@@ -28,39 +28,6 @@ type Params struct {
 	ns   string
 }
 
-// NewQueueParams creates queue params with the default namespace.
-// It validates the queue name and returns an error if invalid.
-func NewQueueParams(name string) (*Params, error) {
-	return NewQueueParamsWithNS(name, "")
-}
-
-// NewQueueParamsWithNS creates queue params with a custom namespace.
-// If namespace is empty, the configured default namespace is used.
-// It validates both name and namespace and returns an error if invalid.
-func NewQueueParamsWithNS(name, namespace string) (*Params, error) {
-	if name == "" {
-		return nil, ErrNameRequired
-	}
-	if namespace == "" {
-		namespace = config.Get().Namespace
-	}
-
-	validName, err := redis.ValidateKey(name)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err)
-	}
-
-	validNS, err := redis.ValidateKey(namespace)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err)
-	}
-
-	return &Params{
-		name: validName,
-		ns:   validNS,
-	}, nil
-}
-
 // Name returns the queue name.
 func (p *Params) Name() string {
 	if p == nil {
@@ -93,7 +60,10 @@ func (p *Params) String() string {
 	return p.name + "@" + p.ns
 }
 
-// MarshalJSON implements custom JSON marshaling for TypeScript compatibility.
+// MarshalJSON implements custom JSON marshaling for cross-language compatibility.
+// It uses a value receiver which means both Params values and *Params pointers implement json.Marshaler.
+// As a result, json.Marshal always MarshalJSON() method.
+// Otherwise json.Marshal would fall back to default struct marshaling and likely produce {}
 func (p Params) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Name string `json:"name"`
@@ -116,6 +86,39 @@ func (p *Params) UnmarshalJSON(data []byte) error {
 	p.name = aux.Name
 	p.ns = aux.NS
 	return nil
+}
+
+// NewQueueParams creates queue params with the default namespace.
+// It validates the queue name and returns an error if invalid.
+func NewQueueParams(name string) (*Params, error) {
+	return NewQueueParamsWithNS(name, "")
+}
+
+// NewQueueParamsWithNS creates queue params with a custom namespace.
+// If namespace is empty, the configured default namespace is used.
+// It validates both name and namespace and returns an error if invalid.
+func NewQueueParamsWithNS(name, namespace string) (*Params, error) {
+	if name == "" {
+		return nil, ErrNameRequired
+	}
+	if namespace == "" {
+		namespace = config.Get().Namespace
+	}
+
+	validName, err := redis.ValidateKey(name)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err)
+	}
+
+	validNS, err := redis.ValidateKey(namespace)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err)
+	}
+
+	return &Params{
+		name: validName,
+		ns:   validNS,
+	}, nil
 }
 
 // MustQueueParams creates queue params and panics on error.

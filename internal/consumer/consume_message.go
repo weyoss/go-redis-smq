@@ -12,6 +12,7 @@ package consumer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync/atomic"
@@ -84,7 +85,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 	if m.ConsumeTimeout > 0 {
 		go func() {
 			<-ctx.Done()
-			if ctx.Err() == context.DeadlineExceeded && timedOut.CompareAndSwap(false, true) {
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) && timedOut.CompareAndSwap(false, true) {
 				c.log.Warn("handler timed out — unacknowledging", "messageID", m.ID)
 				c.batchUnacker.Unack(envelope, CauseTimeout)
 			}

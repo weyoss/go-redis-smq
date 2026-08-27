@@ -217,7 +217,7 @@ func (prod *Producer) produceToQueue(
 func (prod *Producer) produceToExchange(
 	ctx context.Context,
 	m *publicmessage.ProducibleMessage,
-	exchangeParams *publicexchange.ExchangeParams,
+	exchangeParams *publicexchange.Params,
 	resolver *PubSubTargetResolver,
 ) ([]string, error) {
 	queues, err := prod.matchExchangeQueues(ctx, exchangeParams, m.ExchangeRoutingKey())
@@ -262,7 +262,7 @@ func (prod *Producer) produceToExchange(
 // matchExchangeQueues resolves the destination queues for an exchange and routing key.
 func (prod *Producer) matchExchangeQueues(
 	ctx context.Context,
-	exchangeParams *publicexchange.ExchangeParams,
+	exchangeParams *publicexchange.Params,
 	routingKey string,
 ) ([]queue.Params, error) {
 	switch exchangeParams.Type() {

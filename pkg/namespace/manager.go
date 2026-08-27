@@ -32,5 +32,5 @@ type Manager interface {
 	ListQueues(ctx context.Context, name string) ([]queue.Params, error)
 
 	// ListExchanges returns all exchanges in a namespace.
-	ListExchanges(ctx context.Context, name string) ([]exchange.ExchangeParams, error)
+	ListExchanges(ctx context.Context, name string) ([]exchange.Params, error)
 }

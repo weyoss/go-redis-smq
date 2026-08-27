@@ -12,6 +12,7 @@ package queue
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -447,7 +448,7 @@ func acquire(ctx context.Context, client *rdb.Client) (string, error) {
 		popTimeout,
 	).Result()
 
-	if err == rdb.Nil {
+	if errors.Is(err, rdb.Nil) {
 		return "", nil
 	}
 	return val, err

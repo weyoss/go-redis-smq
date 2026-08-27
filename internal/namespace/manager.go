@@ -127,7 +127,7 @@ func (m *Manager) ListQueues(ctx context.Context, name string) ([]queue.Params, 
 }
 
 // ListExchanges returns all exchanges in a namespace.
-func (m *Manager) ListExchanges(ctx context.Context, name string) ([]pubexchange.ExchangeParams, error) {
+func (m *Manager) ListExchanges(ctx context.Context, name string) ([]pubexchange.Params, error) {
 	validName, err := validate(name)
 	if err != nil {
 		return nil, err

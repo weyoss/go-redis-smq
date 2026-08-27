@@ -21,16 +21,16 @@ import (
 	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 )
 
-// ExchangeParamsCodec handles serialization of ExchangeParams to/from Redis sets.
+// ExchangeParamsCodec handles serialization of Params to/from Redis sets.
 type ExchangeParamsCodec struct{}
 
-// NewExchangeParamsCodec creates a new ExchangeParams codec.
+// NewExchangeParamsCodec creates a new Params codec.
 func NewExchangeParamsCodec() *ExchangeParamsCodec {
 	return &ExchangeParamsCodec{}
 }
 
-// EncodeSet serializes ExchangeParams to a JSON string for Redis set storage.
-func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *pubexchange.ExchangeParams) (string, error) {
+// EncodeSet serializes Params to a JSON string for Redis set storage.
+func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *pubexchange.Params) (string, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
 		return "", codec.NewEncodingError("exchange params", params.String(), err)
@@ -38,9 +38,9 @@ func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *pubexchange
 	return string(data), nil
 }
 
-// DecodeSet deserializes a JSON string from a Redis set back to ExchangeParams.
-func (c *ExchangeParamsCodec) DecodeSet(ctx context.Context, data string) (*pubexchange.ExchangeParams, error) {
-	var params pubexchange.ExchangeParams
+// DecodeSet deserializes a JSON string from a Redis set back to Params.
+func (c *ExchangeParamsCodec) DecodeSet(ctx context.Context, data string) (*pubexchange.Params, error) {
+	var params pubexchange.Params
 	if err := json.Unmarshal([]byte(data), &params); err != nil {
 		return nil, codec.NewDecodingError("exchange params", data, err)
 	}
@@ -101,6 +101,6 @@ func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]str
 
 // Compile-time interface checks
 var (
-	_ codec.SetCodec[*pubexchange.ExchangeParams] = (*ExchangeParamsCodec)(nil)
+	_ codec.SetCodec[*pubexchange.Params]         = (*ExchangeParamsCodec)(nil)
 	_ codec.HashCodec[*pubexchange.ExchangeProps] = (*ExchangePropsCodec)(nil)
 )

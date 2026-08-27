@@ -104,7 +104,7 @@ type PurgeJob struct {
 	Meta *PurgeJobMeta `json:"meta,omitempty"`
 }
 
-// Params returns the queue parameters from the payload.
+// QueueParams returns the queue parameters from the payload.
 func (j *PurgeJob) QueueParams() *Params {
 	return j.Payload.Queue
 }

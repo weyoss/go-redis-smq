@@ -42,7 +42,7 @@ func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectS
 
 // Create creates a direct exchange with the given queue policy.
 // Returns ErrTypeMismatch if params.Type() is not TypeDirect.
-func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
 	if params.Type() != pubexchange.TypeDirect {
 		return pubexchange.ErrTypeMismatch
 	}
@@ -52,7 +52,7 @@ func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.ExchangeP
 func (ds *DirectStore) BindQueue(
 	ctx context.Context,
 	queueParams *queue.Params,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	routingKey string,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -124,7 +124,7 @@ func (ds *DirectStore) BindQueue(
 func (ds *DirectStore) UnbindQueue(
 	ctx context.Context,
 	queueParams *queue.Params,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	routingKey string,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -215,7 +215,7 @@ func (ds *DirectStore) UnbindQueue(
 
 func (ds *DirectStore) MatchQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	routingKey string,
 ) ([]queue.Params, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
@@ -227,7 +227,7 @@ func (ds *DirectStore) MatchQueues(
 
 func (ds *DirectStore) RoutingKeys(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) ([]string, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
@@ -243,7 +243,7 @@ func (ds *DirectStore) RoutingKeys(
 
 func (ds *DirectStore) BoundQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	routingKey string,
 ) ([]queue.Params, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
@@ -267,7 +267,7 @@ func (ds *DirectStore) BoundQueues(
 
 func (ds *DirectStore) Bindings(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) (map[string][]queue.Params, error) {
 	routingKeys, err := ds.RoutingKeys(ctx, exchangeParams)
 	if err != nil {
@@ -285,7 +285,7 @@ func (ds *DirectStore) Bindings(
 	return bindings, nil
 }
 
-func (ds *DirectStore) Delete(ctx context.Context, exchangeParams *pubexchange.ExchangeParams) error {
+func (ds *DirectStore) Delete(ctx context.Context, exchangeParams *pubexchange.Params) error {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),

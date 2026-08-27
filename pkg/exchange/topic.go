@@ -33,11 +33,11 @@ import (
 type TopicExchange interface {
 	// Create creates a topic exchange with the given queue policy.
 	// Returns TypeMismatchError if params.Type() is not TypeTopic.
-	Create(ctx context.Context, params *ExchangeParams, policy ExchangePolicy) error
+	Create(ctx context.Context, params *Params, policy ExchangePolicy) error
 
 	// Delete removes a topic exchange and all its pattern bindings.
 	// Returns ErrHasBoundQueues if any patterns still have bound queues.
-	Delete(ctx context.Context, params *ExchangeParams) error
+	Delete(ctx context.Context, params *Params) error
 
 	// BindQueue binds a queue to a topic exchange with a binding pattern.
 	// The pattern must be a valid AMQP-style topic pattern.
@@ -48,21 +48,21 @@ type TopicExchange interface {
 	//   - "order.#"     matches "order.created", "order.items.added"
 	//   - "#"           matches all routing keys
 	//   - "*.created"   matches "order.created", "user.created"
-	BindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *ExchangeParams, pattern string) error
+	BindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *Params, pattern string) error
 
 	// UnbindQueue removes a queue binding from a specific pattern.
 	// The queue and exchange must be in the same namespace.
-	UnbindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *ExchangeParams, pattern string) error
+	UnbindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *Params, pattern string) error
 
 	// MatchQueues returns all queues whose binding patterns match the routing key.
-	MatchQueues(ctx context.Context, exchangeParams *ExchangeParams, routingKey string) ([]queue.Params, error)
+	MatchQueues(ctx context.Context, exchangeParams *Params, routingKey string) ([]queue.Params, error)
 
 	// Patterns returns all binding patterns registered for this topic exchange.
-	Patterns(ctx context.Context, exchangeParams *ExchangeParams) ([]string, error)
+	Patterns(ctx context.Context, exchangeParams *Params) ([]string, error)
 
 	// BoundQueues returns all queues bound to a specific pattern.
-	BoundQueues(ctx context.Context, exchangeParams *ExchangeParams, pattern string) ([]queue.Params, error)
+	BoundQueues(ctx context.Context, exchangeParams *Params, pattern string) ([]queue.Params, error)
 
 	// Bindings returns all pattern to queue mappings for this exchange.
-	Bindings(ctx context.Context, exchangeParams *ExchangeParams) (map[string][]queue.Params, error)
+	Bindings(ctx context.Context, exchangeParams *Params) (map[string][]queue.Params, error)
 }

@@ -12,6 +12,7 @@ package exchange
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
@@ -50,7 +51,7 @@ func NewValidator(store *Store) *Validator {
 //   - Error if validation fails
 func (v *Validator) ValidateQueueBinding(
 	ctx context.Context,
-	params *pubexchange.ExchangeParams,
+	params *pubexchange.Params,
 	queueParams *publicqueue.Params,
 ) (*pubexchange.ExchangeProps, error) {
 	// Load queue properties first (matches TypeScript order)
@@ -62,7 +63,7 @@ func (v *Validator) ValidateQueueBinding(
 	// Load exchange properties
 	exchangeProps, err := v.store.Load(ctx, params)
 	if err != nil {
-		if err == pubexchange.ErrNotFound {
+		if errors.Is(err, pubexchange.ErrNotFound) {
 			// Exchange doesn't exist yet - this is valid for new bindings
 			// The exchange will be created when the first binding is established
 			return nil, nil

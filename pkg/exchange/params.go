@@ -18,7 +18,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/redis"
 )
 
-// ExchangeParams uniquely identifies an exchange and its routing type.
+// Params uniquely identifies an exchange and its routing type.
 // Self-validates on creation following the same pattern as QueueParams.
 // JSON serialization matches format:
 //
@@ -27,7 +27,7 @@ import (
 //	  "ns": "production",
 //	  "type": 0
 //	}
-type ExchangeParams struct {
+type Params struct {
 	name string
 	ns   string
 	typ  ExchangeType
@@ -38,7 +38,7 @@ type ExchangeParams struct {
 // Example:
 //
 //	params, err := exchange.NewExchangeParams("orders", exchange.TypeDirect)
-func NewExchangeParams(name string, typ ExchangeType) (*ExchangeParams, error) {
+func NewExchangeParams(name string, typ ExchangeType) (*Params, error) {
 	return NewExchangeParamsWithNS(name, "", typ)
 }
 
@@ -48,7 +48,7 @@ func NewExchangeParams(name string, typ ExchangeType) (*ExchangeParams, error) {
 // Example:
 //
 //	params, err := exchange.NewExchangeParamsWithNS("orders", "production", exchange.TypeDirect)
-func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*ExchangeParams, error) {
+func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*Params, error) {
 	if name == "" {
 		return nil, ErrNameRequired
 	}
@@ -66,7 +66,7 @@ func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*Exchang
 		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err.Error())
 	}
 
-	return &ExchangeParams{
+	return &Params{
 		name: validName,
 		ns:   validNS,
 		typ:  typ,
@@ -74,20 +74,20 @@ func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*Exchang
 }
 
 // Name returns the exchange name.
-func (p *ExchangeParams) Name() string { return p.name }
+func (p *Params) Name() string { return p.name }
 
 // Namespace returns the exchange namespace.
-func (p *ExchangeParams) Namespace() string { return p.ns }
+func (p *Params) Namespace() string { return p.ns }
 
-// ExchangeType returns the exchange routing type.
-func (p *ExchangeParams) Type() ExchangeType { return p.typ }
+// Type returns the exchange routing type.
+func (p *Params) Type() ExchangeType { return p.typ }
 
 // Clone returns a deep copy of the exchange params.
-func (p *ExchangeParams) Clone() *ExchangeParams {
+func (p *Params) Clone() *Params {
 	if p == nil {
 		return nil
 	}
-	return &ExchangeParams{
+	return &Params{
 		name: p.name,
 		ns:   p.ns,
 		typ:  p.typ,
@@ -96,13 +96,15 @@ func (p *ExchangeParams) Clone() *ExchangeParams {
 
 // String returns the fully qualified exchange name.
 // Uses the format "name@namespace".
-func (p *ExchangeParams) String() string {
+func (p *Params) String() string {
 	return p.name + "@" + p.ns
 }
 
-// MarshalJSON implements custom JSON marshaling.
-// Produces: {"name":"orders","ns":"production","type":0}
-func (p *ExchangeParams) MarshalJSON() ([]byte, error) {
+// MarshalJSON implements custom JSON marshaling for cross-language compatibility.
+// It uses a value receiver so that both Params values and *Params pointers
+// implement json.Marshaler. This ensures json.Marshal always uses the
+// custom representation, even when a Params value is passed directly.
+func (p Params) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Name string       `json:"name"`
 		NS   string       `json:"ns"`
@@ -116,7 +118,7 @@ func (p *ExchangeParams) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON implements custom JSON unmarshaling.
 // Expects: {"name":"orders","ns":"production","type":0}
-func (p *ExchangeParams) UnmarshalJSON(data []byte) error {
+func (p *Params) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Name string       `json:"name"`
 		NS   string       `json:"ns"`
@@ -133,7 +135,7 @@ func (p *ExchangeParams) UnmarshalJSON(data []byte) error {
 
 // MustExchangeParams creates exchange params and panics on error.
 // Useful for testing and initialization where params are known to be valid.
-func MustExchangeParams(name string, typ ExchangeType) *ExchangeParams {
+func MustExchangeParams(name string, typ ExchangeType) *Params {
 	p, err := NewExchangeParams(name, typ)
 	if err != nil {
 		panic(err)
@@ -142,7 +144,7 @@ func MustExchangeParams(name string, typ ExchangeType) *ExchangeParams {
 }
 
 // MustExchangeParamsWithNS creates exchange params with namespace and panics on error.
-func MustExchangeParamsWithNS(name, ns string, typ ExchangeType) *ExchangeParams {
+func MustExchangeParamsWithNS(name, ns string, typ ExchangeType) *Params {
 	p, err := NewExchangeParamsWithNS(name, ns, typ)
 	if err != nil {
 		panic(err)

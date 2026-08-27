@@ -33,7 +33,7 @@ func NewStore(codecs *Codecs) *Store {
 	return &Store{codecs: codecs}
 }
 
-func (s *Store) Save(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -82,7 +82,7 @@ func (s *Store) Save(ctx context.Context, params *pubexchange.ExchangeParams, po
 	return redisClient.WithTransaction(ctx, watchKeys, 3, txf)
 }
 
-func (s *Store) Load(ctx context.Context, params *pubexchange.ExchangeParams) (*pubexchange.ExchangeProps, error) {
+func (s *Store) Load(ctx context.Context, params *pubexchange.Params) (*pubexchange.ExchangeProps, error) {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -101,7 +101,7 @@ func (s *Store) Load(ctx context.Context, params *pubexchange.ExchangeParams) (*
 	return props, nil
 }
 
-func (s *Store) Exists(ctx context.Context, params *pubexchange.ExchangeParams) (bool, error) {
+func (s *Store) Exists(ctx context.Context, params *pubexchange.Params) (bool, error) {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -114,7 +114,7 @@ func (s *Store) Exists(ctx context.Context, params *pubexchange.ExchangeParams) 
 	return count > 0, nil
 }
 
-func (s *Store) ValidateType(ctx context.Context, params *pubexchange.ExchangeParams, required bool) error {
+func (s *Store) ValidateType(ctx context.Context, params *pubexchange.Params, required bool) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -144,7 +144,7 @@ func (s *Store) ValidateType(ctx context.Context, params *pubexchange.ExchangePa
 // Delete removes an exchange and all its associated data structures.
 // It first checks that no queues are bound to the exchange; if any exist,
 // it returns pubexchange.ErrHasBoundQueues.
-func (s *Store) Delete(ctx context.Context, params *pubexchange.ExchangeParams) error {
+func (s *Store) Delete(ctx context.Context, params *pubexchange.Params) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),

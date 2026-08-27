@@ -20,7 +20,7 @@ import (
 
 // Codecs holds the codec instances for exchange serialization.
 type Codecs struct {
-	Params codec.SetCodec[*pubexchange.ExchangeParams]
+	Params codec.SetCodec[*pubexchange.Params]
 	Props  codec.HashCodec[*pubexchange.ExchangeProps]
 }
 
@@ -86,50 +86,50 @@ func (m *Manager) Fanout() *FanoutStore { return m.fanout }
 func (m *Manager) Topic() *TopicStore { return m.topic }
 
 // Create registers a new exchange with the given params and queue policy.
-func (m *Manager) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+func (m *Manager) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
 	return m.store.Save(ctx, params, policy)
 }
 
 // Properties retrieves the stored configuration for an exchange.
-func (m *Manager) Properties(ctx context.Context, params *pubexchange.ExchangeParams) (*pubexchange.ExchangeProps, error) {
+func (m *Manager) Properties(ctx context.Context, params *pubexchange.Params) (*pubexchange.ExchangeProps, error) {
 	return m.store.Load(ctx, params)
 }
 
 // Exists checks whether an exchange has been created.
-func (m *Manager) Exists(ctx context.Context, params *pubexchange.ExchangeParams) (bool, error) {
+func (m *Manager) Exists(ctx context.Context, params *pubexchange.Params) (bool, error) {
 	return m.store.Exists(ctx, params)
 }
 
 // ValidateType verifies an exchange exists and its type matches the expected type.
-func (m *Manager) ValidateType(ctx context.Context, params *pubexchange.ExchangeParams, required bool) error {
+func (m *Manager) ValidateType(ctx context.Context, params *pubexchange.Params, required bool) error {
 	return m.store.ValidateType(ctx, params, required)
 }
 
 // ValidateBinding checks whether a queue can be bound to this exchange.
 func (m *Manager) ValidateBinding(
 	ctx context.Context,
-	params *pubexchange.ExchangeParams,
+	params *pubexchange.Params,
 	queueParams *queue.Params,
 ) (*pubexchange.ExchangeProps, error) {
 	return m.validator.ValidateQueueBinding(ctx, params, queueParams)
 }
 
 // Delete removes an exchange and all its queue bindings.
-func (m *Manager) Delete(ctx context.Context, params *pubexchange.ExchangeParams) error {
+func (m *Manager) Delete(ctx context.Context, params *pubexchange.Params) error {
 	return m.store.Delete(ctx, params)
 }
 
 // ListByQueue returns all exchanges bound to a specific queue.
-func (m *Manager) ListByQueue(ctx context.Context, queueParams *queue.Params) ([]pubexchange.ExchangeParams, error) {
+func (m *Manager) ListByQueue(ctx context.Context, queueParams *queue.Params) ([]pubexchange.Params, error) {
 	return m.lookup.ByQueue(ctx, queueParams)
 }
 
 // ListAll returns every exchange across all namespaces.
-func (m *Manager) ListAll(ctx context.Context) ([]pubexchange.ExchangeParams, error) {
+func (m *Manager) ListAll(ctx context.Context) ([]pubexchange.Params, error) {
 	return m.lookup.All(ctx)
 }
 
 // ListByNamespace returns all exchanges within a namespace.
-func (m *Manager) ListByNamespace(ctx context.Context, namespace string) ([]pubexchange.ExchangeParams, error) {
+func (m *Manager) ListByNamespace(ctx context.Context, namespace string) ([]pubexchange.Params, error) {
 	return m.lookup.ByNamespace(ctx, namespace)
 }

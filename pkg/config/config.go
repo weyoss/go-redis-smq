@@ -1,4 +1,3 @@
-// pkg/config/config.go
 /*
  * Copyright (c) 2026
  * Weyoss <weyoss@outlook.com>

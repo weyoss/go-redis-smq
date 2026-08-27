@@ -47,7 +47,7 @@ func NewTopicStore(store *Store, validator *Validator, codecs *Codecs) *TopicSto
 
 // Create creates a topic exchange with the given queue policy.
 // Returns ErrTypeMismatch if params.Type() is not TypeTopic.
-func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.ExchangeParams, policy pubexchange.ExchangePolicy) error {
+func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
 	if params.Type() != pubexchange.TypeTopic {
 		return pubexchange.ErrTypeMismatch
 	}
@@ -60,7 +60,7 @@ func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.ExchangePa
 func (ts *TopicStore) BindQueue(
 	ctx context.Context,
 	queueParams *queue.Params,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	pattern string,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -138,7 +138,7 @@ func (ts *TopicStore) BindQueue(
 func (ts *TopicStore) UnbindQueue(
 	ctx context.Context,
 	queueParams *queue.Params,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	pattern string,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -235,7 +235,7 @@ func (ts *TopicStore) UnbindQueue(
 // It validates that the exchange is a topic exchange before matching.
 func (ts *TopicStore) MatchQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	routingKey string,
 ) ([]queue.Params, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
@@ -282,7 +282,7 @@ func (ts *TopicStore) MatchQueues(
 // It validates that the exchange is a topic exchange.
 func (ts *TopicStore) Patterns(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) ([]string, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
@@ -294,7 +294,7 @@ func (ts *TopicStore) Patterns(
 // It validates that the exchange is a topic exchange.
 func (ts *TopicStore) BoundQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	pattern string,
 ) ([]queue.Params, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
@@ -307,7 +307,7 @@ func (ts *TopicStore) BoundQueues(
 // It validates that the exchange is a topic exchange.
 func (ts *TopicStore) Bindings(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) (map[string][]queue.Params, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
@@ -331,7 +331,7 @@ func (ts *TopicStore) Bindings(
 
 // Delete removes a topic exchange and all pattern bindings.
 // Returns error if any patterns have bound queues.
-func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *pubexchange.ExchangeParams) error {
+func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *pubexchange.Params) error {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),
@@ -395,7 +395,7 @@ func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *pubexchange.Ex
 // Assumes caller has already validated exchange type.
 func (ts *TopicStore) patterns(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 ) ([]string, error) {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
@@ -408,7 +408,7 @@ func (ts *TopicStore) patterns(
 // Assumes caller has already validated exchange type.
 func (ts *TopicStore) boundQueues(
 	ctx context.Context,
-	exchangeParams *pubexchange.ExchangeParams,
+	exchangeParams *pubexchange.Params,
 	pattern string,
 ) ([]queue.Params, error) {
 	exKey := keys.Exchange{

@@ -80,13 +80,10 @@ func (p *RateLimitParams) Interval() time.Duration {
 	return p.interval
 }
 
-// MarshalJSON implements custom JSON marshaling for TypeScript compatibility.
-// The interval is serialized as milliseconds.
-func (p *RateLimitParams) MarshalJSON() ([]byte, error) {
-	if p == nil {
-		return json.Marshal(nil)
-	}
-
+// MarshalJSON implements custom JSON marshaling for cross-language compatibility.
+// It uses a value receiver so that both RateLimitParams values and pointers
+// implement json.Marshaler.
+func (p RateLimitParams) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
 		Limit    int   `json:"limit"`
 		Interval int64 `json:"interval"`

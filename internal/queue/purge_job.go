@@ -35,7 +35,7 @@ func start(ctx context.Context, jobID, workerID string, job *publicqueue.PurgeJo
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
 			jobID, workerID, mustMarshal(job),
-			publicqueue.PurgeJobPending.String(), publicqueue.PurgeJobProcessing.String(),
+			(publicqueue.PurgeJobPending).String(), publicqueue.PurgeJobProcessing.String(),
 			publicqueue.PurgeJobCompleted.String(), publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 		},
 		"start",
