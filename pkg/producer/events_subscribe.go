@@ -136,13 +136,13 @@ func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (eventbus.
 		}
 
 		var messageID string
-		var queue queue.Params
+		var queueParams queue.Params
 		var producerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queue); err != nil {
+		if err := decodeArg(args[1], &queueParams); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &producerID); err != nil {
@@ -151,7 +151,7 @@ func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (eventbus.
 
 		handler(MessagePublishedPayload{
 			MessageID:  messageID,
-			Queue:      queue,
+			Queue:      queueParams,
 			ProducerID: producerID,
 		})
 	}, EventMessagePublished)
