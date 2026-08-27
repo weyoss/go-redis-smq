@@ -19,15 +19,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
 )
 
 // RedisProcess manages a real Redis server for integration tests.
 type RedisProcess struct {
-	cmd  *exec.Cmd
-	port int
-	addr string
+	cmd    *exec.Cmd
+	port   int
+	addr   string
+	client *goredis.Client
 }
 
 // Global lock to ensure only one Redis process is started at a time across all test packages.
@@ -44,17 +45,13 @@ func StartRedisProcess() (*RedisProcess, error) {
 		return nil, fmt.Errorf("no free port: %w", err)
 	}
 
-	//log.Printf("testutil: finding Redis binary...")
 	redisBinary, err := findOrDownloadRedis()
 	if err != nil {
 		return nil, fmt.Errorf("redis binary: %w", err)
 	}
-	//log.Printf("testutil: using Redis binary: %s", redisBinary)
 
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
-	//log.Printf("testutil: starting Redis on %s...", addr)
 
-	// Use a unique data directory per process to avoid conflicts
 	dataDir := filepath.Join(os.TempDir(), fmt.Sprintf("redis-smq-test-%d-%d", os.Getpid(), port))
 	os.MkdirAll(dataDir, 0700)
 
@@ -78,44 +75,48 @@ func StartRedisProcess() (*RedisProcess, error) {
 		return nil, fmt.Errorf("redis-server start: %w", err)
 	}
 
-	//log.Println("testutil: waiting for Redis to be ready...")
 	if !waitForReady(stdout, 10*time.Second) {
 		cmd.Process.Kill()
 		os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis-server failed to start within timeout")
 	}
-	//log.Println("testutil: Redis is ready")
 
-	ctx := context.Background()
-	if err := internalredis.Init(ctx, redis.Options{Addr: addr}); err != nil {
+	client := goredis.NewClient(&goredis.Options{Addr: addr})
+	if err := internalredis.Init(context.Background(), client); err != nil {
+		_ = client.Close()
 		cmd.Process.Kill()
 		os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis init: %w", err)
 	}
 
 	return &RedisProcess{
-		cmd:  cmd,
-		port: port,
-		addr: addr,
+		cmd:    cmd,
+		port:   port,
+		addr:   addr,
+		client: client,
 	}, nil
 }
 
-// Close stops the Redis server and cleans up the client.
+// Close stops the Redis server and cleans up the client and temporary files.
 func (rp *RedisProcess) Close() {
-	//log.Printf("testutil: stopping Redis on %s...", rp.addr)
-
-	// Close the Redis client pool first to release connections.
+	// Clear the internal singleton references first.
 	internalredis.Close()
 
+	// Close the Redis client we created.
+	if rp.client != nil {
+		_ = rp.client.Close()
+		rp.client = nil
+	}
+
 	// Kill the Redis process.
-	rp.cmd.Process.Kill()
-	rp.cmd.Wait()
+	if rp.cmd != nil && rp.cmd.Process != nil {
+		_ = rp.cmd.Process.Kill()
+		_ = rp.cmd.Wait()
+	}
 
 	// Clean up the data directory.
 	dataDir := filepath.Join(os.TempDir(), fmt.Sprintf("redis-smq-test-%d-%d", os.Getpid(), rp.port))
-	os.RemoveAll(dataDir)
-
-	//log.Println("testutil: Redis stopped")
+	_ = os.RemoveAll(dataDir)
 }
 
 // Addr returns the Redis server address.

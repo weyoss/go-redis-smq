@@ -46,13 +46,18 @@ import (
     "context"
     "log"
 
-    "github.com/redis/go-redis/v9"
+    goredis "github.com/redis/go-redis/v9"
     "github.com/weyoss/go-redis-smq"
 )
 
 func main() {
     ctx := context.Background()
-    if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
+
+    // Create a Redis client. Cluster/ring clients are not supported.
+    rdb := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:6379"})
+    defer rdb.Close()
+
+    if err := redissmq.Init(ctx, rdb); err != nil {
         log.Fatal(err)
     }
     defer redissmq.Shutdown()
@@ -127,10 +132,10 @@ Use the root package to create concrete implementations behind the public interf
 
 | Factory                              | Returns                      |
 |--------------------------------------|------------------------------|
-| `redissmq.NewQueueManager()`         | `queue.QueueManager`         |
+| `redissmq.NewQueueManager()`         | `queue.Manager`              |
 | `redissmq.NewStateManager()`         | `queue.StateManager`         |
 | `redissmq.NewConsumerGroupManager()` | `queue.ConsumerGroupManager` |
-| `redissmq.NewMessageManager()`       | `message.MessageManager`     |
+| `redissmq.NewMessageManager()`       | `message.Manager`            |
 | `redissmq.NewExchangeManager()`      | `exchange.Manager`           |
 | `redissmq.NewDirectExchange()`       | `exchange.DirectExchange`    |
 | `redissmq.NewFanoutExchange()`       | `exchange.FanoutExchange`    |

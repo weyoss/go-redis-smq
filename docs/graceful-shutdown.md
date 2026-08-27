@@ -4,11 +4,17 @@ RedisSMQ handles shutdowns without losing messages. In‑flight messages are rec
 
 ## System Shutdown
 
+RedisSMQ does not own the Redis client; you provide it when calling `redissmq.Init`. After `Shutdown()`, RedisSMQ releases internal references to the client, but it does **not** close it. You are responsible for closing the client when your application is completely finished with Redis.
+
 ```go
 func main() {
     ctx := context.Background()
 
-    if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
+    // Create a single-node Redis client.
+    rdb := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:6379"})
+    defer rdb.Close() // close AFTER RedisSMQ shutdown
+
+    if err := redissmq.Init(ctx, rdb); err != nil {
         log.Fatal(err)
     }
     defer redissmq.Shutdown()
@@ -17,13 +23,15 @@ func main() {
 }
 ```
 
+Because `defer` executes in LIFO order, `redissmq.Shutdown()` runs before `rdb.Close()`, which is the correct sequence.
+
 `redissmq.Shutdown()` shuts down in order:
 
 1. All consumers — in‑flight messages returned to pending
 2. All producers — pending publishes complete
 3. Configuration manager
 4. Event buses (system and user, if started)
-5. Redis connections
+5. Internal Redis references (client remains open for the caller)
 
 ## Individual Shutdown
 
@@ -42,7 +50,10 @@ func main() {
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
+    rdb := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:6379"})
+    defer rdb.Close()
+
+    if err := redissmq.Init(ctx, rdb); err != nil {
         log.Fatal(err)
     }
     defer redissmq.Shutdown()
@@ -71,11 +82,12 @@ No messages are lost.
 
 ## Best Practices
 
-- Use `defer redissmq.Shutdown()` in `main()`
-- Handle OS signals for graceful shutdown
-- Don’t force exit — let cleanup complete
-- Shut down RedisSMQ before closing Redis connections
+- Use `defer redissmq.Shutdown()` **before** `defer rdb.Close()` so RedisSMQ releases internal resources first.
+- Handle OS signals for graceful shutdown.
+- Don’t force exit — let cleanup complete.
+- Shut down RedisSMQ before closing the Redis client.
 - If you started the public event bus with `redissmq.InitUserEventBus(ctx)`, it is automatically stopped by `redissmq.Shutdown()`; you do not need to call `redissmq.ShutdownUserEventBus()` separately unless you want to stop it earlier.
+- Do not use cluster or ring clients; RedisSMQ requires a single-node Redis client.
 
 ## Related
 

@@ -18,10 +18,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
-	msg "github.com/weyoss/go-redis-smq/pkg/message"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -42,7 +42,12 @@ func main() {
 	}
 
 	ctx := context.Background()
-	if err := redissmq.Init(ctx, redis.Options{Addr: addr}); err != nil {
+
+	// Create a single-node Redis client.
+	rdb := goredis.NewClient(&goredis.Options{Addr: addr})
+	defer rdb.Close()
+
+	if err := redissmq.Init(ctx, rdb); err != nil {
 		log.Fatal(err)
 	}
 	defer redissmq.Shutdown()
@@ -50,7 +55,7 @@ func main() {
 	params := queue.MustQueueParamsWithNS(queueName, queueNS)
 
 	cons := redissmq.NewConsumer(consumer.WithHeartbeatTTL(hbTTL))
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		log.Printf("crash consumer: received %s", m.ID)
 		// Block until externally killed to simulate a crash.
 		ch := make(chan os.Signal, 1)

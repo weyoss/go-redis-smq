@@ -10,9 +10,6 @@
 
 // Package redis provides the Redis client singleton and shared utilities
 // for hash, set, and transaction operations.
-//
-// This file contains the Redis client singleton — the single point of
-// configuration and connection management for the entire application.
 package redis
 
 import (
@@ -21,34 +18,38 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 )
 
 // Hook is a callback interface for observing or intercepting Redis commands.
-// Use it for logging, metrics, or tracing.
 type Hook interface {
-	redis.Hook
+	goredis.Hook
 }
 
-// Singleton state
 var (
-	client    atomic.Pointer[redis.Client]
+	client    atomic.Pointer[goredis.Client]
 	scriptMgr atomic.Pointer[scripts.ScriptManager]
 	mu        sync.Mutex
 )
 
-// Init creates the shared Redis client, verifies connectivity, and loads
-// all Lua scripts into Redis. Safe to call multiple times; returns immediately
-// if already initialized. If a previous call failed, retries initialization.
-// Panics if addr is empty.
-func Init(ctx context.Context, cfg redis.Options) error {
-	if cfg.Addr == "" {
-		panic("redis: addr is required")
+// Init sets the shared Redis client, verifies connectivity, and loads all
+// Lua scripts into Redis.
+//
+// The provided client must be a *goredis.Client. Cluster and ring clients are
+// rejected because RedisSMQ uses multi-key Lua scripts that require all keys
+// to reside on a single Redis node.
+//
+// Safe to call multiple times; returns immediately if already initialized.
+// If a previous call failed, retries initialization.
+func Init(ctx context.Context, incoming goredis.UniversalClient) error {
+	c, ok := incoming.(*goredis.Client)
+	if !ok {
+		return fmt.Errorf("redis: only *redis.Client is supported; cluster and ring clients are not allowed")
 	}
 
 	// Fast path: already successfully initialized
-	if c := client.Load(); c != nil {
+	if current := client.Load(); current != nil {
 		return nil
 	}
 
@@ -56,18 +57,17 @@ func Init(ctx context.Context, cfg redis.Options) error {
 	defer mu.Unlock()
 
 	// Double-check after acquiring lock
-	if c := client.Load(); c != nil {
+	if current := client.Load(); current != nil {
 		return nil
 	}
 
-	c, err := dial(ctx, cfg)
-	if err != nil {
-		return err
+	// Verify connectivity
+	if err := c.Ping(ctx).Err(); err != nil {
+		return fmt.Errorf("redis: connect failed: %w", err)
 	}
 
 	sm := scripts.NewScriptManager(c)
 	if err := sm.RegisterAll(ctx); err != nil {
-		_ = c.Close()
 		return fmt.Errorf("redis: %w", err)
 	}
 
@@ -78,7 +78,7 @@ func Init(ctx context.Context, cfg redis.Options) error {
 
 // Client returns the shared Redis client.
 // Panics if Init has not been called.
-func Client() *redis.Client {
+func Client() *goredis.Client {
 	c := client.Load()
 	if c == nil {
 		panic("redis: not initialized — call redis.Init() during bootstrap")
@@ -96,22 +96,22 @@ func Eval(ctx context.Context, id scripts.ID, keys []string, args ...interface{}
 	return sm.Eval(ctx, id, keys, args...)
 }
 
-// Close shuts down the shared Redis client and releases all pool connections.
-// After Close, Client() and Eval() will panic. Safe to call multiple times.
-// After Close, Init() can be called again to reinitialize.
+// Close clears the shared Redis client and script manager references.
+//
+// It does NOT close the Redis client itself, because the client is now
+// owned by the caller (the user who provided it to Init). After Close,
+// Client() and Eval() will panic. Safe to call multiple times.
+// After Close, Init() can be called again with a new client.
 func Close() {
 	mu.Lock()
 	defer mu.Unlock()
 
 	scriptMgr.Swap(nil)
-	c := client.Swap(nil)
-	if c != nil {
-		_ = c.Close()
-	}
+	client.Swap(nil)
 }
 
 // Stats returns connection pool statistics for health checks and monitoring.
-func Stats() *redis.PoolStats {
+func Stats() *goredis.PoolStats {
 	return Client().PoolStats()
 }
 
@@ -121,15 +121,7 @@ func AddHook(hook Hook) {
 	Client().AddHook(hook)
 }
 
-// dial creates a new Redis client and verifies connectivity.
-func dial(ctx context.Context, cfg redis.Options) (*redis.Client, error) {
-	c := redis.NewClient(&cfg)
-	if err := c.Ping(ctx).Err(); err != nil {
-		return nil, fmt.Errorf("redis: connect failed: %w", err)
-	}
-	return c, nil
-}
-
-func Conn() *redis.Conn {
+// Conn returns a new connection from the shared client.
+func Conn() *goredis.Conn {
 	return Client().Conn()
 }

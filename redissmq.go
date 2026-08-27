@@ -24,7 +24,8 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
+
 	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
@@ -91,16 +92,24 @@ func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interfa
 	return sub, nil
 }
 
-// Init initializes the RedisSMQ runtime.
+// Init initializes the RedisSMQ runtime with the given Redis client.
 //
-// It connects to Redis, starts the internal system event bus, loads the
+// The client must be a single-node Redis client (*redis.Client). Cluster and
+// ring clients are rejected because RedisSMQ relies on multi-key Lua scripts
+// that require all keys to reside on a single Redis node.
+//
+// It starts the internal system event bus, loads the
 // configuration, and launches background workers (such as the queue purge
 // worker). The provided context is used as the parent for all internal
 // operations; cancelling it triggers a graceful shutdown.
 //
 // Init is idempotent and can be called multiple times; subsequent calls
 // are no-ops.
-func Init(ctx context.Context, cfg redis.Options) error {
+func Init(ctx context.Context, client goredis.UniversalClient) error {
+	if _, ok := client.(*goredis.Client); !ok {
+		return fmt.Errorf("redissmq: only *redis.Client is supported; cluster and ring clients are not allowed")
+	}
+
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
 
@@ -108,7 +117,7 @@ func Init(ctx context.Context, cfg redis.Options) error {
 		return nil
 	}
 
-	if err := internalredis.Init(ctx, cfg); err != nil {
+	if err := internalredis.Init(ctx, client); err != nil {
 		return fmt.Errorf("redissmq: redis init failed: %w", err)
 	}
 
@@ -153,9 +162,12 @@ func ShutdownUserEventBus() {
 // Shutdown gracefully stops the RedisSMQ runtime.
 //
 // It stops the purge worker, shuts down all registered consumers and
-// producers, stops the event buses, releases the configuration, and closes
-// the Redis client. Shutdown is safe to call multiple times and may be
-// followed by another Init to restart the runtime.
+// producers, stops the event buses, releases the configuration, and clears
+// internal Redis references. The Redis client itself is not closed; the
+// caller remains responsible for closing it.
+//
+// Shutdown is safe to call multiple times and may be followed by another
+// Init to restart the runtime.
 func Shutdown() {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()

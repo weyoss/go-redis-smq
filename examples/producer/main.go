@@ -26,8 +26,10 @@ import (
 func main() {
 	ctx := context.Background()
 
-	// Initialize
-	if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
+	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
+	defer rdb.Close()
+
+	if err := redissmq.Init(ctx, rdb); err != nil {
 		log.Fatalf("init: %v", err)
 	}
 	defer redissmq.Shutdown()

@@ -10,6 +10,8 @@ go get github.com/weyoss/go-redis-smq
 
 ## 2. Initialize
 
+RedisSMQ requires a single-node Redis client. Cluster and ring clients are not supported because RedisSMQ relies on multi‑key Lua scripts.
+
 ```go
 package main
 
@@ -17,14 +19,18 @@ import (
 	"context"
 	"log"
 
-	"github.com/redis/go-redis/v9"
+	goredis "github.com/redis/go-redis/v9"
 	"github.com/weyoss/go-redis-smq"
 )
 
 func main() {
 	ctx := context.Background()
 
-	if err := redissmq.Init(ctx, redis.Options{Addr: "127.0.0.1:6379"}); err != nil {
+	// Create a Redis client (single-node only).
+	rdb := goredis.NewClient(&goredis.Options{Addr: "127.0.0.1:6379"})
+	defer rdb.Close()
+
+	if err := redissmq.Init(ctx, rdb); err != nil {
 		log.Fatal(err)
 	}
 	defer redissmq.Shutdown()
@@ -84,7 +90,7 @@ defer consumer.Shutdown()
 
 ```go
 // Shutdown is called via defer in step 2
-// redissmq.Shutdown() handles producers, consumers, and connections
+// redissmq.Shutdown() handles producers, consumers, and connections.
 ```
 
 ## Next Steps
