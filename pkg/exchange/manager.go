@@ -36,14 +36,14 @@ type Manager interface {
 	// ValidateBinding checks whether a queue can be bound to this exchange.
 	// Returns the exchange properties if the exchange exists, nil if it doesn't exist yet.
 	// Validates exchange type compatibility and queue policy constraints.
-	ValidateBinding(ctx context.Context, params *ExchangeParams, queueParams *queue.QueueParams) (*ExchangeProps, error)
+	ValidateBinding(ctx context.Context, params *ExchangeParams, queueParams *queue.Params) (*ExchangeProps, error)
 
 	// Delete removes an exchange and all its queue bindings.
 	// For direct/topic exchanges, also removes routing keys and pattern bindings.
 	Delete(ctx context.Context, params *ExchangeParams) error
 
 	// ListByQueue returns all exchanges bound to a specific queue.
-	ListByQueue(ctx context.Context, queueParams *queue.QueueParams) ([]ExchangeParams, error)
+	ListByQueue(ctx context.Context, queueParams *queue.Params) ([]ExchangeParams, error)
 
 	// ListAll returns every exchange across all namespaces.
 	ListAll(ctx context.Context) ([]ExchangeParams, error)

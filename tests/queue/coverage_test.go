@@ -29,16 +29,16 @@ func TestQueue_TypeStringAndIsValid(t *testing.T) {
 	if publicqueue.TypePriority.String() != "priority" {
 		t.Errorf("TypePriority.String() = %q", publicqueue.TypePriority.String())
 	}
-	if publicqueue.QueueType(99).String() != "unknown" {
-		t.Errorf("invalid type string = %q", publicqueue.QueueType(99).String())
+	if publicqueue.Type(99).String() != "unknown" {
+		t.Errorf("invalid type string = %q", publicqueue.Type(99).String())
 	}
 
-	for _, typ := range []publicqueue.QueueType{publicqueue.TypeFIFO, publicqueue.TypeLIFO, publicqueue.TypePriority} {
+	for _, typ := range []publicqueue.Type{publicqueue.TypeFIFO, publicqueue.TypeLIFO, publicqueue.TypePriority} {
 		if !typ.IsValid() {
 			t.Errorf("%v should be valid", typ)
 		}
 	}
-	if publicqueue.QueueType(99).IsValid() {
+	if publicqueue.Type(99).IsValid() {
 		t.Error("invalid type should not be valid")
 	}
 }
@@ -112,7 +112,7 @@ func TestQueue_PurgeJobQueueParams(t *testing.T) {
 		Payload: publicqueue.PurgeJobPayload{Queue: queueParams},
 	}
 	if job.QueueParams() != queueParams {
-		t.Error("QueueParams returned unexpected value")
+		t.Error("Params returned unexpected value")
 	}
 }
 

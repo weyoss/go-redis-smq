@@ -29,17 +29,17 @@ type Consumer interface {
 	IsRunning() bool
 
 	// Consume registers a handler for a queue.
-	Consume(queue *queue.QueueParams, handler Handler) Consumer
+	Consume(queue *queue.Params, handler Handler) Consumer
 
 	// ConsumeWithGroup registers a handler for a Pub/Sub queue and consumer
 	// group.
-	ConsumeWithGroup(queue *queue.QueueParams, groupID string, handler Handler) Consumer
+	ConsumeWithGroup(queue *queue.Params, groupID string, handler Handler) Consumer
 
 	// Cancel removes a handler from a queue.
-	Cancel(queue *queue.QueueParams) Consumer
+	Cancel(queue *queue.Params) Consumer
 
 	// CancelWithGroup removes a handler from a consumer group.
-	CancelWithGroup(queue *queue.QueueParams, groupID string) Consumer
+	CancelWithGroup(queue *queue.Params, groupID string) Consumer
 
 	// Run starts the consumer and all registered handlers.
 	Run(ctx context.Context) error
@@ -48,5 +48,5 @@ type Consumer interface {
 	Shutdown()
 
 	// Queues returns the queue parameters of all registered handlers.
-	Queues() []*queue.QueueParams
+	Queues() []*queue.Params
 }

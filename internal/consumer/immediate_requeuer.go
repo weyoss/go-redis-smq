@@ -27,14 +27,14 @@ import (
 )
 
 type ImmediateRequeuer struct {
-	queue      *queue.QueueParams
+	queue      *queue.Params
 	groupID    string
 	consumerID string
 	interval   time.Duration
 	log        *slog.Logger
 }
 
-func NewImmediateRequeuer(queue *queue.QueueParams, groupID, consumerID string) *ImmediateRequeuer {
+func NewImmediateRequeuer(queue *queue.Params, groupID, consumerID string) *ImmediateRequeuer {
 	return &ImmediateRequeuer{
 		queue:      queue,
 		groupID:    groupID,

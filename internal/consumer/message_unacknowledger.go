@@ -37,13 +37,13 @@ type UnackEntry struct {
 
 // MessageUnacknowledger handles unacknowledging messages for a consumer.
 type MessageUnacknowledger struct {
-	queue      *queue.QueueParams
+	queue      *queue.Params
 	consumerID string
 	log        *slog.Logger
 }
 
 // NewMessageUnacknowledger creates a new unacknowledger.
-func NewMessageUnacknowledger(queue *queue.QueueParams, consumerID string) *MessageUnacknowledger {
+func NewMessageUnacknowledger(queue *queue.Params, consumerID string) *MessageUnacknowledger {
 	return &MessageUnacknowledger{
 		queue:      queue,
 		consumerID: consumerID,

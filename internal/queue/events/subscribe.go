@@ -40,8 +40,8 @@ func SubscribeCreated(handler func(CreatedPayload)) (*eventbus.Subscription, err
 		if len(args) < 2 {
 			return
 		}
-		var queue publicqueue.QueueParams
-		var props publicqueue.QueueProps
+		var queue publicqueue.Params
+		var props publicqueue.Props
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -59,7 +59,7 @@ func SubscribeDeleted(handler func(DeletedPayload)) (*eventbus.Subscription, err
 		if len(args) < 1 {
 			return
 		}
-		var queue publicqueue.QueueParams
+		var queue publicqueue.Params
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -74,7 +74,7 @@ func SubscribeStateChanged(handler func(StateChangedPayload)) (*eventbus.Subscri
 		if len(args) < 2 {
 			return
 		}
-		var queue publicqueue.QueueParams
+		var queue publicqueue.Params
 		var transition publicqueue.StateTransition
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -93,7 +93,7 @@ func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (*
 		if len(args) < 2 {
 			return
 		}
-		var queue publicqueue.QueueParams
+		var queue publicqueue.Params
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -112,7 +112,7 @@ func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (*
 		if len(args) < 2 {
 			return
 		}
-		var queue publicqueue.QueueParams
+		var queue publicqueue.Params
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return

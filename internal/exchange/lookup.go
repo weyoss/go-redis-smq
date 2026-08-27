@@ -59,7 +59,7 @@ func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]pubexchan
 
 // ByQueue returns all exchanges bound to a specific queue.
 // Reads from the queue's exchange bindings set.
-func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.QueueParams) ([]pubexchange.ExchangeParams, error) {
+func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.Params) ([]pubexchange.ExchangeParams, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

@@ -35,7 +35,7 @@ type unackEntry struct {
 // into a single Redis Lua script call when batch mode is enabled.
 type BatchUnacker struct {
 	mu             sync.Mutex
-	queue          *queue.QueueParams
+	queue          *queue.Params
 	groupID        string
 	consumerID     string
 	cfg            consumer.BatchConfig
@@ -49,7 +49,7 @@ type BatchUnacker struct {
 }
 
 // NewBatchUnacker creates a new batch unacknowledger.
-func NewBatchUnacker(queue *queue.QueueParams, groupID, consumerID string, cfg consumer.BatchConfig) *BatchUnacker {
+func NewBatchUnacker(queue *queue.Params, groupID, consumerID string, cfg consumer.BatchConfig) *BatchUnacker {
 	return &BatchUnacker{
 		queue:          queue,
 		groupID:        groupID,

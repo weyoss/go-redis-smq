@@ -25,13 +25,13 @@ import (
 )
 
 type OrphanedLockRecoverer struct {
-	queue      *queue.QueueParams
+	queue      *queue.Params
 	consumerID string
 	interval   time.Duration
 	log        *slog.Logger
 }
 
-func NewOrphanedLockRecoverer(q *queue.QueueParams, consumerID string) *OrphanedLockRecoverer {
+func NewOrphanedLockRecoverer(q *queue.Params, consumerID string) *OrphanedLockRecoverer {
 	return &OrphanedLockRecoverer{
 		queue:      q,
 		consumerID: consumerID,

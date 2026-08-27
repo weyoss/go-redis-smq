@@ -43,7 +43,7 @@ type LifecyclePayload struct {
 //
 //	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
 type MessagePublishedPayload struct {
-	MessageID  string            `json:"messageId"`
-	Queue      queue.QueueParams `json:"queue"`
-	ProducerID string            `json:"producerId"`
+	MessageID  string       `json:"messageId"`
+	Queue      queue.Params `json:"queue"`
+	ProducerID string       `json:"producerId"`
 }

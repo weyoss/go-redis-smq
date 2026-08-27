@@ -18,8 +18,8 @@ import (
 
 // Codecs holds codec instances for queue serialization.
 type Codecs struct {
-	Params codec.SetCodec[*publicqueue.QueueParams]
-	Props  codec.HashCodec[*publicqueue.QueueProps]
+	Params codec.SetCodec[*publicqueue.Params]
+	Props  codec.HashCodec[*publicqueue.Props]
 }
 
 // DefaultCodecs returns the standard TypeScript-compatible codecs.

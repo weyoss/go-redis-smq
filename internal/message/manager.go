@@ -22,8 +22,8 @@ type Manager struct {
 }
 
 // NewManager creates a new internal message manager that satisfies the
-// public message.MessageManager interface.
-func NewManager() publicmessage.MessageManager {
+// public message.Manager interface.
+func NewManager() publicmessage.Manager {
 	return &Manager{
 		store: NewStore(NewEnvelopeCodec(), NewStateCodec()),
 	}

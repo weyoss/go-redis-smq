@@ -239,7 +239,7 @@ func TestComplex_SchedulingMultipleQueueTypes(t *testing.T) {
 
 	// Verify all queues have scheduled messages
 	qm := redissmq.NewQueueManager()
-	for _, qp := range []*publicqueue.QueueParams{fifoQ, lifoQ, prioQ} {
+	for _, qp := range []*publicqueue.Params{fifoQ, lifoQ, prioQ} {
 		props, err := qm.Properties(ctx, qp)
 		if err != nil {
 			t.Fatalf("properties %s: %v", qp.Name(), err)

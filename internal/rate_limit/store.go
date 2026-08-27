@@ -35,7 +35,7 @@ func (s *Store) Codec() *RateLimitCodec {
 	return s.codec
 }
 
-func (s *Store) Set(ctx context.Context, queueParams *publicqueue.QueueParams, rl *publicqueue.RateLimitParams) error {
+func (s *Store) Set(ctx context.Context, queueParams *publicqueue.Params, rl *publicqueue.RateLimitParams) error {
 	queueKeys := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -79,7 +79,7 @@ func (s *Store) Set(ctx context.Context, queueParams *publicqueue.QueueParams, r
 	}
 }
 
-func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.Params) error {
 	queueKeys := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -120,7 +120,7 @@ func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.QueueParams)
 	}
 }
 
-func (s *Store) Get(ctx context.Context, queueParams *publicqueue.QueueParams) (*publicqueue.RateLimitParams, error) {
+func (s *Store) Get(ctx context.Context, queueParams *publicqueue.Params) (*publicqueue.RateLimitParams, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

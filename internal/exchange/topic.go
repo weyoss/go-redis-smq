@@ -32,7 +32,7 @@ type TopicStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*queue.QueueParams]
+	queueCodec codec.SetCodec[*queue.Params]
 }
 
 // NewTopicStore creates a new topic exchange store.
@@ -59,7 +59,7 @@ func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.ExchangePa
 // The queue and exchange must be in the same namespace.
 func (ts *TopicStore) BindQueue(
 	ctx context.Context,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
 ) error {
@@ -137,7 +137,7 @@ func (ts *TopicStore) BindQueue(
 // The queue and exchange must be in the same namespace.
 func (ts *TopicStore) UnbindQueue(
 	ctx context.Context,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
 ) error {
@@ -237,7 +237,7 @@ func (ts *TopicStore) MatchQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
@@ -259,7 +259,7 @@ func (ts *TopicStore) MatchQueues(
 	}
 
 	seen := make(map[string]bool)
-	var queues []queue.QueueParams
+	var queues []queue.Params
 
 	for _, pattern := range matchedPatterns {
 		bound, err := ts.boundQueues(ctx, exchangeParams, pattern)
@@ -296,7 +296,7 @@ func (ts *TopicStore) BoundQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
@@ -308,7 +308,7 @@ func (ts *TopicStore) BoundQueues(
 func (ts *TopicStore) Bindings(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
-) (map[string][]queue.QueueParams, error) {
+) (map[string][]queue.Params, error) {
 	if err := ts.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
@@ -318,7 +318,7 @@ func (ts *TopicStore) Bindings(
 		return nil, err
 	}
 
-	bindings := make(map[string][]queue.QueueParams, len(patterns))
+	bindings := make(map[string][]queue.Params, len(patterns))
 	for _, pattern := range patterns {
 		queues, err := ts.boundQueues(ctx, exchangeParams, pattern)
 		if err != nil {
@@ -410,7 +410,7 @@ func (ts *TopicStore) boundQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
 	pattern string,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	exKey := keys.Exchange{
 		Namespace: exchangeParams.Namespace(),
 		Name:      exchangeParams.Name(),

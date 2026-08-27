@@ -22,7 +22,7 @@ import (
 )
 
 type ReapConsumers struct {
-	queue      *queue.QueueParams
+	queue      *queue.Params
 	groupID    string
 	consumerID string
 	interval   time.Duration
@@ -30,7 +30,7 @@ type ReapConsumers struct {
 	log        *slog.Logger
 }
 
-func NewReapConsumers(queue *queue.QueueParams, groupID, consumerID string) *ReapConsumers {
+func NewReapConsumers(queue *queue.Params, groupID, consumerID string) *ReapConsumers {
 	return &ReapConsumers{
 		queue:      queue,
 		groupID:    groupID,

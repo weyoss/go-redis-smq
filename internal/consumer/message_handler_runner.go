@@ -26,7 +26,7 @@ type MessageHandlerRunner struct {
 }
 
 type handlerConfig struct {
-	queue   *publicqueue.QueueParams
+	queue   *publicqueue.Params
 	groupID string
 	handler Handler
 }
@@ -39,7 +39,7 @@ func NewMessageHandlerRunner(consumerID string, options *publicconsumer.Options)
 	}
 }
 
-func (r *MessageHandlerRunner) AddHandler(queue *publicqueue.QueueParams, groupID string, handler Handler) {
+func (r *MessageHandlerRunner) AddHandler(queue *publicqueue.Params, groupID string, handler Handler) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -67,7 +67,7 @@ func (r *MessageHandlerRunner) AddHandler(queue *publicqueue.QueueParams, groupI
 	})
 }
 
-func (r *MessageHandlerRunner) RemoveHandler(queue *publicqueue.QueueParams, groupID string) {
+func (r *MessageHandlerRunner) RemoveHandler(queue *publicqueue.Params, groupID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -173,7 +173,7 @@ func (r *MessageHandlerRunner) shutdownLocked() {
 	r.log.Debug("message handler runner shut down complete")
 }
 
-func (r *MessageHandlerRunner) StopHandler(queue *publicqueue.QueueParams, groupID string) bool {
+func (r *MessageHandlerRunner) StopHandler(queue *publicqueue.Params, groupID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -190,7 +190,7 @@ func (r *MessageHandlerRunner) StopHandler(queue *publicqueue.QueueParams, group
 	return false
 }
 
-func (r *MessageHandlerRunner) StartHandler(queue *publicqueue.QueueParams, groupID string) bool {
+func (r *MessageHandlerRunner) StartHandler(queue *publicqueue.Params, groupID string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -225,11 +225,11 @@ func (r *MessageHandlerRunner) StartHandler(queue *publicqueue.QueueParams, grou
 	return true
 }
 
-func (r *MessageHandlerRunner) Queues() []*publicqueue.QueueParams {
+func (r *MessageHandlerRunner) Queues() []*publicqueue.Params {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
-	queues := make([]*publicqueue.QueueParams, 0, len(r.handlers))
+	queues := make([]*publicqueue.Params, 0, len(r.handlers))
 	for _, h := range r.handlers {
 		queues = append(queues, h.queue)
 	}
@@ -256,7 +256,7 @@ func (r *MessageHandlerRunner) HandlerCount() (total, active, stopped, paused, l
 }
 
 // isQueueActive checks the queue operational state using the internal queue manager.
-func (r *MessageHandlerRunner) isQueueActive(ctx context.Context, queue *publicqueue.QueueParams) bool {
+func (r *MessageHandlerRunner) isQueueActive(ctx context.Context, queue *publicqueue.Params) bool {
 	props, err := internalqueue.NewManager().Store().Load(ctx, queue)
 	if err != nil {
 		r.log.Debug("failed to get queue properties", "queue", queue.String(), "error", err)
@@ -267,17 +267,17 @@ func (r *MessageHandlerRunner) isQueueActive(ctx context.Context, queue *publicq
 
 // ── Queue state change callbacks ──
 
-func (r *MessageHandlerRunner) onQueueStopped(queue *publicqueue.QueueParams) {
+func (r *MessageHandlerRunner) onQueueStopped(queue *publicqueue.Params) {
 	r.log.Warn("queue stopped — stopping handlers", "queue", queue.String())
 	r.mu.RLock()
 	var toStop []struct {
-		queue   *publicqueue.QueueParams
+		queue   *publicqueue.Params
 		groupID string
 	}
 	for _, cfg := range r.handlers {
 		if cfg.queue.String() == queue.String() {
 			toStop = append(toStop, struct {
-				queue   *publicqueue.QueueParams
+				queue   *publicqueue.Params
 				groupID string
 			}{cfg.queue, cfg.groupID})
 		}
@@ -289,17 +289,17 @@ func (r *MessageHandlerRunner) onQueueStopped(queue *publicqueue.QueueParams) {
 	}
 }
 
-func (r *MessageHandlerRunner) onQueuePaused(queue *publicqueue.QueueParams) {
+func (r *MessageHandlerRunner) onQueuePaused(queue *publicqueue.Params) {
 	r.log.Warn("queue paused — stopping handlers", "queue", queue.String())
 	r.mu.RLock()
 	var toStop []struct {
-		queue   *publicqueue.QueueParams
+		queue   *publicqueue.Params
 		groupID string
 	}
 	for _, cfg := range r.handlers {
 		if cfg.queue.String() == queue.String() {
 			toStop = append(toStop, struct {
-				queue   *publicqueue.QueueParams
+				queue   *publicqueue.Params
 				groupID string
 			}{cfg.queue, cfg.groupID})
 		}
@@ -311,17 +311,17 @@ func (r *MessageHandlerRunner) onQueuePaused(queue *publicqueue.QueueParams) {
 	}
 }
 
-func (r *MessageHandlerRunner) onQueueLocked(queue *publicqueue.QueueParams) {
+func (r *MessageHandlerRunner) onQueueLocked(queue *publicqueue.Params) {
 	r.log.Warn("queue locked — stopping handlers", "queue", queue.String())
 	r.mu.RLock()
 	var toStop []struct {
-		queue   *publicqueue.QueueParams
+		queue   *publicqueue.Params
 		groupID string
 	}
 	for _, cfg := range r.handlers {
 		if cfg.queue.String() == queue.String() {
 			toStop = append(toStop, struct {
-				queue   *publicqueue.QueueParams
+				queue   *publicqueue.Params
 				groupID string
 			}{cfg.queue, cfg.groupID})
 		}
@@ -333,17 +333,17 @@ func (r *MessageHandlerRunner) onQueueLocked(queue *publicqueue.QueueParams) {
 	}
 }
 
-func (r *MessageHandlerRunner) onQueueActive(queue *publicqueue.QueueParams) {
+func (r *MessageHandlerRunner) onQueueActive(queue *publicqueue.Params) {
 	r.log.Info("queue active — starting handlers", "queue", queue.String())
 	r.mu.RLock()
 	var toStart []struct {
-		queue   *publicqueue.QueueParams
+		queue   *publicqueue.Params
 		groupID string
 	}
 	for _, cfg := range r.handlers {
 		if cfg.queue.String() == queue.String() {
 			toStart = append(toStart, struct {
-				queue   *publicqueue.QueueParams
+				queue   *publicqueue.Params
 				groupID string
 			}{cfg.queue, cfg.groupID})
 		}

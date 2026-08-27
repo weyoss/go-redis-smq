@@ -29,14 +29,14 @@ func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
 	return &ConsumerGroupManager{store: NewConsumerGroupStore()}
 }
 
-func (cgm *ConsumerGroupManager) Save(ctx context.Context, queueParams *publicqueue.QueueParams, groupID string) (int64, error) {
+func (cgm *ConsumerGroupManager) Save(ctx context.Context, queueParams *publicqueue.Params, groupID string) (int64, error) {
 	return cgm.store.Save(ctx, queueParams, groupID)
 }
 
-func (cgm *ConsumerGroupManager) Delete(ctx context.Context, queueParams *publicqueue.QueueParams, groupID string) error {
+func (cgm *ConsumerGroupManager) Delete(ctx context.Context, queueParams *publicqueue.Params, groupID string) error {
 	return cgm.store.Delete(ctx, queueParams, groupID)
 }
 
-func (cgm *ConsumerGroupManager) List(ctx context.Context, queueParams *publicqueue.QueueParams) ([]string, error) {
+func (cgm *ConsumerGroupManager) List(ctx context.Context, queueParams *publicqueue.Params) ([]string, error) {
 	return cgm.store.List(ctx, queueParams)
 }

@@ -29,7 +29,7 @@ type Manager interface {
 	Delete(ctx context.Context, name string) error
 
 	// ListQueues returns all queues in a namespace.
-	ListQueues(ctx context.Context, name string) ([]queue.QueueParams, error)
+	ListQueues(ctx context.Context, name string) ([]queue.Params, error)
 
 	// ListExchanges returns all exchanges in a namespace.
 	ListExchanges(ctx context.Context, name string) ([]exchange.ExchangeParams, error)

@@ -28,7 +28,7 @@ type DirectStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*queue.QueueParams]
+	queueCodec codec.SetCodec[*queue.Params]
 }
 
 func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectStore {
@@ -51,7 +51,7 @@ func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.ExchangeP
 
 func (ds *DirectStore) BindQueue(
 	ctx context.Context,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) error {
@@ -123,7 +123,7 @@ func (ds *DirectStore) BindQueue(
 
 func (ds *DirectStore) UnbindQueue(
 	ctx context.Context,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
 ) error {
@@ -217,7 +217,7 @@ func (ds *DirectStore) MatchQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
@@ -245,7 +245,7 @@ func (ds *DirectStore) BoundQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
 	routingKey string,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	if err := ds.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}
@@ -268,13 +268,13 @@ func (ds *DirectStore) BoundQueues(
 func (ds *DirectStore) Bindings(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
-) (map[string][]queue.QueueParams, error) {
+) (map[string][]queue.Params, error) {
 	routingKeys, err := ds.RoutingKeys(ctx, exchangeParams)
 	if err != nil {
 		return nil, err
 	}
 
-	bindings := make(map[string][]queue.QueueParams, len(routingKeys))
+	bindings := make(map[string][]queue.Params, len(routingKeys))
 	for _, rk := range routingKeys {
 		queues, err := ds.BoundQueues(ctx, exchangeParams, rk)
 		if err != nil {

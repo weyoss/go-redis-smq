@@ -13,7 +13,7 @@ import (
 // CreateQueue is a test helper that creates a queue using the internal
 // queue manager implementation. This is appropriate for internal test
 // utilities and avoids dependency on public convenience functions.
-func CreateQueue(tb testing.TB, ctx context.Context, params *publicqueue.QueueParams, queueType publicqueue.QueueType, deliveryModel publicqueue.DeliveryModel) {
+func CreateQueue(tb testing.TB, ctx context.Context, params *publicqueue.Params, queueType publicqueue.Type, deliveryModel publicqueue.DeliveryModel) {
 	tb.Helper()
 	qm := internalqueue.NewQueueManager()
 	if err := qm.Create(ctx, params, queueType, deliveryModel); err != nil {

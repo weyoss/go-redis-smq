@@ -65,10 +65,10 @@ sub, _ := queue.SubscribeCreated(func(p queue.CreatedPayload) {
 
 Payload:
 
-| Field          | Type                | Description                                   |
-|----------------|---------------------|-----------------------------------------------|
-| `p.Queue`      | `queue.QueueParams` | The queue that was created                    |
-| `p.Properties` | `queue.QueueProps`  | Queue properties (type, delivery model, etc.) |
+| Field          | Type           | Description                                   |
+|----------------|----------------|-----------------------------------------------|
+| `p.Queue`      | `queue.Params` | The queue that was created                    |
+| `p.Properties` | `queue.Props`  | Queue properties (type, delivery model, etc.) |
 
 #### `queue.queueDeleted`
 
@@ -82,9 +82,9 @@ sub, _ := queue.SubscribeDeleted(func(p queue.DeletedPayload) {
 
 Payload:
 
-| Field     | Type                |
-|-----------|---------------------|
-| `p.Queue` | `queue.QueueParams` |
+| Field     | Type           |
+|-----------|----------------|
+| `p.Queue` | `queue.Params` |
 
 #### `queue.stateChanged`
 
@@ -99,10 +99,10 @@ sub, _ := queue.SubscribeStateChanged(func(p queue.StateChangedPayload) {
 
 Payload:
 
-| Field          | Type                    |
-|----------------|-------------------------|
-| `p.Queue`      | `queue.QueueParams`     |
-| `p.Transition` | `queue.StateTransition` |
+| Field          | Type                     |
+|----------------|--------------------------|
+| `p.Queue`      | `queue.Params`           |
+| `p.Transition` | `queue.StateTransition`  |
 
 #### `queue.consumerGroupCreated`
 
@@ -116,10 +116,10 @@ sub, _ := queue.SubscribeConsumerGroupCreated(func(p queue.ConsumerGroupCreatedP
 
 Payload:
 
-| Field       | Type                |
-|-------------|---------------------|
-| `p.Queue`   | `queue.QueueParams` |
-| `p.GroupID` | `string`            |
+| Field       | Type           |
+|-------------|----------------|
+| `p.Queue`   | `queue.Params` |
+| `p.GroupID` | `string`       |
 
 #### `queue.consumerGroupDeleted`
 
@@ -133,10 +133,10 @@ sub, _ := queue.SubscribeConsumerGroupDeleted(func(p queue.ConsumerGroupDeletedP
 
 Payload:
 
-| Field       | Type                |
-|-------------|---------------------|
-| `p.Queue`   | `queue.QueueParams` |
-| `p.GroupID` | `string`            |
+| Field       | Type           |
+|-------------|----------------|
+| `p.Queue`   | `queue.Params` |
+| `p.GroupID` | `string`       |
 
 ### Producer Events
 
@@ -169,11 +169,11 @@ sub, _ := producer.SubscribeMessagePublished(func(p producer.MessagePublishedPay
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ProducerID` | `string`            |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ProducerID` | `string`       |
 
 ### Consumer Events
 
@@ -205,11 +205,11 @@ sub, _ := consumer.SubscribeMessageReceived(func(p consumer.MessageReceivedPaylo
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ConsumerID` | `string`            |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ConsumerID` | `string`       |
 
 #### `consumer.messageAcknowledged`
 
@@ -223,11 +223,11 @@ sub, _ := consumer.SubscribeMessageAcknowledged(func(p consumer.MessagePayload) 
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ConsumerID` | `string`            |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ConsumerID` | `string`       |
 
 #### `consumer.messageUnacknowledged`
 
@@ -241,12 +241,12 @@ sub, _ := consumer.SubscribeMessageUnacknowledged(func(p consumer.MessageUnackno
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ConsumerID` | `string`            |
-| `p.Cause`      | `int`               |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ConsumerID` | `string`       |
+| `p.Cause`      | `int`          |
 
 #### `consumer.messageDeadLettered`
 
@@ -260,12 +260,12 @@ sub, _ := consumer.SubscribeMessageDeadLettered(func(p consumer.MessageDeadLette
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ConsumerID` | `string`            |
-| `p.Cause`      | `int`               |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ConsumerID` | `string`       |
+| `p.Cause`      | `int`          |
 
 #### `consumer.messageRequeued`
 
@@ -279,11 +279,11 @@ sub, _ := consumer.SubscribeMessageRequeued(func(p consumer.MessagePayload) {
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ConsumerID` | `string`            |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ConsumerID` | `string`       |
 
 #### `consumer.messageDelayed`
 
@@ -297,11 +297,11 @@ sub, _ := consumer.SubscribeMessageDelayed(func(p consumer.MessagePayload) {
 
 Payload:
 
-| Field          | Type                |
-|----------------|---------------------|
-| `p.MessageID`  | `string`            |
-| `p.Queue`      | `queue.QueueParams` |
-| `p.ConsumerID` | `string`            |
+| Field          | Type           |
+|----------------|----------------|
+| `p.MessageID`  | `string`       |
+| `p.Queue`      | `queue.Params` |
+| `p.ConsumerID` | `string`       |
 
 ## Unsubscribing
 

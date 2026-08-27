@@ -31,7 +31,7 @@ type consumerInfo struct {
 	CreatedAt   int64    `json:"createdAt"`
 }
 
-func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.QueueParams, groupID string) error {
+func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.Params, groupID string) error {
 	log := logger.New("consumer", "subscribe", consumerID, q.Name())
 
 	info := consumerInfo{
@@ -100,7 +100,7 @@ func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.QueuePar
 	}
 }
 
-func UnsubscribeConsumer(ctx context.Context, consumerID string, queue *queue.QueueParams, groupID string) error {
+func UnsubscribeConsumer(ctx context.Context, consumerID string, queue *queue.Params, groupID string) error {
 	log := logger.New("consumer", "unsubscribe", consumerID, queue.Name())
 
 	log.Debug("unsubscribing consumer", "group", groupID)

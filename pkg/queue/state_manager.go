@@ -24,29 +24,29 @@ import (
 type StateManager interface {
 	// Current returns the latest transition, which contains the current
 	// state of the queue.
-	Current(ctx context.Context, params *QueueParams) (*StateTransition, error)
+	Current(ctx context.Context, params *Params) (*StateTransition, error)
 
 	// Pause transitions a queue to the Paused state. New messages can
 	// still be enqueued, but message processing stops.
-	Pause(ctx context.Context, params *QueueParams, opts *StateTransitionOptions) (*StateTransition, error)
+	Pause(ctx context.Context, params *Params, opts *StateTransitionOptions) (*StateTransition, error)
 
 	// Resume transitions a queue back to the Active state from Paused or
 	// Stopped.
-	Resume(ctx context.Context, params *QueueParams, opts *StateTransitionOptions) (*StateTransition, error)
+	Resume(ctx context.Context, params *Params, opts *StateTransitionOptions) (*StateTransition, error)
 
 	// Stop transitions a queue to the Stopped state. The queue will not
 	// accept or process messages.
-	Stop(ctx context.Context, params *QueueParams, opts *StateTransitionOptions) (*StateTransition, error)
+	Stop(ctx context.Context, params *Params, opts *StateTransitionOptions) (*StateTransition, error)
 
 	// Lock transitions a queue to the Locked state for exclusive
 	// maintenance operations. The owner and lock ID are required.
-	Lock(ctx context.Context, params *QueueParams, owner LockOwner, id string, opts *StateTransitionOptions) (*StateTransition, error)
+	Lock(ctx context.Context, params *Params, owner LockOwner, id string, opts *StateTransitionOptions) (*StateTransition, error)
 
 	// Unlock transitions a Locked queue back to the Active state after
 	// verifying lock ownership.
-	Unlock(ctx context.Context, params *QueueParams, owner LockOwner, id string, opts *StateTransitionOptions) (*StateTransition, error)
+	Unlock(ctx context.Context, params *Params, owner LockOwner, id string, opts *StateTransitionOptions) (*StateTransition, error)
 
 	// History returns the full state transition history for a queue,
 	// ordered from most recent to oldest.
-	History(ctx context.Context, params *QueueParams) ([]*StateTransition, error)
+	History(ctx context.Context, params *Params) ([]*StateTransition, error)
 }

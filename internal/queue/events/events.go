@@ -33,33 +33,33 @@ const (
 // CreatedPayload is used by internal subscribers to receive the arguments
 // of a queue.queueCreated event.
 type CreatedPayload struct {
-	Queue      publicqueue.QueueParams
-	Properties publicqueue.QueueProps
+	Queue      publicqueue.Params
+	Properties publicqueue.Props
 }
 
 // DeletedPayload is used by internal subscribers to receive the arguments
 // of a queue.queueDeleted event.
 type DeletedPayload struct {
-	Queue publicqueue.QueueParams
+	Queue publicqueue.Params
 }
 
 // StateChangedPayload is used by internal subscribers to receive the
 // arguments of a queue.stateChanged event.
 type StateChangedPayload struct {
-	Queue      publicqueue.QueueParams
+	Queue      publicqueue.Params
 	Transition publicqueue.StateTransition
 }
 
 // ConsumerGroupCreatedPayload is used by internal subscribers to receive
 // the arguments of a queue.consumerGroupCreated event.
 type ConsumerGroupCreatedPayload struct {
-	Queue   publicqueue.QueueParams
+	Queue   publicqueue.Params
 	GroupID string
 }
 
 // ConsumerGroupDeletedPayload is used by internal subscribers to receive
 // the arguments of a queue.consumerGroupDeleted event.
 type ConsumerGroupDeletedPayload struct {
-	Queue   publicqueue.QueueParams
+	Queue   publicqueue.Params
 	GroupID string
 }

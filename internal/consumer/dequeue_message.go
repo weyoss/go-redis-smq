@@ -30,12 +30,12 @@ import (
 )
 
 type DequeueMessage struct {
-	queue      *queue.QueueParams
+	queue      *queue.Params
 	groupID    string
 	consumerID string
 	blocking   bool
 
-	queueType      *queue.QueueType
+	queueType      *queue.Type
 	rateLimit      *queue.RateLimitParams
 	unacknowledger *MessageUnacknowledger
 	log            *slog.Logger
@@ -49,7 +49,7 @@ func WithBlocking() DequeueOption {
 	}
 }
 
-func NewDequeueMessage(queue *queue.QueueParams, groupID, consumerID string, opts ...DequeueOption) *DequeueMessage {
+func NewDequeueMessage(queue *queue.Params, groupID, consumerID string, opts ...DequeueOption) *DequeueMessage {
 	d := &DequeueMessage{
 		queue:      queue,
 		groupID:    groupID,

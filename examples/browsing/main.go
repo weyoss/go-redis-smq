@@ -152,7 +152,7 @@ func main() {
 	log.Println("Browsing example complete")
 }
 
-func printBrowseResult(ctx context.Context, label string, queueParams *queue.QueueParams, filter queue.BrowseFilter) {
+func printBrowseResult(ctx context.Context, label string, queueParams *queue.Params, filter queue.BrowseFilter) {
 	qm := redissmq.NewQueueManager()
 	result, err := qm.BrowseMessages(ctx, queueParams, &queue.BrowseParams{
 		Filter: filter,

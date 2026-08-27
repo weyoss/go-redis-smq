@@ -23,11 +23,11 @@ import (
 type ConsumerGroupManager interface {
 	// Save creates a consumer group for a queue.
 	// It returns 1 if the group was newly created, or 0 if it already existed.
-	Save(ctx context.Context, queueParams *QueueParams, groupID string) (int64, error)
+	Save(ctx context.Context, queueParams *Params, groupID string) (int64, error)
 
 	// Delete removes a consumer group from a queue.
-	Delete(ctx context.Context, queueParams *QueueParams, groupID string) error
+	Delete(ctx context.Context, queueParams *Params, groupID string) error
 
 	// List returns all consumer group IDs for a queue.
-	List(ctx context.Context, queueParams *QueueParams) ([]string, error)
+	List(ctx context.Context, queueParams *Params) ([]string, error)
 }

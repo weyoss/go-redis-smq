@@ -12,10 +12,10 @@ package queue
 
 import "time"
 
-// QueueProps holds the stored configuration of a queue.
-type QueueProps struct {
+// Props holds the stored configuration of a queue.
+type Props struct {
 	// Type is the queue ordering type (FIFO, LIFO, or Priority).
-	Type QueueType
+	Type Type
 
 	// DeliveryModel is the delivery model (Point-to-Point or Pub/Sub).
 	DeliveryModel DeliveryModel

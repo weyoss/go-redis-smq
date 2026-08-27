@@ -10,14 +10,14 @@
 
 package queue
 
-// QueueType represents the ordering semantics of a queue.
+// Type represents the ordering semantics of a queue.
 // Values match TypeScript EQueueType enum for cross-language compatibility.
 // Integer values are persisted in Redis and must not be changed.
-type QueueType int
+type Type int
 
 const (
 	// TypeLIFO delivers messages in last-in-first-out order.
-	TypeLIFO QueueType = iota // 0
+	TypeLIFO Type = iota // 0
 
 	// TypeFIFO delivers messages in first-in-first-out order.
 	TypeFIFO // 1
@@ -27,11 +27,11 @@ const (
 )
 
 // Int returns the integer representation for Redis storage.
-func (t QueueType) Int() int { return int(t) }
+func (t Type) Int() int { return int(t) }
 
 // String returns a human-readable representation.
 // Unknown values return "unknown".
-func (t QueueType) String() string {
+func (t Type) String() string {
 	switch t {
 	case TypeFIFO:
 		return "fifo"
@@ -46,7 +46,7 @@ func (t QueueType) String() string {
 
 // IsValid reports whether the queue type value is within the valid range.
 // Valid types are TypeLIFO through TypePriority.
-func (t QueueType) IsValid() bool {
+func (t Type) IsValid() bool {
 	return t >= TypeLIFO && t <= TypePriority
 }
 

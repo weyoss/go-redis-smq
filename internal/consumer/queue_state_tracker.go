@@ -23,26 +23,26 @@ import (
 
 type QueueStateTracker struct {
 	mu      sync.RWMutex
-	paused  map[string]*queue.QueueParams
-	stopped map[string]*queue.QueueParams
-	locked  map[string]*queue.QueueParams
+	paused  map[string]*queue.Params
+	stopped map[string]*queue.Params
+	locked  map[string]*queue.Params
 	sub     *eventbus.Subscription
 
-	onStopped func(queue *queue.QueueParams)
-	onPaused  func(queue *queue.QueueParams)
-	onLocked  func(queue *queue.QueueParams)
-	onActive  func(queue *queue.QueueParams)
+	onStopped func(queue *queue.Params)
+	onPaused  func(queue *queue.Params)
+	onLocked  func(queue *queue.Params)
+	onActive  func(queue *queue.Params)
 
 	log *slog.Logger
 }
 
 func NewQueueStateTracker(
-	onStopped, onPaused, onLocked, onActive func(*queue.QueueParams),
+	onStopped, onPaused, onLocked, onActive func(*queue.Params),
 ) *QueueStateTracker {
 	t := &QueueStateTracker{
-		paused:    make(map[string]*queue.QueueParams),
-		stopped:   make(map[string]*queue.QueueParams),
-		locked:    make(map[string]*queue.QueueParams),
+		paused:    make(map[string]*queue.Params),
+		stopped:   make(map[string]*queue.Params),
+		locked:    make(map[string]*queue.Params),
 		onStopped: onStopped,
 		onPaused:  onPaused,
 		onLocked:  onLocked,
@@ -128,28 +128,28 @@ func (t *QueueStateTracker) handleStateChange(p internalQueueEvents.StateChanged
 	}
 }
 
-func (t *QueueStateTracker) IsStopped(queue *queue.QueueParams) bool {
+func (t *QueueStateTracker) IsStopped(queue *queue.Params) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	_, ok := t.stopped[queue.String()]
 	return ok
 }
 
-func (t *QueueStateTracker) IsPaused(queue *queue.QueueParams) bool {
+func (t *QueueStateTracker) IsPaused(queue *queue.Params) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	_, ok := t.paused[queue.String()]
 	return ok
 }
 
-func (t *QueueStateTracker) IsLocked(queue *queue.QueueParams) bool {
+func (t *QueueStateTracker) IsLocked(queue *queue.Params) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	_, ok := t.locked[queue.String()]
 	return ok
 }
 
-func (t *QueueStateTracker) IsActive(queue *queue.QueueParams) bool {
+func (t *QueueStateTracker) IsActive(queue *queue.Params) bool {
 	t.mu.RLock()
 	defer t.mu.RUnlock()
 	key := queue.String()

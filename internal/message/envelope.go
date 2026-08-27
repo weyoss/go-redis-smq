@@ -25,7 +25,7 @@ type Envelope struct {
 	producibleMessage *publicmessage.ProducibleMessage
 	messageState      *publicmessage.MessageState
 	status            publicmessage.MessageStatus
-	destinationQueue  *publicqueue.QueueParams
+	destinationQueue  *publicqueue.Params
 	consumerGroupID   string
 }
 
@@ -73,12 +73,12 @@ func (e *Envelope) SetStatus(status publicmessage.MessageStatus) *Envelope {
 }
 
 // DestinationQueue returns the resolved destination queue.
-func (e *Envelope) DestinationQueue() *publicqueue.QueueParams {
+func (e *Envelope) DestinationQueue() *publicqueue.Params {
 	return e.destinationQueue
 }
 
 // SetDestinationQueue sets the destination queue (called once during routing).
-func (e *Envelope) SetDestinationQueue(q *publicqueue.QueueParams) *Envelope {
+func (e *Envelope) SetDestinationQueue(q *publicqueue.Params) *Envelope {
 	e.destinationQueue = q
 	return e
 }

@@ -34,7 +34,7 @@ type LifecyclePayload struct {
 
 type MessagePublishedPayload struct {
 	MessageID  string
-	Queue      queue.QueueParams
+	Queue      queue.Params
 	ProducerID string
 }
 
@@ -136,7 +136,7 @@ func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (eventbus.
 		}
 
 		var messageID string
-		var queue queue.QueueParams
+		var queue queue.Params
 		var producerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {

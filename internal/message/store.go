@@ -114,7 +114,7 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 	}
 
 	type messageGroup struct {
-		queue    *publicqueue.QueueParams
+		queue    *publicqueue.Params
 		messages []*Envelope
 	}
 
@@ -162,7 +162,7 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 
 func (s *Store) deleteMessageGroup(
 	ctx context.Context,
-	queue *publicqueue.QueueParams,
+	queue *publicqueue.Params,
 	messages []*Envelope,
 	lockID string,
 ) (*publicmessage.DeleteStats, error) {

@@ -28,7 +28,7 @@ func NewConsumerGroupStore() *ConsumerGroupStore {
 	return &ConsumerGroupStore{}
 }
 
-func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *publicqueue.QueueParams, groupID string) (int64, error) {
+func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *publicqueue.Params, groupID string) (int64, error) {
 	if _, err := keys.ValidateKey(groupID); err != nil {
 		return 0, fmt.Errorf("invalid consumer group ID: %w", err)
 	}
@@ -59,7 +59,7 @@ func (cgs *ConsumerGroupStore) Save(ctx context.Context, queueParams *publicqueu
 	return result, nil
 }
 
-func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *publicqueue.QueueParams, groupID string) error {
+func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *publicqueue.Params, groupID string) error {
 	qKey := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -119,7 +119,7 @@ func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *publicqu
 	}
 }
 
-func (cgs *ConsumerGroupStore) List(ctx context.Context, queueParams *publicqueue.QueueParams) ([]string, error) {
+func (cgs *ConsumerGroupStore) List(ctx context.Context, queueParams *publicqueue.Params) ([]string, error) {
 	qKey := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

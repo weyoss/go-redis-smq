@@ -70,10 +70,10 @@ type Transferable struct {
 
 	// Queue is the target queue, if the message was sent directly to a
 	// queue.
-	Queue *queue.QueueParams `json:"queue,omitempty"`
+	Queue *queue.Params `json:"queue,omitempty"`
 
 	// DestinationQueue is the resolved destination queue for the message.
-	DestinationQueue *queue.QueueParams `json:"destinationQueue"`
+	DestinationQueue *queue.Params `json:"destinationQueue"`
 
 	// ConsumerGroupID is the consumer group the message belongs to for
 	// Pub/Sub queues.

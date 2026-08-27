@@ -38,7 +38,7 @@ func NewState() *State {
 // FetchCurrent returns the latest state transition for a queue.
 func (s *State) FetchCurrent(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 ) (*publicqueue.StateTransition, error) {
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
 	propsKey := qKey.Properties()
@@ -79,7 +79,7 @@ func (s *State) FetchCurrent(
 // FetchHistory returns the full state transition history for a queue.
 func (s *State) FetchHistory(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 ) ([]*publicqueue.StateTransition, error) {
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
 	client := redisClient.Client()
@@ -104,7 +104,7 @@ func (s *State) FetchHistory(
 // from the given options and calls the internal transitionTo.
 func (s *State) TransitionTo(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	target publicqueue.QueueState,
 	opts *publicqueue.StateTransitionOptions,
 ) (*publicqueue.StateTransition, error) {
@@ -116,7 +116,7 @@ func (s *State) TransitionTo(
 // and calls the internal acquireLock.
 func (s *State) AcquireLock(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	owner publicqueue.LockOwner,
 	id string,
 	opts *publicqueue.StateTransitionOptions,
@@ -129,7 +129,7 @@ func (s *State) AcquireLock(
 // calls the internal releaseLock.
 func (s *State) ReleaseLock(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	owner publicqueue.LockOwner,
 	id string,
 	opts *publicqueue.StateTransitionOptions,
@@ -141,7 +141,7 @@ func (s *State) ReleaseLock(
 // transitionTo performs a state transition with an explicit reason.
 func (s *State) transitionTo(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	target publicqueue.QueueState,
 	reason publicqueue.QueueStateTransitionReason,
 	opts *publicqueue.StateTransitionOptions,
@@ -159,7 +159,7 @@ func (s *State) transitionTo(
 // acquireLock acquires a lock with an explicit reason. Used by purge manager.
 func (s *State) acquireLock(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	owner publicqueue.LockOwner,
 	id string,
 	reason publicqueue.QueueStateTransitionReason,
@@ -193,7 +193,7 @@ func (s *State) acquireLock(
 // releaseLock releases a lock with an explicit reason. Used by purge manager.
 func (s *State) releaseLock(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	owner publicqueue.LockOwner,
 	id string,
 	reason publicqueue.QueueStateTransitionReason,
@@ -232,7 +232,7 @@ func (s *State) releaseLock(
 // saveState persists the new state transition and publishes an event.
 func (s *State) saveState(
 	ctx context.Context,
-	params *publicqueue.QueueParams,
+	params *publicqueue.Params,
 	from *publicqueue.QueueState,
 	to publicqueue.QueueState,
 	reason publicqueue.QueueStateTransitionReason,

@@ -160,7 +160,7 @@ func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMe
 func (prod *Producer) produceToQueue(
 	ctx context.Context,
 	m *publicmessage.ProducibleMessage,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	resolver *PubSubTargetResolver,
 ) ([]string, error) {
 	var targets []string
@@ -264,7 +264,7 @@ func (prod *Producer) matchExchangeQueues(
 	ctx context.Context,
 	exchangeParams *publicexchange.ExchangeParams,
 	routingKey string,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	switch exchangeParams.Type() {
 	case publicexchange.TypeDirect:
 		if routingKey == "" {
@@ -290,7 +290,7 @@ func (prod *Producer) matchExchangeQueues(
 func (prod *Producer) dispatch(
 	ctx context.Context,
 	envelope *internalMessage.Envelope,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 ) (string, error) {
 	envelope.SetDestinationQueue(queueParams)
 	messageID := envelope.ID()

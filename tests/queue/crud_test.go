@@ -65,7 +65,7 @@ func TestQueue_CreateDifferentTypes(t *testing.T) {
 
 	tests := []struct {
 		name  string
-		qType publicqueue.QueueType
+		qType publicqueue.Type
 		model publicqueue.DeliveryModel
 	}{
 		{"FIFO-P2P", publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint},

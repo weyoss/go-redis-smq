@@ -19,26 +19,26 @@ import (
 
 // PublishCreated publishes a queue.queueCreated event to the appropriate
 // bus(es) according to the routing policy.
-func PublishCreated(ctx context.Context, queue queue.QueueParams, props queue.QueueProps) {
+func PublishCreated(ctx context.Context, queue queue.Params, props queue.Props) {
 	eventmultiplexer.Publish(ctx, EventCreated, queue, props)
 }
 
 // PublishDeleted publishes a queue.queueDeleted event.
-func PublishDeleted(ctx context.Context, queue queue.QueueParams) {
+func PublishDeleted(ctx context.Context, queue queue.Params) {
 	eventmultiplexer.Publish(ctx, EventDeleted, queue)
 }
 
 // PublishStateChanged publishes a queue.stateChanged event.
-func PublishStateChanged(ctx context.Context, queue queue.QueueParams, transition queue.StateTransition) {
+func PublishStateChanged(ctx context.Context, queue queue.Params, transition queue.StateTransition) {
 	eventmultiplexer.Publish(ctx, EventStateChanged, queue, transition)
 }
 
 // PublishConsumerGroupCreated publishes a queue.consumerGroupCreated event.
-func PublishConsumerGroupCreated(ctx context.Context, queue queue.QueueParams, groupID string) {
+func PublishConsumerGroupCreated(ctx context.Context, queue queue.Params, groupID string) {
 	eventmultiplexer.Publish(ctx, EventConsumerGroupCreated, queue, groupID)
 }
 
 // PublishConsumerGroupDeleted publishes a queue.consumerGroupDeleted event.
-func PublishConsumerGroupDeleted(ctx context.Context, queue queue.QueueParams, groupID string) {
+func PublishConsumerGroupDeleted(ctx context.Context, queue queue.Params, groupID string) {
 	eventmultiplexer.Publish(ctx, EventConsumerGroupDeleted, queue, groupID)
 }

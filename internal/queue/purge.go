@@ -130,7 +130,7 @@ func stopPurgeWorker() {
 	purgeWorkerStarted = false
 }
 
-func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *publicqueue.QueueParams, filter publicqueue.BrowseFilter) (string, error) {
+func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *publicqueue.Params, filter publicqueue.BrowseFilter) (string, error) {
 	if err := pm.validateFilter(filter); err != nil {
 		return "", err
 	}
@@ -159,7 +159,7 @@ func (pm *PurgeManager) Get(ctx context.Context, jobID string) (*publicqueue.Pur
 	return getJob(ctx, jobID)
 }
 
-func (pm *PurgeManager) Cancel(ctx context.Context, queueParams *publicqueue.QueueParams, jobID string) error {
+func (pm *PurgeManager) Cancel(ctx context.Context, queueParams *publicqueue.Params, jobID string) error {
 	job, err := getJob(ctx, jobID)
 	if err != nil {
 		return fmt.Errorf("purge: get job: %w", err)
@@ -320,7 +320,7 @@ func (pm *PurgeManager) heartbeatLoop(ctx context.Context) {
 	}
 }
 
-func (pm *PurgeManager) failJob(ctx context.Context, job *publicqueue.PurgeJob, queueParams *publicqueue.QueueParams, errMsg string) {
+func (pm *PurgeManager) failJob(ctx context.Context, job *publicqueue.PurgeJob, queueParams *publicqueue.Params, errMsg string) {
 	job.Status = publicqueue.PurgeJobFailed
 	job.Error = errMsg
 	job.CompletedAt = time.Now().UnixMilli()
@@ -386,7 +386,7 @@ func (pm *PurgeManager) validateFilter(filter publicqueue.BrowseFilter) error {
 	return nil
 }
 
-func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *publicqueue.QueueParams, jobID string, status publicqueue.PurgeJobStatus, description string) {
+func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *publicqueue.Params, jobID string, status publicqueue.PurgeJobStatus, description string) {
 	var reason publicqueue.QueueStateTransitionReason
 	switch status {
 	case publicqueue.PurgeJobCompleted:
@@ -409,7 +409,7 @@ func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *publicqueu
 	}
 }
 
-func newPurgeJob(jobID string, queueParams *publicqueue.QueueParams, filter publicqueue.BrowseFilter) *publicqueue.PurgeJob {
+func newPurgeJob(jobID string, queueParams *publicqueue.Params, filter publicqueue.BrowseFilter) *publicqueue.PurgeJob {
 	return &publicqueue.PurgeJob{
 		ID: jobID,
 		Payload: publicqueue.PurgeJobPayload{

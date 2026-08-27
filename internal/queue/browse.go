@@ -33,7 +33,7 @@ func NewBrowse(store *Store) *Browse {
 
 func (b *Browse) BrowseMessages(
 	ctx context.Context,
-	queueParams *publicqueue.QueueParams,
+	queueParams *publicqueue.Params,
 	params *publicqueue.BrowseParams,
 ) (*publicqueue.BrowseResult, error) {
 	if params == nil {

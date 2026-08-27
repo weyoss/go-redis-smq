@@ -22,16 +22,16 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// QueueParamsCodec handles serialization of QueueParams to/from Redis sets.
+// QueueParamsCodec handles serialization of Params to/from Redis sets.
 type QueueParamsCodec struct{}
 
-// NewQueueParamsCodec creates a new QueueParams codec.
+// NewQueueParamsCodec creates a new Params codec.
 func NewQueueParamsCodec() *QueueParamsCodec {
 	return &QueueParamsCodec{}
 }
 
-// EncodeSet serializes QueueParams to a JSON string for Redis set storage.
-func (c *QueueParamsCodec) EncodeSet(ctx context.Context, params *publicqueue.QueueParams) (string, error) {
+// EncodeSet serializes Params to a JSON string for Redis set storage.
+func (c *QueueParamsCodec) EncodeSet(ctx context.Context, params *publicqueue.Params) (string, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
 		return "", codec.NewEncodingError("queue params", params.String(), err)
@@ -39,9 +39,9 @@ func (c *QueueParamsCodec) EncodeSet(ctx context.Context, params *publicqueue.Qu
 	return string(data), nil
 }
 
-// DecodeSet deserializes a JSON string from a Redis set back to QueueParams.
-func (c *QueueParamsCodec) DecodeSet(ctx context.Context, data string) (*publicqueue.QueueParams, error) {
-	var params publicqueue.QueueParams
+// DecodeSet deserializes a JSON string from a Redis set back to Params.
+func (c *QueueParamsCodec) DecodeSet(ctx context.Context, data string) (*publicqueue.Params, error) {
+	var params publicqueue.Params
 	if err := json.Unmarshal([]byte(data), &params); err != nil {
 		return nil, codec.NewDecodingError("queue params", data, err)
 	}
@@ -51,20 +51,20 @@ func (c *QueueParamsCodec) DecodeSet(ctx context.Context, data string) (*publicq
 	return &params, nil
 }
 
-// QueuePropsCodec handles serialization of QueueProps to/from Redis hash.
+// QueuePropsCodec handles serialization of Props to/from Redis hash.
 type QueuePropsCodec struct {
 	rateLimitCodec *rate_limit.RateLimitCodec
 }
 
-// NewQueuePropsCodec creates a new QueueProps codec.
+// NewQueuePropsCodec creates a new Props codec.
 func NewQueuePropsCodec() *QueuePropsCodec {
 	return &QueuePropsCodec{
 		rateLimitCodec: rate_limit.NewRateLimitCodec(),
 	}
 }
 
-// EncodeHash serializes QueueProps to a Redis hash map.
-func (c *QueuePropsCodec) EncodeHash(ctx context.Context, props *publicqueue.QueueProps) (map[string]interface{}, error) {
+// EncodeHash serializes Props to a Redis hash map.
+func (c *QueuePropsCodec) EncodeHash(ctx context.Context, props *publicqueue.Props) (map[string]interface{}, error) {
 	if props == nil {
 		return nil, codec.NewEncodingError("queue props", "nil", codec.ErrInvalidFormat)
 	}
@@ -107,18 +107,18 @@ func (c *QueuePropsCodec) EncodeHash(ctx context.Context, props *publicqueue.Que
 	return hash, nil
 }
 
-// DecodeHash deserializes a Redis hash map back to QueueProps.
-func (c *QueuePropsCodec) DecodeHash(ctx context.Context, hash map[string]string) (*publicqueue.QueueProps, error) {
+// DecodeHash deserializes a Redis hash map back to Props.
+func (c *QueuePropsCodec) DecodeHash(ctx context.Context, hash map[string]string) (*publicqueue.Props, error) {
 	if len(hash) == 0 {
 		return nil, codec.NewDecodingError("queue props", "empty hash", codec.ErrInvalidFormat)
 	}
 
-	props := &publicqueue.QueueProps{}
+	props := &publicqueue.Props{}
 
 	// Queue type
 	if v, ok := hash[schema.QueueFieldType.Key()]; ok {
 		n, _ := strconv.Atoi(v)
-		props.Type = publicqueue.QueueType(n)
+		props.Type = publicqueue.Type(n)
 	}
 
 	// Delivery model
@@ -178,6 +178,6 @@ func parseInt64Field(hash map[string]string, field string) int64 {
 
 // Compile-time interface checks
 var (
-	_ codec.SetCodec[*publicqueue.QueueParams] = (*QueueParamsCodec)(nil)
-	_ codec.HashCodec[*publicqueue.QueueProps] = (*QueuePropsCodec)(nil)
+	_ codec.SetCodec[*publicqueue.Params] = (*QueueParamsCodec)(nil)
+	_ codec.HashCodec[*publicqueue.Props] = (*QueuePropsCodec)(nil)
 )

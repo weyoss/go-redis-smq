@@ -28,30 +28,30 @@ func NewStateManager() publicqueue.StateManager {
 	return &StateManager{state: NewState()}
 }
 
-func (sm *StateManager) Current(ctx context.Context, params *publicqueue.QueueParams) (*publicqueue.StateTransition, error) {
+func (sm *StateManager) Current(ctx context.Context, params *publicqueue.Params) (*publicqueue.StateTransition, error) {
 	return sm.state.FetchCurrent(ctx, params)
 }
 
-func (sm *StateManager) Pause(ctx context.Context, params *publicqueue.QueueParams, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
+func (sm *StateManager) Pause(ctx context.Context, params *publicqueue.Params, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
 	return sm.state.TransitionTo(ctx, params, publicqueue.StatePaused, opts)
 }
 
-func (sm *StateManager) Resume(ctx context.Context, params *publicqueue.QueueParams, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
+func (sm *StateManager) Resume(ctx context.Context, params *publicqueue.Params, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
 	return sm.state.TransitionTo(ctx, params, publicqueue.StateActive, opts)
 }
 
-func (sm *StateManager) Stop(ctx context.Context, params *publicqueue.QueueParams, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
+func (sm *StateManager) Stop(ctx context.Context, params *publicqueue.Params, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
 	return sm.state.TransitionTo(ctx, params, publicqueue.StateStopped, opts)
 }
 
-func (sm *StateManager) Lock(ctx context.Context, params *publicqueue.QueueParams, owner publicqueue.LockOwner, id string, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
+func (sm *StateManager) Lock(ctx context.Context, params *publicqueue.Params, owner publicqueue.LockOwner, id string, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
 	return sm.state.AcquireLock(ctx, params, owner, id, opts)
 }
 
-func (sm *StateManager) Unlock(ctx context.Context, params *publicqueue.QueueParams, owner publicqueue.LockOwner, id string, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
+func (sm *StateManager) Unlock(ctx context.Context, params *publicqueue.Params, owner publicqueue.LockOwner, id string, opts *publicqueue.StateTransitionOptions) (*publicqueue.StateTransition, error) {
 	return sm.state.ReleaseLock(ctx, params, owner, id, opts)
 }
 
-func (sm *StateManager) History(ctx context.Context, params *publicqueue.QueueParams) ([]*publicqueue.StateTransition, error) {
+func (sm *StateManager) History(ctx context.Context, params *publicqueue.Params) ([]*publicqueue.StateTransition, error) {
 	return sm.state.FetchHistory(ctx, params)
 }

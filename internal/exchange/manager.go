@@ -109,7 +109,7 @@ func (m *Manager) ValidateType(ctx context.Context, params *pubexchange.Exchange
 func (m *Manager) ValidateBinding(
 	ctx context.Context,
 	params *pubexchange.ExchangeParams,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 ) (*pubexchange.ExchangeProps, error) {
 	return m.validator.ValidateQueueBinding(ctx, params, queueParams)
 }
@@ -120,7 +120,7 @@ func (m *Manager) Delete(ctx context.Context, params *pubexchange.ExchangeParams
 }
 
 // ListByQueue returns all exchanges bound to a specific queue.
-func (m *Manager) ListByQueue(ctx context.Context, queueParams *queue.QueueParams) ([]pubexchange.ExchangeParams, error) {
+func (m *Manager) ListByQueue(ctx context.Context, queueParams *queue.Params) ([]pubexchange.ExchangeParams, error) {
 	return m.lookup.ByQueue(ctx, queueParams)
 }
 

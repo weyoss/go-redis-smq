@@ -30,7 +30,7 @@ func NewValidator(store *Store) *Validator {
 
 // Exists validates that a queue exists in Redis.
 // Returns ErrNotFound if the queue doesn't exist.
-func (v *Validator) Exists(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) Exists(ctx context.Context, queueParams *publicqueue.Params) error {
 	exists, err := v.store.Exists(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("validate queue exists: %w", err)
@@ -43,7 +43,7 @@ func (v *Validator) Exists(ctx context.Context, queueParams *publicqueue.QueuePa
 
 // IsOperational validates that a queue exists and is in an operational state.
 // Active and Paused states are considered operational.
-func (v *Validator) IsOperational(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) IsOperational(ctx context.Context, queueParams *publicqueue.Params) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -63,7 +63,7 @@ func (v *Validator) IsOperational(ctx context.Context, queueParams *publicqueue.
 // CanEnqueue validates that a queue can accept new messages.
 // Queue must exist and be in an operational state.
 // Also checks rate limit if configured.
-func (v *Validator) CanEnqueue(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) CanEnqueue(ctx context.Context, queueParams *publicqueue.Params) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -90,7 +90,7 @@ func (v *Validator) CanEnqueue(ctx context.Context, queueParams *publicqueue.Que
 
 // CanDequeue validates that a queue can deliver messages.
 // Only Active state allows dequeue operations.
-func (v *Validator) CanDequeue(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) CanDequeue(ctx context.Context, queueParams *publicqueue.Params) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -110,13 +110,13 @@ func (v *Validator) CanDequeue(ctx context.Context, queueParams *publicqueue.Que
 
 // CanBindToExchange validates that a queue can be bound to an exchange.
 // Queue must exist to be bound.
-func (v *Validator) CanBindToExchange(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) CanBindToExchange(ctx context.Context, queueParams *publicqueue.Params) error {
 	return v.Exists(ctx, queueParams)
 }
 
 // CanDelete validates that a queue can be safely deleted.
 // Checks that no messages are currently being processed or pending.
-func (v *Validator) CanDelete(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) CanDelete(ctx context.Context, queueParams *publicqueue.Params) error {
 	if err := v.Exists(ctx, queueParams); err != nil {
 		return err
 	}
@@ -139,7 +139,7 @@ func (v *Validator) CanDelete(ctx context.Context, queueParams *publicqueue.Queu
 
 // CanPurge validates that a queue can be purged (all messages removed).
 // Purge is allowed even with active consumers.
-func (v *Validator) CanPurge(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (v *Validator) CanPurge(ctx context.Context, queueParams *publicqueue.Params) error {
 	return v.Exists(ctx, queueParams)
 }
 
@@ -147,7 +147,7 @@ func (v *Validator) CanPurge(ctx context.Context, queueParams *publicqueue.Queue
 // the expected delivery model.
 func (v *Validator) DeliveryModelMatches(
 	ctx context.Context,
-	queueParams *publicqueue.QueueParams,
+	queueParams *publicqueue.Params,
 	expected publicqueue.DeliveryModel,
 ) error {
 	if err := v.Exists(ctx, queueParams); err != nil {

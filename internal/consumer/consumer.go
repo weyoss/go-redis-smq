@@ -61,7 +61,7 @@ func (cons *Consumer) IsRunning() bool {
 	return cons.running
 }
 
-func (cons *Consumer) Consume(queue *queue.QueueParams, handler publicconsumer.Handler) publicconsumer.Consumer {
+func (cons *Consumer) Consume(queue *queue.Params, handler publicconsumer.Handler) publicconsumer.Consumer {
 	cons.log.Debug("adding handler", "queue", queue.String())
 	cons.runner.AddHandler(queue, "", Handler(handler))
 	if cons.IsRunning() {
@@ -71,7 +71,7 @@ func (cons *Consumer) Consume(queue *queue.QueueParams, handler publicconsumer.H
 	return cons
 }
 
-func (cons *Consumer) ConsumeWithGroup(queue *queue.QueueParams, groupID string, handler publicconsumer.Handler) publicconsumer.Consumer {
+func (cons *Consumer) ConsumeWithGroup(queue *queue.Params, groupID string, handler publicconsumer.Handler) publicconsumer.Consumer {
 	cons.log.Debug("adding handler with group", "queue", queue.String(), "group", groupID)
 	cons.runner.AddHandler(queue, groupID, Handler(handler))
 	if cons.IsRunning() {
@@ -81,13 +81,13 @@ func (cons *Consumer) ConsumeWithGroup(queue *queue.QueueParams, groupID string,
 	return cons
 }
 
-func (cons *Consumer) Cancel(queue *queue.QueueParams) publicconsumer.Consumer {
+func (cons *Consumer) Cancel(queue *queue.Params) publicconsumer.Consumer {
 	cons.log.Debug("cancelling handler", "queue", queue.String())
 	cons.runner.RemoveHandler(queue, "")
 	return cons
 }
 
-func (cons *Consumer) CancelWithGroup(queue *queue.QueueParams, groupID string) publicconsumer.Consumer {
+func (cons *Consumer) CancelWithGroup(queue *queue.Params, groupID string) publicconsumer.Consumer {
 	cons.log.Debug("cancelling handler with group", "queue", queue.String(), "group", groupID)
 	cons.runner.RemoveHandler(queue, groupID)
 	return cons
@@ -191,7 +191,7 @@ func (cons *Consumer) shutdownLocked() {
 	consumerEvents.PublishDown(context.Background(), cons.id)
 }
 
-func (cons *Consumer) Queues() []*queue.QueueParams {
+func (cons *Consumer) Queues() []*queue.Params {
 	return cons.runner.Queues()
 }
 

@@ -30,7 +30,7 @@ type FanoutStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*queue.QueueParams]
+	queueCodec codec.SetCodec[*queue.Params]
 }
 
 // NewFanoutStore creates a new fanout exchange store.
@@ -57,7 +57,7 @@ func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.ExchangeP
 // The queue and exchange must be in the same namespace.
 func (fs *FanoutStore) BindQueue(
 	ctx context.Context,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	exchangeParams *pubexchange.ExchangeParams,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -128,7 +128,7 @@ func (fs *FanoutStore) BindQueue(
 // The queue and exchange must be in the same namespace.
 func (fs *FanoutStore) UnbindQueue(
 	ctx context.Context,
-	queueParams *queue.QueueParams,
+	queueParams *queue.Params,
 	exchangeParams *pubexchange.ExchangeParams,
 ) error {
 	if queueParams.NS() != exchangeParams.Namespace() {
@@ -189,7 +189,7 @@ func (fs *FanoutStore) UnbindQueue(
 func (fs *FanoutStore) MatchQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	return fs.BoundQueues(ctx, exchangeParams)
 }
 
@@ -198,7 +198,7 @@ func (fs *FanoutStore) MatchQueues(
 func (fs *FanoutStore) BoundQueues(
 	ctx context.Context,
 	exchangeParams *pubexchange.ExchangeParams,
-) ([]queue.QueueParams, error) {
+) ([]queue.Params, error) {
 	if err := fs.store.ValidateType(ctx, exchangeParams, true); err != nil {
 		return nil, err
 	}

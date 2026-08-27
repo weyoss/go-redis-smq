@@ -77,7 +77,7 @@ func (r *PubSubTargetResolver) Load(ctx context.Context) error {
 
 	pubSubCount := 0
 	for _, member := range queues {
-		var qp queue.QueueParams
+		var qp queue.Params
 		if err := json.Unmarshal([]byte(member), &qp); err != nil {
 			continue
 		}
@@ -190,13 +190,13 @@ func (r *PubSubTargetResolver) Clear() {
 	r.log.Debug("pub/sub targets cleared")
 }
 
-func (r *PubSubTargetResolver) Resolve(queueParams *queue.QueueParams) []string {
+func (r *PubSubTargetResolver) Resolve(queueParams *queue.Params) []string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return r.targets[queueParams.String()]
 }
 
-func (r *PubSubTargetResolver) Add(queueParams *queue.QueueParams, groupID string) {
+func (r *PubSubTargetResolver) Add(queueParams *queue.Params, groupID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := queueParams.String()
@@ -208,7 +208,7 @@ func (r *PubSubTargetResolver) Add(queueParams *queue.QueueParams, groupID strin
 	r.targets[key] = append(r.targets[key], groupID)
 }
 
-func (r *PubSubTargetResolver) Remove(queueParams *queue.QueueParams, groupID string) {
+func (r *PubSubTargetResolver) Remove(queueParams *queue.Params, groupID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	key := queueParams.String()

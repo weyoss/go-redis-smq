@@ -28,32 +28,32 @@ const (
 
 // CreatedPayload is the payload for the queue.queueCreated event.
 type CreatedPayload struct {
-	Queue      QueueParams
-	Properties QueueProps
+	Queue      Params
+	Properties Props
 }
 
 // DeletedPayload is the payload for the queue.queueDeleted event.
 type DeletedPayload struct {
-	Queue QueueParams
+	Queue Params
 }
 
 // StateChangedPayload is the payload for the queue.stateChanged event.
 type StateChangedPayload struct {
-	Queue      QueueParams
+	Queue      Params
 	Transition StateTransition
 }
 
 // ConsumerGroupCreatedPayload is the payload for the
 // queue.consumerGroupCreated event.
 type ConsumerGroupCreatedPayload struct {
-	Queue   QueueParams
+	Queue   Params
 	GroupID string
 }
 
 // ConsumerGroupDeletedPayload is the payload for the
 // queue.consumerGroupDeleted event.
 type ConsumerGroupDeletedPayload struct {
-	Queue   QueueParams
+	Queue   Params
 	GroupID string
 }
 
@@ -76,8 +76,8 @@ func SubscribeCreated(handler func(CreatedPayload)) (eventbus.Subscription, erro
 		if len(args) < 2 {
 			return
 		}
-		var queue QueueParams
-		var props QueueProps
+		var queue Params
+		var props Props
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -99,7 +99,7 @@ func SubscribeDeleted(handler func(DeletedPayload)) (eventbus.Subscription, erro
 		if len(args) < 1 {
 			return
 		}
-		var queue QueueParams
+		var queue Params
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
 		}
@@ -118,7 +118,7 @@ func SubscribeStateChanged(handler func(StateChangedPayload)) (eventbus.Subscrip
 		if len(args) < 2 {
 			return
 		}
-		var queue QueueParams
+		var queue Params
 		var transition StateTransition
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -142,7 +142,7 @@ func SubscribeConsumerGroupCreated(handler func(ConsumerGroupCreatedPayload)) (e
 		if len(args) < 2 {
 			return
 		}
-		var queue QueueParams
+		var queue Params
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return
@@ -166,7 +166,7 @@ func SubscribeConsumerGroupDeleted(handler func(ConsumerGroupDeletedPayload)) (e
 		if len(args) < 2 {
 			return
 		}
-		var queue QueueParams
+		var queue Params
 		var groupID string
 		if err := decodeArg(args[0], &queue); err != nil {
 			return

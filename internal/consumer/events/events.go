@@ -47,10 +47,10 @@ type LifecyclePayload struct {
 
 // MessagePayload is the base payload for consumer message events.
 type MessagePayload struct {
-	MessageID  string            `json:"messageId"`
-	Queue      queue.QueueParams `json:"queue"`
-	GroupID    string            `json:"groupId,omitempty"`
-	ConsumerID string            `json:"consumerId"`
+	MessageID  string       `json:"messageId"`
+	Queue      queue.Params `json:"queue"`
+	GroupID    string       `json:"groupId,omitempty"`
+	ConsumerID string       `json:"consumerId"`
 }
 
 // MessageUnacknowledgedPayload is used for consumer.messageUnacknowledged.
@@ -67,7 +67,7 @@ type MessageDeadLetteredPayload struct {
 
 // MessageReceivedPayload is used for consumer.messageReceived.
 type MessageReceivedPayload struct {
-	MessageID  string            `json:"messageId"`
-	Queue      queue.QueueParams `json:"queue"`
-	ConsumerID string            `json:"consumerId"`
+	MessageID  string       `json:"messageId"`
+	Queue      queue.Params `json:"queue"`
+	ConsumerID string       `json:"consumerId"`
 }

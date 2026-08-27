@@ -118,7 +118,7 @@ func (m *Manager) Delete(ctx context.Context, name string) error {
 }
 
 // ListQueues returns all queues in a namespace.
-func (m *Manager) ListQueues(ctx context.Context, name string) ([]queue.QueueParams, error) {
+func (m *Manager) ListQueues(ctx context.Context, name string) ([]queue.Params, error) {
 	validName, err := validate(name)
 	if err != nil {
 		return nil, err

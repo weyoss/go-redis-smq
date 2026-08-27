@@ -30,14 +30,14 @@ import (
 )
 
 type ScheduledPublisher struct {
-	queue      *queue.QueueParams
+	queue      *queue.Params
 	groupID    string
 	consumerID string
 	interval   time.Duration
 	log        *slog.Logger
 }
 
-func NewScheduledPublisher(queue *queue.QueueParams, groupID, consumerID string) *ScheduledPublisher {
+func NewScheduledPublisher(queue *queue.Params, groupID, consumerID string) *ScheduledPublisher {
 	return &ScheduledPublisher{
 		queue:      queue,
 		groupID:    groupID,

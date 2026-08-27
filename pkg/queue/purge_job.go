@@ -56,7 +56,7 @@ func (s *PurgeJobStatus) UnmarshalJSON(data []byte) error {
 // PurgeJobPayload contains the queue and message type for a purge job.
 type PurgeJobPayload struct {
 	// Queue is the target queue for the purge job.
-	Queue *QueueParams `json:"queue"`
+	Queue *Params `json:"queue"`
 
 	// MessageType is the category of messages to purge.
 	MessageType BrowseFilter `json:"messageType"`
@@ -104,8 +104,8 @@ type PurgeJob struct {
 	Meta *PurgeJobMeta `json:"meta,omitempty"`
 }
 
-// QueueParams returns the queue parameters from the payload.
-func (j *PurgeJob) QueueParams() *QueueParams {
+// Params returns the queue parameters from the payload.
+func (j *PurgeJob) QueueParams() *Params {
 	return j.Payload.Queue
 }
 

@@ -19,19 +19,19 @@
 //
 // Use the following factory functions to obtain concrete managers:
 //
-//   - redissmq.NewQueueManager() returns a queue.QueueManager
+//   - redissmq.NewQueueManager() returns a queue.Manager
 //   - redissmq.NewStateManager() returns a queue.StateManager
 //   - redissmq.NewConsumerGroupManager() returns a queue.ConsumerGroupManager
 //
 // # Queue Types and Delivery Models
 //
-// The package defines QueueType (FIFO, LIFO, Priority) and DeliveryModel
+// The package defines Type (FIFO, LIFO, Priority) and DeliveryModel
 // (Point-to-Point, Pub/Sub) to control how messages are ordered and
 // delivered.
 //
 // # Queue Parameters
 //
-// A QueueParams identifies a queue by its name and optional namespace. Create
+// A Params identifies a queue by its name and optional namespace. Create
 // one with NewQueueParams (uses the default namespace from configuration) or
 // NewQueueParamsWithNS (explicit namespace). The Must* variants panic on
 // error and are intended for testing or when parameters are known to be
@@ -45,13 +45,13 @@
 //
 // # Rate Limiting
 //
-// Rate limits can be applied to queues via QueueManager.SetRateLimit,
+// Rate limits can be applied to queues via Manager.SetRateLimit,
 // ClearRateLimit, and RateLimit methods. RateLimitParams are used to define
 // the limit and interval.
 //
 // # Browsing and Purging
 //
-// QueueManager.BrowseMessages allows paginated inspection of published,
+// Manager.BrowseMessages allows paginated inspection of published,
 // pending, scheduled, acknowledged, and dead-lettered messages (where audit
 // is enabled). PurgeQueue enqueues a background job to delete messages of a
 // given category.

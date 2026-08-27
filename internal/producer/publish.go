@@ -43,6 +43,6 @@ func PublishGoingDown(ctx context.Context, producerID string) {
 // The arguments match the TypeScript event signature:
 //
 //	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
-func PublishMessagePublished(ctx context.Context, messageID string, queue queue.QueueParams, producerID string) {
+func PublishMessagePublished(ctx context.Context, messageID string, queue queue.Params, producerID string) {
 	eventmultiplexer.Publish(ctx, EventMessagePublished, messageID, queue, producerID)
 }

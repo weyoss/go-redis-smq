@@ -48,21 +48,21 @@ type TopicExchange interface {
 	//   - "order.#"     matches "order.created", "order.items.added"
 	//   - "#"           matches all routing keys
 	//   - "*.created"   matches "order.created", "user.created"
-	BindQueue(ctx context.Context, queueParams *queue.QueueParams, exchangeParams *ExchangeParams, pattern string) error
+	BindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *ExchangeParams, pattern string) error
 
 	// UnbindQueue removes a queue binding from a specific pattern.
 	// The queue and exchange must be in the same namespace.
-	UnbindQueue(ctx context.Context, queueParams *queue.QueueParams, exchangeParams *ExchangeParams, pattern string) error
+	UnbindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *ExchangeParams, pattern string) error
 
 	// MatchQueues returns all queues whose binding patterns match the routing key.
-	MatchQueues(ctx context.Context, exchangeParams *ExchangeParams, routingKey string) ([]queue.QueueParams, error)
+	MatchQueues(ctx context.Context, exchangeParams *ExchangeParams, routingKey string) ([]queue.Params, error)
 
 	// Patterns returns all binding patterns registered for this topic exchange.
 	Patterns(ctx context.Context, exchangeParams *ExchangeParams) ([]string, error)
 
 	// BoundQueues returns all queues bound to a specific pattern.
-	BoundQueues(ctx context.Context, exchangeParams *ExchangeParams, pattern string) ([]queue.QueueParams, error)
+	BoundQueues(ctx context.Context, exchangeParams *ExchangeParams, pattern string) ([]queue.Params, error)
 
 	// Bindings returns all pattern to queue mappings for this exchange.
-	Bindings(ctx context.Context, exchangeParams *ExchangeParams) (map[string][]queue.QueueParams, error)
+	Bindings(ctx context.Context, exchangeParams *ExchangeParams) (map[string][]queue.Params, error)
 }

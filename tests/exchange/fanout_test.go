@@ -256,7 +256,7 @@ func TestFanout_DeleteAfterUnbind(t *testing.T) {
 }
 
 // Helper
-func startConsumer(t *testing.T, ctx context.Context, params *queue.QueueParams, counter *atomic.Int64) {
+func startConsumer(t *testing.T, ctx context.Context, params *queue.Params, counter *atomic.Int64) {
 	t.Helper()
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {

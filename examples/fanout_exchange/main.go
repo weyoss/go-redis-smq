@@ -75,7 +75,7 @@ func main() {
 	}
 	ch := make(chan result, 3)
 
-	startConsumer := func(queue *queue.QueueParams, label string) {
+	startConsumer := func(queue *queue.Params, label string) {
 		c := redissmq.NewConsumer()
 		c.Consume(queue, func(ctx context.Context, m *message.Transferable) error {
 			ch <- result{queue: label, body: m.Body}

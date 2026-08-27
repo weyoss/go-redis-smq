@@ -229,8 +229,8 @@ func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
 }
 
 // NewQueueManager returns a new queue manager that implements
-// publicqueue.QueueManager.
-func NewQueueManager() publicqueue.QueueManager {
+// publicqueue.Manager.
+func NewQueueManager() publicqueue.Manager {
 	return internalqueue.NewQueueManager()
 }
 
@@ -247,8 +247,8 @@ func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
 }
 
 // NewMessageManager returns a new message manager that implements
-// publicmessage.MessageManager.
-func NewMessageManager() publicmessage.MessageManager {
+// publicmessage.Manager.
+func NewMessageManager() publicmessage.Manager {
 	return internalmessage.NewManager()
 }
 

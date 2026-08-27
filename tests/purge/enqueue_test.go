@@ -188,7 +188,7 @@ func TestEnqueue_GetJob(t *testing.T) {
 }
 
 // Helper
-func consumeAndAck(t *testing.T, ctx context.Context, params *publicqueue.QueueParams, messageID string) {
+func consumeAndAck(t *testing.T, ctx context.Context, params *publicqueue.Params, messageID string) {
 	t.Helper()
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()

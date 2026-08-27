@@ -28,7 +28,7 @@ import (
 // handler, enforces expiration and consume timeouts, and routes the result
 // to the batch acker or unacker.
 type ConsumeMessage struct {
-	queue        *queue.QueueParams
+	queue        *queue.Params
 	groupID      string
 	consumerID   string
 	handler      Handler
@@ -39,7 +39,7 @@ type ConsumeMessage struct {
 
 // NewConsumeMessage creates a new ConsumeMessage instance.
 func NewConsumeMessage(
-	queue *queue.QueueParams,
+	queue *queue.Params,
 	groupID string,
 	consumerID string,
 	handler Handler,

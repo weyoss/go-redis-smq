@@ -31,7 +31,7 @@ import (
 //   - If PUB/SUB: create consumer group (ephemeral if no groupID provided)
 //   - If POINT_TO_POINT with groupID: error
 //   - If POINT_TO_POINT without groupID: OK, no group needed
-func PrepareConsumerGroup(ctx context.Context, consumerID string, q *queue.QueueParams, groupID string) (string, error) {
+func PrepareConsumerGroup(ctx context.Context, consumerID string, q *queue.Params, groupID string) (string, error) {
 	log := logger.New("consumer", "prepare-group", consumerID, q.Name())
 
 	store := internalQueue.NewManager().Store()
@@ -75,7 +75,7 @@ func PrepareConsumerGroup(ctx context.Context, consumerID string, q *queue.Queue
 
 // DeleteEphemeralConsumerGroup removes an ephemeral consumer group.
 // Called during consumer shutdown. If groupID is empty, generates one from consumerID.
-func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, q *queue.QueueParams, groupID string) error {
+func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, q *queue.Params, groupID string) error {
 	log := logger.New("consumer", "delete-group", consumerID, q.Name())
 
 	effectiveGroupID := groupID
@@ -134,7 +134,7 @@ func ephemeralGroupID(consumerID string) string {
 }
 
 // createConsumerGroup creates a consumer group for a queue.
-func createConsumerGroup(ctx context.Context, q *queue.QueueParams, groupID string) error {
+func createConsumerGroup(ctx context.Context, q *queue.Params, groupID string) error {
 	log := logger.New("consumer", "create-group", q.Name())
 
 	qKey := keys.Queue{

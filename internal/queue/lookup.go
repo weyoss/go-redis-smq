@@ -36,7 +36,7 @@ func NewLookup(codecs *Codecs) *Lookup {
 }
 
 // All returns every queue across all namespaces.
-func (l *Lookup) All(ctx context.Context) ([]publicqueue.QueueParams, error) {
+func (l *Lookup) All(ctx context.Context) ([]publicqueue.Params, error) {
 	members, err := redisClient.LoadSetMembers(ctx,
 		keys.System{}.AllQueues(), "all queues")
 	if err != nil {
@@ -46,7 +46,7 @@ func (l *Lookup) All(ctx context.Context) ([]publicqueue.QueueParams, error) {
 }
 
 // ByNamespace returns all queues within a specific namespace.
-func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]publicqueue.QueueParams, error) {
+func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]publicqueue.Params, error) {
 	members, err := redisClient.LoadSetMembers(ctx,
 		keys.Namespace{Name: namespace}.Queues(),
 		fmt.Sprintf("queues in namespace %s", namespace))
@@ -57,7 +57,7 @@ func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]publicque
 }
 
 // ByExchange returns all queues bound to a specific exchange.
-func (l *Lookup) ByExchange(ctx context.Context, namespace, exchangeName string, exchangeType int) ([]publicqueue.QueueParams, error) {
+func (l *Lookup) ByExchange(ctx context.Context, namespace, exchangeName string, exchangeType int) ([]publicqueue.Params, error) {
 	exKey := keys.Exchange{
 		Namespace: namespace,
 		Name:      exchangeName,
@@ -134,10 +134,10 @@ func (l *Lookup) AllNamespaces(ctx context.Context) ([]string, error) {
 
 // DecodeQueueParams decodes JSON-encoded queue params from Redis set members.
 // Malformed entries are silently skipped.
-func DecodeQueueParams(members []string) ([]publicqueue.QueueParams, error) {
-	params := make([]publicqueue.QueueParams, 0, len(members))
+func DecodeQueueParams(members []string) ([]publicqueue.Params, error) {
+	params := make([]publicqueue.Params, 0, len(members))
 	for _, member := range members {
-		var p publicqueue.QueueParams
+		var p publicqueue.Params
 		if err := json.Unmarshal([]byte(member), &p); err != nil {
 			continue
 		}

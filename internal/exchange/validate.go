@@ -51,7 +51,7 @@ func NewValidator(store *Store) *Validator {
 func (v *Validator) ValidateQueueBinding(
 	ctx context.Context,
 	params *pubexchange.ExchangeParams,
-	queueParams *publicqueue.QueueParams,
+	queueParams *publicqueue.Params,
 ) (*pubexchange.ExchangeProps, error) {
 	// Load queue properties first (matches TypeScript order)
 	queueProps, err := v.queueStore.Load(ctx, queueParams)
@@ -90,7 +90,7 @@ func (v *Validator) ValidateQueueBinding(
 //
 //	STANDARD policy: only FIFO or LIFO queues allowed
 //	PRIORITY policy: only Priority queues allowed
-func checkPolicy(props *pubexchange.ExchangeProps, queueType publicqueue.QueueType) error {
+func checkPolicy(props *pubexchange.ExchangeProps, queueType publicqueue.Type) error {
 	switch props.Policy {
 	case pubexchange.PolicyStandard:
 		// Standard exchanges require FIFO or LIFO queues

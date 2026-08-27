@@ -33,7 +33,7 @@ import (
 // BatchAcker buffers acknowledgments and flushes them in batches.
 type BatchAcker struct {
 	mu             sync.Mutex
-	queue          *queue.QueueParams
+	queue          *queue.Params
 	consumerID     string
 	cfg            consumer.BatchConfig
 	buffer         []string
@@ -46,7 +46,7 @@ type BatchAcker struct {
 }
 
 // NewBatchAcker creates a new batch acker.
-func NewBatchAcker(queue *queue.QueueParams, consumerID string, cfg consumer.BatchConfig) *BatchAcker {
+func NewBatchAcker(queue *queue.Params, consumerID string, cfg consumer.BatchConfig) *BatchAcker {
 	return &BatchAcker{
 		queue:          queue,
 		consumerID:     consumerID,

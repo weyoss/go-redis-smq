@@ -43,7 +43,7 @@ type ProducibleMessage struct {
 	scheduledRepeat       int
 	exchange              *exchange.ExchangeParams
 	exchangeRoutingKey    string
-	queue                 *queue.QueueParams
+	queue                 *queue.Params
 }
 
 // defaultOptions holds the default consume options for all instances.
@@ -260,11 +260,11 @@ func (m *ProducibleMessage) SetExchangeRoutingKey(key string) *ProducibleMessage
 }
 
 // Queue returns the target queue, if any.
-func (m *ProducibleMessage) Queue() *queue.QueueParams { return m.queue }
+func (m *ProducibleMessage) Queue() *queue.Params { return m.queue }
 
 // SetQueue sets the target queue for direct delivery.
 // It clears any previously set exchange.
-func (m *ProducibleMessage) SetQueue(params *queue.QueueParams) *ProducibleMessage {
+func (m *ProducibleMessage) SetQueue(params *queue.Params) *ProducibleMessage {
 	m.queue = params
 	m.exchange = nil
 	m.exchangeRoutingKey = ""
@@ -272,7 +272,7 @@ func (m *ProducibleMessage) SetQueue(params *queue.QueueParams) *ProducibleMessa
 }
 
 // ToParams converts the message to a serializable params struct.
-func (m *ProducibleMessage) ToParams(destinationQueue *queue.QueueParams, consumerGroupID string) *Params {
+func (m *ProducibleMessage) ToParams(destinationQueue *queue.Params, consumerGroupID string) *Params {
 	p := &Params{
 		CreatedAt:        m.createdAt.UnixMilli(),
 		TTL:              m.ttl.Milliseconds(),

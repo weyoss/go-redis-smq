@@ -65,8 +65,8 @@ type DeleteResponse struct {
 	Stats DeleteStats `json:"stats"`
 }
 
-// MessageManager is the public interface for message lifecycle operations.
-type MessageManager interface {
+// Manager is the public interface for message lifecycle operations.
+type Manager interface {
 	// Status retrieves the current status of a message.
 	Status(ctx context.Context, messageID string) (MessageStatus, error)
 

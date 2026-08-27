@@ -44,8 +44,8 @@ func NewStore(codecs *Codecs) *Store {
 
 func (s *Store) Save(
 	ctx context.Context,
-	queueParams *publicqueue.QueueParams,
-	queueType publicqueue.QueueType,
+	queueParams *publicqueue.Params,
+	queueType publicqueue.Type,
 	deliveryModel publicqueue.DeliveryModel,
 ) error {
 	return s.SaveWithRateLimit(ctx, queueParams, queueType, deliveryModel, nil)
@@ -53,8 +53,8 @@ func (s *Store) Save(
 
 func (s *Store) SaveWithRateLimit(
 	ctx context.Context,
-	queueParams *publicqueue.QueueParams,
-	queueType publicqueue.QueueType,
+	queueParams *publicqueue.Params,
+	queueType publicqueue.Type,
 	deliveryModel publicqueue.DeliveryModel,
 	rateLimit *publicqueue.RateLimitParams,
 ) error {
@@ -141,7 +141,7 @@ func (s *Store) SaveWithRateLimit(
 
 	switch replyStr {
 	case "OK":
-		queueEvents.PublishCreated(ctx, *queueParams, publicqueue.QueueProps{
+		queueEvents.PublishCreated(ctx, *queueParams, publicqueue.Props{
 			Type:          queueType,
 			DeliveryModel: deliveryModel,
 			RateLimit:     rateLimit,
@@ -154,19 +154,19 @@ func (s *Store) SaveWithRateLimit(
 	}
 }
 
-func (s *Store) SetRateLimit(ctx context.Context, queueParams *publicqueue.QueueParams, rateLimit *publicqueue.RateLimitParams) error {
+func (s *Store) SetRateLimit(ctx context.Context, queueParams *publicqueue.Params, rateLimit *publicqueue.RateLimitParams) error {
 	return s.rateLimitStore.Set(ctx, queueParams, rateLimit)
 }
 
-func (s *Store) ClearRateLimit(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (s *Store) ClearRateLimit(ctx context.Context, queueParams *publicqueue.Params) error {
 	return s.rateLimitStore.Clear(ctx, queueParams)
 }
 
-func (s *Store) GetRateLimit(ctx context.Context, queueParams *publicqueue.QueueParams) (*publicqueue.RateLimitParams, error) {
+func (s *Store) GetRateLimit(ctx context.Context, queueParams *publicqueue.Params) (*publicqueue.RateLimitParams, error) {
 	return s.rateLimitStore.Get(ctx, queueParams)
 }
 
-func (s *Store) Load(ctx context.Context, queueParams *publicqueue.QueueParams) (*publicqueue.QueueProps, error) {
+func (s *Store) Load(ctx context.Context, queueParams *publicqueue.Params) (*publicqueue.Props, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -185,7 +185,7 @@ func (s *Store) Load(ctx context.Context, queueParams *publicqueue.QueueParams) 
 	return props, nil
 }
 
-func (s *Store) Exists(ctx context.Context, queueParams *publicqueue.QueueParams) (bool, error) {
+func (s *Store) Exists(ctx context.Context, queueParams *publicqueue.Params) (bool, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
@@ -198,7 +198,7 @@ func (s *Store) Exists(ctx context.Context, queueParams *publicqueue.QueueParams
 	return count > 0, nil
 }
 
-func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.QueueParams) error {
+func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) error {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

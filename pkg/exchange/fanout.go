@@ -29,16 +29,16 @@ type FanoutExchange interface {
 	// BindQueue binds a queue to a fanout exchange.
 	// The queue will receive all messages published to this exchange.
 	// The queue and exchange must be in the same namespace.
-	BindQueue(ctx context.Context, queueParams *queue.QueueParams, exchangeParams *ExchangeParams) error
+	BindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *ExchangeParams) error
 
 	// UnbindQueue removes a queue binding from a fanout exchange.
 	// The queue and exchange must be in the same namespace.
-	UnbindQueue(ctx context.Context, queueParams *queue.QueueParams, exchangeParams *ExchangeParams) error
+	UnbindQueue(ctx context.Context, queueParams *queue.Params, exchangeParams *ExchangeParams) error
 
 	// MatchQueues returns all queues bound to this fanout exchange.
 	// This is equivalent to BoundQueues for fanout exchanges.
-	MatchQueues(ctx context.Context, exchangeParams *ExchangeParams) ([]queue.QueueParams, error)
+	MatchQueues(ctx context.Context, exchangeParams *ExchangeParams) ([]queue.Params, error)
 
 	// BoundQueues returns all queues bound to this fanout exchange.
-	BoundQueues(ctx context.Context, exchangeParams *ExchangeParams) ([]queue.QueueParams, error)
+	BoundQueues(ctx context.Context, exchangeParams *ExchangeParams) ([]queue.Params, error)
 }
