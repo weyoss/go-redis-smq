@@ -1,0 +1,6 @@
+issues:
+  exclude:
+    - "SA1019" # ZRangeByScore/BRPopLPush/RPopLPush is deprecated
+  exclude-dirs:
+    - tests
+    - benchmark
