@@ -13,6 +13,7 @@ package lock
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"math"
 	"math/rand"
 	"sync"
@@ -21,6 +22,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
+	"github.com/weyoss/go-redis-smq/internal/util/logger"
 )
 
 // BackoffStrategy defines a retry backoff function.
@@ -79,6 +81,8 @@ type Lock struct {
 	mu       sync.Mutex
 	acquired bool
 	stopCh   chan struct{}
+
+	log *slog.Logger
 }
 
 // Option configures a Lock.
@@ -115,6 +119,7 @@ func New(key, owner string, opts ...Option) *Lock {
 		key:    key,
 		owner:  owner,
 		ttl:    30 * time.Second,
+		log:    logger.New("lock"),
 	}
 	for _, o := range opts {
 		o(l)
@@ -225,15 +230,19 @@ func (l *Lock) refreshLoop() {
 		case <-ticker.C:
 			l.mu.Lock()
 			if l.acquired {
-				// Use extend-lock.lua: PEXPIRE if owner matches
-				// ARGV[1] = lock_id, ARGV[2] = ttl in milliseconds
-				redisClient.Eval(
+				if _, err := redisClient.Eval(
 					context.Background(),
 					scripts.ExtendLock,
 					[]string{l.key},
 					l.owner,
 					l.ttl.Milliseconds(),
-				)
+				); err != nil {
+					l.log.Error("failed to extend lock",
+						"key", l.key,
+						"owner", l.owner,
+						"error", err,
+					)
+				}
 			}
 			l.mu.Unlock()
 		}

@@ -11,7 +11,6 @@
 package consumer
 
 import (
-	"encoding/json"
 	"log/slog"
 	"sync"
 
@@ -61,16 +60,6 @@ func NewQueueStateTracker(
 	t.log.Debug("queue state tracker started")
 
 	return t
-}
-
-// decodeEventArg converts a positional event argument received from Redis
-// Pub/Sub (typically a map[string]interface{}) into the target Go type.
-func decodeEventArg(arg interface{}, target interface{}) error {
-	data, err := json.Marshal(arg)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, target)
 }
 
 func (t *QueueStateTracker) handleStateChange(p internalQueueEvents.StateChangedPayload) {

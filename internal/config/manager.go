@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"sync"
 
 	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
@@ -223,7 +224,9 @@ func (m *Manager) loadOrDefault(ctx context.Context) *pubconfig.Config {
 	if err != nil {
 		currentVersion := 0
 		if v, ok := hash[ConfigFieldVersion]; ok {
-			fmt.Sscanf(v, "%d", &currentVersion)
+			if parsed, err := strconv.Atoi(v); err == nil {
+				currentVersion = parsed
+			}
 		}
 		return m.saveDefaultsLocked(ctx, currentVersion)
 	}

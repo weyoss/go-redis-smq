@@ -14,27 +14,40 @@ import (
 	"context"
 
 	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
+	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+var log = logger.New("producer", "events")
+
+// publish publishes an event to the appropriate bus(es) and logs any error.
+func publish(ctx context.Context, eventName string, args ...interface{}) {
+	if err := eventmultiplexer.Publish(ctx, eventName, args...); err != nil {
+		log.Error("failed to publish event",
+			"event", eventName,
+			"error", err,
+		)
+	}
+}
+
 // PublishUp publishes a producer.up event to the public user bus.
 func PublishUp(ctx context.Context, producerID string) {
-	eventmultiplexer.Publish(ctx, EventUp, producerID)
+	publish(ctx, EventUp, producerID)
 }
 
 // PublishDown publishes a producer.down event to the public user bus.
 func PublishDown(ctx context.Context, producerID string) {
-	eventmultiplexer.Publish(ctx, EventDown, producerID)
+	publish(ctx, EventDown, producerID)
 }
 
 // PublishGoingUp publishes a producer.goingUp event to the public user bus.
 func PublishGoingUp(ctx context.Context, producerID string) {
-	eventmultiplexer.Publish(ctx, EventGoingUp, producerID)
+	publish(ctx, EventGoingUp, producerID)
 }
 
 // PublishGoingDown publishes a producer.goingDown event to the public user bus.
 func PublishGoingDown(ctx context.Context, producerID string) {
-	eventmultiplexer.Publish(ctx, EventGoingDown, producerID)
+	publish(ctx, EventGoingDown, producerID)
 }
 
 // PublishMessagePublished publishes a producer.messagePublished event to the
@@ -44,5 +57,5 @@ func PublishGoingDown(ctx context.Context, producerID string) {
 //
 //	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
 func PublishMessagePublished(ctx context.Context, messageID string, queue queue.Params, producerID string) {
-	eventmultiplexer.Publish(ctx, EventMessagePublished, messageID, queue, producerID)
+	publish(ctx, EventMessagePublished, messageID, queue, producerID)
 }

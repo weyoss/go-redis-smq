@@ -8,7 +8,6 @@
  *
  */
 
-// Package queue provides the public API for managing RedisSMQ queues.
 package queue
 
 import (

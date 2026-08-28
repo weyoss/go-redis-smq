@@ -325,7 +325,9 @@ func (pm *PurgeManager) failJob(ctx context.Context, job *publicqueue.PurgeJob, 
 	job.Status = publicqueue.PurgeJobFailed
 	job.Error = errMsg
 	job.CompletedAt = time.Now().UnixMilli()
-	fail(ctx, job.ID, job)
+	if err := fail(ctx, job.ID, job); err != nil {
+		pm.log.Error("failed to mark job as failed", "jobID", job.ID, "error", err)
+	}
 	pm.unlockQueue(ctx, queueParams, job.ID, publicqueue.PurgeJobFailed, errMsg)
 }
 

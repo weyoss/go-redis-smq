@@ -8,8 +8,6 @@
  *
  */
 
-// Package events provides internal subscription functions for RedisSMQ
-// configuration events on the system event bus.
 package events
 
 import (

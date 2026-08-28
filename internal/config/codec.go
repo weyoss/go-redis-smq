@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/weyoss/go-redis-smq/internal/codec"
 	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
@@ -62,7 +63,11 @@ func (c *Codec) DecodeHash(ctx context.Context, hash map[string]string) (*pubcon
 	}
 
 	if v, ok := hash[ConfigFieldVersion]; ok {
-		fmt.Sscanf(v, "%d", &cfg.Version)
+		version, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, codec.NewDecodingError("config", fmt.Sprintf("version=%s", v), err)
+		}
+		cfg.Version = version
 	}
 
 	return &cfg, nil

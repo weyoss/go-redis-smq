@@ -165,7 +165,9 @@ func (mh *MessageHandler) acquireWorkerLock() {
 
 	if !mh.running {
 		mh.log.Debug("handler stopped before lock acquired — releasing")
-		mh.workerLock.Release(context.Background())
+		if err := mh.workerLock.Release(context.Background()); err != nil {
+			mh.log.Error("failed to release worker lock after stop", "error", err)
+		}
 		return
 	}
 

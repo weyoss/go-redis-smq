@@ -8,8 +8,6 @@
  *
  */
 
-// Package redis provides small public utilities related to Redis key
-// validation used by RedisSMQ public packages.
 package redis
 
 import (

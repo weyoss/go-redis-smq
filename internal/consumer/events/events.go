@@ -20,13 +20,10 @@ import (
 
 // Consumer event names.
 const (
-	// Lifecycle
-	EventUp        = "consumer.up"
-	EventDown      = "consumer.down"
-	EventGoingUp   = "consumer.goingUp"
-	EventGoingDown = "consumer.goingDown"
-
-	// Message processing
+	EventUp                    = "consumer.up"
+	EventDown                  = "consumer.down"
+	EventGoingUp               = "consumer.goingUp"
+	EventGoingDown             = "consumer.goingDown"
 	EventMessageReceived       = "consumer.messageReceived"
 	EventMessageAcknowledged   = "consumer.messageAcknowledged"
 	EventMessageUnacknowledged = "consumer.messageUnacknowledged"

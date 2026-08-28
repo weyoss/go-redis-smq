@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
+	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
@@ -22,5 +23,11 @@ import (
 // This event is internal-only and is used to synchronise configuration
 // changes across connected instances.
 func PublishUpdated(ctx context.Context, config *config.Config, version int) {
-	eventmultiplexer.Publish(ctx, EventUpdated, config, version)
+	if err := eventmultiplexer.Publish(ctx, EventUpdated, config, version); err != nil {
+		logger.New("config-events").
+			Error("failed to publish configuration update",
+				"version", version,
+				"error", err,
+			)
+	}
 }

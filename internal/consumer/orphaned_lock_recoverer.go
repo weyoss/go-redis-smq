@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
@@ -76,8 +77,14 @@ func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
 		return
 	}
 
-	var state int
-	fmt.Sscanf(stateStr, "%d", &state)
+	state, err := strconv.Atoi(stateStr)
+	if err != nil {
+		olr.log.Error("invalid queue state value",
+			"value", stateStr,
+			"error", err,
+		)
+		return
+	}
 
 	if queue.QueueState(state) != queue.StateLocked {
 		return

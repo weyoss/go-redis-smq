@@ -53,7 +53,9 @@ func StartRedisProcess() (*RedisProcess, error) {
 	addr := fmt.Sprintf("127.0.0.1:%d", port)
 
 	dataDir := filepath.Join(os.TempDir(), fmt.Sprintf("redis-smq-test-%d-%d", os.Getpid(), port))
-	os.MkdirAll(dataDir, 0700)
+	if err := os.MkdirAll(dataDir, 0700); err != nil {
+		return nil, fmt.Errorf("create data dir: %w", err)
+	}
 
 	cmd := exec.Command(redisBinary,
 		"--port", fmt.Sprintf("%d", port),
@@ -66,26 +68,28 @@ func StartRedisProcess() (*RedisProcess, error) {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		os.RemoveAll(dataDir)
+		_ = os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis-server pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		os.RemoveAll(dataDir)
+		_ = os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis-server start: %w", err)
 	}
 
 	if !waitForReady(stdout, 10*time.Second) {
-		cmd.Process.Kill()
-		os.RemoveAll(dataDir)
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis-server failed to start within timeout")
 	}
 
 	client := goredis.NewClient(&goredis.Options{Addr: addr})
 	if err := internalredis.Init(context.Background(), client); err != nil {
 		_ = client.Close()
-		cmd.Process.Kill()
-		os.RemoveAll(dataDir)
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_ = os.RemoveAll(dataDir)
 		return nil, fmt.Errorf("redis init: %w", err)
 	}
 

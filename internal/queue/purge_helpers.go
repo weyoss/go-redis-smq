@@ -14,26 +14,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/redis"
-	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
-
-func resolveCategory(filter publicqueue.BrowseFilter, qKey keys.Queue) (key string, counter schema.QueueField, updateMessages bool) {
-	switch filter {
-	case publicqueue.BrowsePending:
-		return qKey.Pending(), schema.QueueFieldPendingMessagesCount, true
-	case publicqueue.BrowseScheduled:
-		return qKey.Scheduled(), schema.QueueFieldScheduledMessagesCount, true
-	case publicqueue.BrowseAcknowledged:
-		return qKey.Acknowledged(), schema.QueueFieldAcknowledgedMessagesCount, false
-	case publicqueue.BrowseDeadLettered:
-		return qKey.DeadLetter(), schema.QueueFieldDeadLetteredMessagesCount, false
-	default:
-		return "", 0, false
-	}
-}
 
 func fetchBatch(ctx context.Context, key string, count int) ([]string, error) {
 	t, err := redis.Client().Type(ctx, key).Result()

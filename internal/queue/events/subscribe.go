@@ -8,12 +8,6 @@
  *
  */
 
-// Package events provides internal subscription functions for RedisSMQ queue
-// events on the system event bus.
-//
-// These functions are intended for use by RedisSMQ components only.
-// External users should use the public subscription functions in
-// pkg/queue instead.
 package events
 
 import (

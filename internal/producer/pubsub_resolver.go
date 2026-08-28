@@ -176,16 +176,6 @@ func (r *PubSubTargetResolver) subscribe() error {
 	return nil
 }
 
-// decodeArg converts a positional event argument received from Redis Pub/Sub
-// (typically a map[string]interface{} after JSON decoding) into the target Go type.
-func decodeArg(arg interface{}, target interface{}) error {
-	data, err := json.Marshal(arg)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, target)
-}
-
 func (r *PubSubTargetResolver) Clear() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

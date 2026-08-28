@@ -27,7 +27,6 @@ const (
 	EventMessagePublished = "producer.messagePublished"
 )
 
-// Public payload types.
 type LifecyclePayload struct {
 	ProducerID string
 }

@@ -38,8 +38,9 @@ const (
 	// ZPOPLPUSH Custom Lua script: atomically pop highest priority and push to processing
 	ZPOPLPUSH ID = "ZPOPLPUSH"
 
-	// Redis lock scripts
-	ExtendLock  ID = "EXTEND_LOCK"
+	// ExtendLock is the Lua script ID for extending a Redis lock.
+	ExtendLock ID = "EXTEND_LOCK"
+	// ReleaseLock is the Lua script ID for releasing a Redis lock.
 	ReleaseLock ID = "RELEASE_LOCK"
 
 	//

@@ -16,13 +16,10 @@ import (
 
 // Producer event names.
 const (
-	// Lifecycle
-	EventUp        = "producer.up"
-	EventDown      = "producer.down"
-	EventGoingUp   = "producer.goingUp"
-	EventGoingDown = "producer.goingDown"
-
-	// Message publication
+	EventUp               = "producer.up"
+	EventDown             = "producer.down"
+	EventGoingUp          = "producer.goingUp"
+	EventGoingDown        = "producer.goingDown"
 	EventMessagePublished = "producer.messagePublished"
 )
 
