@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/requeue-message.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

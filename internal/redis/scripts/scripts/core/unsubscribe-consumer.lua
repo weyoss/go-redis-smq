@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/unsubscribe-consumer.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/save-config.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

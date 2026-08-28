@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/get-queue-state.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>
@@ -32,4 +31,3 @@ end
 
 -- Get current state
 return redis.call("HGET", keyQueueProperties, EQueuePropertyOperationalState)
-

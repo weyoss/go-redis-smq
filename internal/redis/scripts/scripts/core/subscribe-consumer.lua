@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/subscribe-consumer.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

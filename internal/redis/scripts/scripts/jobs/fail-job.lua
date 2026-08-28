@@ -1,4 +1,3 @@
--- internal/redis/scripts/scripts/jobs/fail-job.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

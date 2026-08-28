@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/unacknowledge-message.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>
@@ -185,12 +184,9 @@ for argvIndex = INITIAL_ARGV_OFFSET + 1, #ARGV, PARAMS_PER_MESSAGE do
                     redis.call("LTRIM", keyMessageHistory, 0, maxHistorySize - 1)
                 end
 
-                -- Set expiration on history key to match message expiration if applicable
+                -- Set expiration on history key if dead‑letter audit expiry is configured.
                 if expireStoredMessages ~= '0' then
-                    local ttl = redis.call("PTTL", keyMessage)
-                    if ttl > 0 then
-                        redis.call("PEXPIRE", keyMessageHistory, ttl)
-                    end
+                    redis.call("PEXPIRE", keyMessageHistory, expireStoredMessages)
                 end
 
                 -- Increment unacknowledged count on the message

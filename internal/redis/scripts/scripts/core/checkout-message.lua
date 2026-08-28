@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/checkout-message.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

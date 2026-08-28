@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/delete-queue.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

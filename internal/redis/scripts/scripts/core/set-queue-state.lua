@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/set-queue-state.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

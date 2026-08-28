@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/create-queue.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

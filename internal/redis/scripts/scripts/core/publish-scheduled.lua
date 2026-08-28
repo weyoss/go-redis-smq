@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/publish-scheduled.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

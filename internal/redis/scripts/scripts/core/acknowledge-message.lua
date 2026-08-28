@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/acknowledge-message.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

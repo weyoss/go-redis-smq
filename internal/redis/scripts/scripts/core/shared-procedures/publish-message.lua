@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/shared-procedures/publish-message.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

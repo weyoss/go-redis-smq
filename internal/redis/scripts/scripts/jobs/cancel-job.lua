@@ -1,4 +1,3 @@
--- internal/redis/scripts/scripts/jobs/cancel-job.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

@@ -1,4 +1,3 @@
--- internal/redis/scripts/scripts/jobs/start-job.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>

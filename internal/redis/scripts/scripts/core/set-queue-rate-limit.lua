@@ -1,4 +1,3 @@
--- internal/redis/scripts/core/set-queue-rate-limit.lua
 --
 -- Copyright (c)
 -- Weyoss <weyoss@outlook.com>
