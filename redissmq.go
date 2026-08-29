@@ -58,6 +58,8 @@ var (
 	initialized bool
 )
 
+var log = logger.New("redissmq")
+
 type trackedInstances struct {
 	mu        sync.Mutex
 	producers []producer.Producer
@@ -137,7 +139,7 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 	}()
 
 	initialized = true
-	logger.New("redissmq").Info("RedisSMQ initialized successfully")
+	log.Info("RedisSMQ initialized successfully")
 	return nil
 }
 
@@ -176,8 +178,7 @@ func Shutdown() {
 		return
 	}
 
-	l := logger.New("redissmq")
-	l.Info("RedisSMQ shutting down...")
+	log.Info("RedisSMQ shutting down...")
 
 	if purgeWorkerStop != nil {
 		purgeWorkerStop()
@@ -202,18 +203,18 @@ func Shutdown() {
 	for _, c := range consumers {
 		c.Shutdown()
 	}
-	l.Info("consumers shut down", "count", len(consumers))
+	log.Info("consumers shut down", "count", len(consumers))
 
 	bgCtx := context.Background()
 	for _, p := range producers {
 		p.Shutdown(bgCtx)
 	}
-	l.Info("producers shut down", "count", len(producers))
+	log.Info("producers shut down", "count", len(producers))
 
 	ShutdownUserEventBus()
 	internaleventbus.ShutdownSystem()
 
-	l.Info("RedisSMQ shut down complete")
+	log.Info("RedisSMQ shut down complete")
 
 	logger.Shutdown()
 	internalconfig.Close()

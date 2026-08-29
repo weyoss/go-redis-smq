@@ -24,7 +24,7 @@ import (
 // changes across connected instances.
 func PublishUpdated(ctx context.Context, config *config.Config, version int) {
 	if err := eventmultiplexer.Publish(ctx, EventUpdated, config, version); err != nil {
-		logger.New("config-events").
+		logger.New("config", "events").
 			Error("failed to publish configuration update",
 				"version", version,
 				"error", err,
