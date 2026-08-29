@@ -204,17 +204,20 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		Name:      queueParams.Name(),
 	}
 
-	consumerIDs, err := redisClient.LoadSetMembers(ctx, key.Consumers(), "consumers")
+	// Get consumer IDs from the consumer hash (HKEYS).
+	consumerIDs, err := redisClient.Client().HKeys(ctx, key.Consumers()).Result()
 	if err != nil {
 		return fmt.Errorf("delete queue: get consumers: %w", err)
 	}
 
-	consumerGroups, err := redisClient.LoadSetMembers(ctx, key.ConsumerGroups(), "consumer groups")
+	// Get consumer group IDs from the set (SMEMBERS).
+	consumerGroups, err := redisClient.Client().SMembers(ctx, key.ConsumerGroups()).Result()
 	if err != nil {
 		return fmt.Errorf("delete queue: get consumer groups: %w", err)
 	}
 
-	processingQueues, err := redisClient.LoadSetMembers(ctx, key.ProcessingQueues(), "processing queues")
+	// Get processing queue keys from the processing queues hash (HKEYS).
+	processingQueues, err := redisClient.Client().HKeys(ctx, key.ProcessingQueues()).Result()
 	if err != nil {
 		return fmt.Errorf("delete queue: get processing queues: %w", err)
 	}
