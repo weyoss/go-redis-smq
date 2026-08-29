@@ -87,9 +87,9 @@ func TestEvent_RapidSaves(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	cfgManager := redissmq.NewConfigManager()
-	cfg := cfgManager.Get()
 
 	for i := 0; i < 10; i++ {
+		cfg := cfgManager.Get()
 		cfg.Namespace = fmt.Sprintf("rapid-ns-%d", i)
 		if _, err := cfgManager.Save(ctx, cfg); err != nil {
 			t.Fatalf("save %d: %v", i, err)
