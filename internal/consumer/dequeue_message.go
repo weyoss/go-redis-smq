@@ -156,17 +156,17 @@ func (d *DequeueMessage) unacknowledgePoppedMessage(ctx context.Context, message
 	}
 }
 
-func (d *DequeueMessage) causeFromCheckoutError(err error) *UnacknowledgeCause {
+func (d *DequeueMessage) causeFromCheckoutError(err error) *consumer.UnacknowledgeCause {
 	if errors.Is(err, consumer.ErrQueueStopped) {
-		c := CauseQueueStopped
+		c := consumer.CauseQueueStopped
 		return &c
 	}
 	if errors.Is(err, consumer.ErrQueueLocked) {
-		c := CauseQueueLocked
+		c := consumer.CauseQueueLocked
 		return &c
 	}
 	if errors.Is(err, consumer.ErrQueueInvalidState) {
-		c := CauseQueueInvalidState
+		c := consumer.CauseQueueInvalidState
 		return &c
 	}
 	return nil

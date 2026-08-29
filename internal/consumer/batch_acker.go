@@ -197,7 +197,7 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 	reply, err := redisClient.Eval(ctx, scripts.AcknowledgeMessage, luaKeys, argv...)
 	if err != nil {
 		ba.log.Error("batch ack script failed", "count", len(ids), "error", err)
-		ba.unacknowledgeFailed(ctx, ids, CauseUnexpectedError)
+		ba.unacknowledgeFailed(ctx, ids, consumer.CauseUnexpectedError)
 		return
 	}
 
@@ -212,7 +212,7 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 	results, ok := reply.([]interface{})
 	if !ok {
 		ba.log.Error("unexpected ack script reply", "reply", fmt.Sprintf("%v", reply))
-		ba.unacknowledgeFailed(ctx, ids, CauseUnexpectedError)
+		ba.unacknowledgeFailed(ctx, ids, consumer.CauseUnexpectedError)
 		return
 	}
 
@@ -236,7 +236,7 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 	ba.log.Debug("batch ack completed", "total", len(ids), "succeeded", succeeded)
 }
 
-func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cause UnacknowledgeCause) {
+func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cause consumer.UnacknowledgeCause) {
 	entries := make([]UnackEntry, 0, len(ids))
 	for _, id := range ids {
 		msgKey := keys.System{}.Message(id)
@@ -261,15 +261,15 @@ func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cau
 	}
 }
 
-func (ba *BatchAcker) causeFromAckError(reply string) UnacknowledgeCause {
+func (ba *BatchAcker) causeFromAckError(reply string) consumer.UnacknowledgeCause {
 	switch reply {
 	case "QUEUE_STOPPED":
-		return CauseQueueStopped
+		return consumer.CauseQueueStopped
 	case "QUEUE_LOCKED":
-		return CauseQueueLocked
+		return consumer.CauseQueueLocked
 	case "QUEUE_INVALID_STATE":
-		return CauseQueueInvalidState
+		return consumer.CauseQueueInvalidState
 	default:
-		return CauseUnexpectedError
+		return consumer.CauseUnexpectedError
 	}
 }

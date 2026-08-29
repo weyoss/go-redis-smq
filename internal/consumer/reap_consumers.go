@@ -18,6 +18,7 @@ import (
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -119,7 +120,7 @@ func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string)
 
 	// Use the dead consumer's ID to create an unacknowledger for its processing queue.
 	deadUnack := NewMessageUnacknowledger(rc.queue, consumerID)
-	if err := deadUnack.UnacknowledgeProcessingQueue(ctx, CauseOfflineConsumer); err != nil {
+	if err := deadUnack.UnacknowledgeProcessingQueue(ctx, consumer.CauseOfflineConsumer); err != nil {
 		rc.log.Error("failed to unacknowledge messages for dead consumer",
 			"consumerID", consumerID,
 			"error", err,

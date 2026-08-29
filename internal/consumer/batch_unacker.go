@@ -26,7 +26,7 @@ import (
 // unackEntry is a pending unacknowledgment entry.
 type unackEntry struct {
 	msg   *internalMessage.Envelope
-	cause UnacknowledgeCause
+	cause consumer.UnacknowledgeCause
 }
 
 // BatchUnacker buffers unacknowledgments and flushes them in batches.
@@ -73,7 +73,7 @@ func (bu *BatchUnacker) Run(ctx context.Context) {
 
 // Unack adds a message to the unacknowledgment batch or processes it
 // immediately if batching is disabled.
-func (bu *BatchUnacker) Unack(msg *internalMessage.Envelope, cause UnacknowledgeCause) {
+func (bu *BatchUnacker) Unack(msg *internalMessage.Envelope, cause consumer.UnacknowledgeCause) {
 	if !bu.cfg.Enabled {
 		bu.unacknowledge([]unackEntry{{msg: msg, cause: cause}})
 		return

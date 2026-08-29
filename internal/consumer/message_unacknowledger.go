@@ -25,6 +25,7 @@ import (
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -32,7 +33,7 @@ import (
 // UnackEntry holds a message and the cause for its unacknowledgment.
 type UnackEntry struct {
 	Message *internalMessage.Envelope
-	Cause   UnacknowledgeCause
+	Cause   consumer.UnacknowledgeCause
 }
 
 // MessageUnacknowledger handles unacknowledging messages for a consumer.
@@ -53,7 +54,7 @@ func NewMessageUnacknowledger(queue *queue.Params, consumerID string) *MessageUn
 
 // UnacknowledgeProcessingQueue unacknowledges all messages in a consumer's
 // processing queue with the given cause.
-func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Context, cause UnacknowledgeCause) error {
+func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Context, cause consumer.UnacknowledgeCause) error {
 	qKey := redisKeys.Queue{
 		Namespace: mu.queue.NS(),
 		Name:      mu.queue.Name(),
@@ -197,7 +198,7 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		}
 
 		messageExpired := "0"
-		if entry.Message.IsExpired() || entry.Cause == CauseTTLExpired {
+		if entry.Message.IsExpired() || entry.Cause == consumer.CauseTTLExpired {
 			messageExpired = "1"
 		}
 

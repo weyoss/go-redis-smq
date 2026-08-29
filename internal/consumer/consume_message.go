@@ -21,6 +21,7 @@ import (
 	consumerEvents "github.com/weyoss/go-redis-smq/internal/consumer/events"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -70,7 +71,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 	// Handle expired messages immediately.
 	if c.isExpired(m) {
 		c.log.Warn("message expired — unacknowledging", "messageID", m.ID, "ttl", m.TTL)
-		c.batchUnacker.Unack(envelope, CauseTTLExpired)
+		c.batchUnacker.Unack(envelope, consumer.CauseTTLExpired)
 		return
 	}
 
@@ -87,7 +88,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 			<-ctx.Done()
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) && timedOut.CompareAndSwap(false, true) {
 				c.log.Warn("handler timed out — unacknowledging", "messageID", m.ID)
-				c.batchUnacker.Unack(envelope, CauseTimeout)
+				c.batchUnacker.Unack(envelope, consumer.CauseTimeout)
 			}
 		}()
 	}
@@ -113,7 +114,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 	// Normal ack/unack path.
 	if err != nil {
 		c.log.Warn("handler returned error — unacknowledging", "messageID", m.ID, "error", err)
-		c.batchUnacker.Unack(envelope, CauseUnacknowledged)
+		c.batchUnacker.Unack(envelope, consumer.CauseUnacknowledged)
 	} else {
 		c.log.Debug("handler succeeded — acknowledging", "messageID", m.ID)
 		c.batchAcker.Ack(m.ID)

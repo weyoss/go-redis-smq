@@ -13,33 +13,7 @@ package consumer
 import (
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-)
-
-type UnacknowledgeCause int
-
-const (
-	CauseTimeout                 UnacknowledgeCause = 0  // TIMEOUT
-	CauseConsumeError            UnacknowledgeCause = 1  // CONSUME_ERROR
-	CauseUnacknowledged          UnacknowledgeCause = 2  // UNACKNOWLEDGED
-	CauseOfflineConsumer         UnacknowledgeCause = 3  // OFFLINE_CONSUMER
-	CauseShuttingDown            UnacknowledgeCause = 4  // SHUTTING_DOWN
-	CauseTTLExpired              UnacknowledgeCause = 5  // TTL_EXPIRED
-	CauseQueueStopped            UnacknowledgeCause = 6  // QUEUE_STOPPED
-	CauseQueueInvalidState       UnacknowledgeCause = 7  // QUEUE_INVALID_STATE
-	CauseQueueLocked             UnacknowledgeCause = 8  // QUEUE_LOCKED
-	CauseMessageNotFound         UnacknowledgeCause = 9  // MESSAGE_NOT_FOUND
-	CauseQueueStateChanged       UnacknowledgeCause = 10 // QUEUE_STATE_CHANGED
-	CauseQueueNotFound           UnacknowledgeCause = 11 // QUEUE_NOT_FOUND
-	CauseUnexpectedError         UnacknowledgeCause = 12 // UNEXPECTED_ERROR
-	CauseInvalidHandlerSignature UnacknowledgeCause = 13 // INVALID_HANDLER_SIGNATURE
-)
-
-type DeadLetterCause int
-
-const (
-	DeadLetterTTLExpired             DeadLetterCause = 0
-	DeadLetterRetryThresholdExceeded DeadLetterCause = 1
-	DeadLetterPeriodicMessage        DeadLetterCause = 2
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 )
 
 type UnacknowledgeAction int
@@ -64,15 +38,15 @@ func (a UnacknowledgeAction) String() string {
 }
 
 // resolveUnackAction determines the action and dead-letter cause for a failed message.
-func resolveUnackAction(msg *internalMessage.Envelope, cause UnacknowledgeCause) (UnacknowledgeAction, DeadLetterCause) {
+func resolveUnackAction(msg *internalMessage.Envelope, cause consumer.UnacknowledgeCause) (UnacknowledgeAction, consumer.DeadLetterCause) {
 	log := logger.New("consumer", "unacknowledge", msg.ID())
 
-	if cause == CauseTTLExpired || msg.IsExpired() {
+	if cause == consumer.CauseTTLExpired || msg.IsExpired() {
 		log.Debug("message expired — dead lettering",
 			"cause", int(cause),
 			"attempts", msg.MessageState().Attempts(),
 		)
-		return ActionDeadLetter, DeadLetterTTLExpired
+		return ActionDeadLetter, consumer.DeadLetterTTLExpired
 	}
 
 	if msg.IsPeriodic() {
@@ -80,7 +54,7 @@ func resolveUnackAction(msg *internalMessage.Envelope, cause UnacknowledgeCause)
 			"cause", int(cause),
 			"attempts", msg.MessageState().Attempts(),
 		)
-		return ActionDeadLetter, DeadLetterPeriodicMessage
+		return ActionDeadLetter, consumer.DeadLetterPeriodicMessage
 	}
 
 	if msg.HasRetryThresholdExceeded() {
@@ -89,7 +63,7 @@ func resolveUnackAction(msg *internalMessage.Envelope, cause UnacknowledgeCause)
 			"attempts", msg.MessageState().Attempts(),
 			"threshold", msg.ProducibleMessage().RetryThreshold(),
 		)
-		return ActionDeadLetter, DeadLetterRetryThresholdExceeded
+		return ActionDeadLetter, consumer.DeadLetterRetryThresholdExceeded
 	}
 
 	if msg.ProducibleMessage().RetryDelay() > 0 {

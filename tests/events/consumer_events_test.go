@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
-	"github.com/weyoss/go-redis-smq/internal/consumer"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
@@ -176,8 +175,8 @@ func TestConsumerEvents_MessageUnacknowledged(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	if received.Cause != int(consumer.CauseUnacknowledged) {
-		t.Errorf("cause = %d, want %d", received.Cause, consumer.CauseUnacknowledged)
+	if received.Cause != int(publicConsumer.CauseUnacknowledged) {
+		t.Errorf("cause = %d, want %d", received.Cause, publicConsumer.CauseUnacknowledged)
 	}
 	if received.ConsumerID == "" {
 		t.Error("consumerID should not be empty")
@@ -226,8 +225,8 @@ func TestConsumerEvents_MessageDeadLettered(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	if received.Cause != int(consumer.DeadLetterRetryThresholdExceeded) {
-		t.Errorf("cause = %d, want %d", received.Cause, consumer.DeadLetterRetryThresholdExceeded)
+	if received.Cause != int(publicConsumer.DeadLetterRetryThresholdExceeded) {
+		t.Errorf("cause = %d, want %d", received.Cause, publicConsumer.DeadLetterRetryThresholdExceeded)
 	}
 	if received.Queue.Name() != params.Name() {
 		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
