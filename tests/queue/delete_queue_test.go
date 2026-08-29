@@ -12,6 +12,7 @@ package queue_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -100,11 +101,11 @@ func TestDeleteQueue_EmptyQueue(t *testing.T) {
 	}
 }
 
-// Scenario: Delete queue after stopping consumers
-func TestDeleteQueue_AfterConsumerShutdown(t *testing.T) {
+// Scenario: Delete queue after consumer shutdown (empty hash should succeed)
+func TestDeleteQueue_AfterConsumerShutdown_EmptyHashSucceeds(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	params := publicqueue.MustQueueParams("test-delete-after-shutdown")
+	params := publicqueue.MustQueueParams("test-delete-after-shutdown-empty-hash")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Start and stop a consumer
@@ -112,14 +113,43 @@ func TestDeleteQueue_AfterConsumerShutdown(t *testing.T) {
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		return nil
 	})
-	cons.Run(ctx)
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
 	time.Sleep(200 * time.Millisecond)
 	cons.Shutdown()
 	time.Sleep(200 * time.Millisecond)
 
 	// Now delete should succeed
-	err := redissmq.NewQueueManager().Delete(ctx, params)
-	if err != nil {
+	if err := redissmq.NewQueueManager().Delete(ctx, params); err != nil {
 		t.Fatalf("delete after consumer shutdown: %v", err)
+	}
+}
+
+// Scenario: Delete queue with active consumer fails with ErrQueueHasActiveConsumers
+func TestDeleteQueue_WithActiveConsumerFails(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := publicqueue.MustQueueParams("test-delete-with-active-consumer")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	cons := redissmq.NewConsumer()
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+	defer cons.Shutdown()
+
+	// Give the consumer time to subscribe and set its heartbeat.
+	time.Sleep(500 * time.Millisecond)
+
+	err := redissmq.NewQueueManager().Delete(ctx, params)
+	if err == nil {
+		t.Fatal("expected error when deleting a queue with an active consumer")
+	}
+	if !errors.Is(err, publicqueue.ErrQueueHasActiveConsumers) {
+		t.Fatalf("expected ErrQueueHasActiveConsumers, got: %v", err)
 	}
 }
