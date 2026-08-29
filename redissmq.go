@@ -28,7 +28,7 @@ import (
 
 	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	internalconsumer "github.com/weyoss/go-redis-smq/internal/consumer"
-	"github.com/weyoss/go-redis-smq/internal/eventbus"
+	internaleventbus "github.com/weyoss/go-redis-smq/internal/eventbus"
 	internalexchange "github.com/weyoss/go-redis-smq/internal/exchange"
 	internalmessage "github.com/weyoss/go-redis-smq/internal/message"
 	internalnamespace "github.com/weyoss/go-redis-smq/internal/namespace"
@@ -37,13 +37,13 @@ import (
 	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	"github.com/weyoss/go-redis-smq/pkg/config"
-	publicconsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
-	publiceventbus "github.com/weyoss/go-redis-smq/pkg/eventbus"
-	publicexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
-	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
-	publicnamespace "github.com/weyoss/go-redis-smq/pkg/namespace"
-	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
-	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
+	"github.com/weyoss/go-redis-smq/pkg/eventbus"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
+	"github.com/weyoss/go-redis-smq/pkg/message"
+	"github.com/weyoss/go-redis-smq/pkg/namespace"
+	"github.com/weyoss/go-redis-smq/pkg/producer"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 var (
@@ -60,19 +60,19 @@ var (
 
 type trackedInstances struct {
 	mu        sync.Mutex
-	producers []publicproducer.Producer
-	consumers []publicconsumer.Consumer
+	producers []producer.Producer
+	consumers []consumer.Consumer
 }
 
 var instances trackedInstances
 
-func registerProducer(p publicproducer.Producer) {
+func registerProducer(p producer.Producer) {
 	instances.mu.Lock()
 	defer instances.mu.Unlock()
 	instances.producers = append(instances.producers, p)
 }
 
-func registerConsumer(c publicconsumer.Consumer) {
+func registerConsumer(c consumer.Consumer) {
 	instances.mu.Lock()
 	defer instances.mu.Unlock()
 	instances.consumers = append(instances.consumers, c)
@@ -80,11 +80,11 @@ func registerConsumer(c publicconsumer.Consumer) {
 
 // userBusAdapter adapts the internal event bus to the public event bus interface.
 type userBusAdapter struct {
-	bus *eventbus.EventBus
+	bus *internaleventbus.EventBus
 }
 
-// Subscribe implements publiceventbus.EventBus.
-func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interface{}), eventName string) (publiceventbus.Subscription, error) {
+// Subscribe implements eventbus.EventBus.
+func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interface{}), eventName string) (eventbus.Subscription, error) {
 	sub, err := a.bus.Subscribe(handler, eventName)
 	if err != nil {
 		return nil, err
@@ -121,7 +121,7 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 		return fmt.Errorf("redissmq: redis init failed: %w", err)
 	}
 
-	eventbus.InitSystem(ctx)
+	internaleventbus.InitSystem(ctx)
 
 	if err := internalconfig.Init(ctx); err != nil {
 		return fmt.Errorf("redissmq: config init failed: %w", err)
@@ -148,15 +148,15 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 // functions in the pkg packages. It is not started automatically; call this
 // function if you need to use the public event subscription API.
 func InitUserEventBus(ctx context.Context) {
-	bus := eventbus.InitUser(ctx)
-	publiceventbus.SetUserBus(&userBusAdapter{bus: bus})
+	bus := internaleventbus.InitUser(ctx)
+	eventbus.SetUserBus(&userBusAdapter{bus: bus})
 }
 
 // ShutdownUserEventBus stops the public user event bus and clears the global
 // reference. It can be called independently of the main Shutdown function.
 func ShutdownUserEventBus() {
-	publiceventbus.SetUserBus(nil)
-	eventbus.ShutdownUser()
+	eventbus.SetUserBus(nil)
+	internaleventbus.ShutdownUser()
 }
 
 // Shutdown gracefully stops the RedisSMQ runtime.
@@ -191,9 +191,9 @@ func Shutdown() {
 	}
 
 	instances.mu.Lock()
-	consumers := make([]publicconsumer.Consumer, len(instances.consumers))
+	consumers := make([]consumer.Consumer, len(instances.consumers))
 	copy(consumers, instances.consumers)
-	producers := make([]publicproducer.Producer, len(instances.producers))
+	producers := make([]producer.Producer, len(instances.producers))
 	copy(producers, instances.producers)
 	instances.consumers = nil
 	instances.producers = nil
@@ -211,7 +211,7 @@ func Shutdown() {
 	l.Info("producers shut down", "count", len(producers))
 
 	ShutdownUserEventBus()
-	eventbus.ShutdownSystem()
+	internaleventbus.ShutdownSystem()
 
 	l.Info("RedisSMQ shut down complete")
 
@@ -222,69 +222,69 @@ func Shutdown() {
 	initialized = false
 }
 
-// NewProducer returns a new producer that implements publicproducer.Producer.
+// NewProducer returns a new producer that implements producer.Producer.
 // The producer is automatically registered for lifecycle management and will
 // be shut down when Shutdown is called.
-func NewProducer() publicproducer.Producer {
+func NewProducer() producer.Producer {
 	p := internalproducer.New()
 	registerProducer(p)
 	return p
 }
 
-// NewConsumer returns a new consumer that implements publicconsumer.Consumer.
+// NewConsumer returns a new consumer that implements consumer.Consumer.
 // The consumer is automatically registered for lifecycle management and will
 // be shut down when Shutdown is called.
-func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
+func NewConsumer(opts ...consumer.Option) consumer.Consumer {
 	c := internalconsumer.New(opts...)
 	registerConsumer(c)
 	return c
 }
 
 // NewQueueManager returns a new queue manager that implements
-// publicqueue.Manager.
-func NewQueueManager() publicqueue.Manager {
+// queue.Manager.
+func NewQueueManager() queue.Manager {
 	return internalqueue.NewManager()
 }
 
 // NewStateManager returns a new state manager that implements
-// publicqueue.StateManager.
-func NewStateManager() publicqueue.StateManager {
+// queue.StateManager.
+func NewStateManager() queue.StateManager {
 	return internalqueue.NewStateManager()
 }
 
 // NewConsumerGroupManager returns a new consumer group manager that
-// implements publicqueue.ConsumerGroupManager.
-func NewConsumerGroupManager() publicqueue.ConsumerGroupManager {
+// implements queue.ConsumerGroupManager.
+func NewConsumerGroupManager() queue.ConsumerGroupManager {
 	return internalqueue.NewConsumerGroupManager()
 }
 
 // NewMessageManager returns a new message manager that implements
-// publicmessage.Manager.
-func NewMessageManager() publicmessage.Manager {
+// message.Manager.
+func NewMessageManager() message.Manager {
 	return internalmessage.NewManager()
 }
 
 // NewExchangeManager returns a new exchange manager that implements
-// publicexchange.Manager.
-func NewExchangeManager() publicexchange.Manager {
+// exchange.Manager.
+func NewExchangeManager() exchange.Manager {
 	return internalexchange.NewManager()
 }
 
 // NewDirectExchange returns a new direct exchange that implements
-// publicexchange.DirectExchange.
-func NewDirectExchange() publicexchange.DirectExchange {
+// exchange.DirectExchange.
+func NewDirectExchange() exchange.DirectExchange {
 	return internalexchange.NewManager().Direct()
 }
 
 // NewFanoutExchange returns a new fanout exchange that implements
-// publicexchange.FanoutExchange.
-func NewFanoutExchange() publicexchange.FanoutExchange {
+// exchange.FanoutExchange.
+func NewFanoutExchange() exchange.FanoutExchange {
 	return internalexchange.NewManager().Fanout()
 }
 
 // NewTopicExchange returns a new topic exchange that implements
-// publicexchange.TopicExchange.
-func NewTopicExchange() publicexchange.TopicExchange {
+// exchange.TopicExchange.
+func NewTopicExchange() exchange.TopicExchange {
 	return internalexchange.NewManager().Topic()
 }
 
@@ -295,7 +295,7 @@ func NewConfigManager() config.Manager {
 }
 
 // NewNamespaceManager returns a new namespace manager that implements
-// publicnamespace.Manager.
-func NewNamespaceManager() publicnamespace.Manager {
+// namespace.Manager.
+func NewNamespaceManager() namespace.Manager {
 	return internalnamespace.NewManager()
 }
