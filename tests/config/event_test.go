@@ -14,6 +14,7 @@ import (
 	"fmt"
 	"testing"
 
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 )
@@ -85,16 +86,17 @@ func TestEvent_VersionMonotonic(t *testing.T) {
 func TestEvent_RapidSaves(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	cfg := config.Get()
+	cfgManager := redissmq.NewConfigManager()
+	cfg := cfgManager.Get()
 
 	for i := 0; i < 10; i++ {
 		cfg.Namespace = fmt.Sprintf("rapid-ns-%d", i)
-		if _, err := config.Save(ctx, cfg); err != nil {
+		if _, err := cfgManager.Save(ctx, cfg); err != nil {
 			t.Fatalf("save %d: %v", i, err)
 		}
 	}
 
-	cfg2 := config.Get()
+	cfg2 := cfgManager.Get()
 	if cfg2.Namespace != "rapid-ns-9" {
 		t.Errorf("namespace = %q, want %q", cfg2.Namespace, "rapid-ns-9")
 	}

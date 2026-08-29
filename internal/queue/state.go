@@ -60,7 +60,7 @@ func (s *State) FetchCurrent(
 	current := publicqueue.StateActive
 	if raw != "" {
 		if v, parseErr := strconv.Atoi(raw); parseErr == nil {
-			current = publicqueue.QueueState(v)
+			current = publicqueue.State(v)
 		}
 	}
 
@@ -105,7 +105,7 @@ func (s *State) FetchHistory(
 func (s *State) TransitionTo(
 	ctx context.Context,
 	params *publicqueue.Params,
-	target publicqueue.QueueState,
+	target publicqueue.State,
 	opts *publicqueue.StateTransitionOptions,
 ) (*publicqueue.StateTransition, error) {
 	reason := reasonFromOpts(opts)
@@ -142,8 +142,8 @@ func (s *State) ReleaseLock(
 func (s *State) transitionTo(
 	ctx context.Context,
 	params *publicqueue.Params,
-	target publicqueue.QueueState,
-	reason publicqueue.QueueStateTransitionReason,
+	target publicqueue.State,
+	reason publicqueue.TransitionReason,
 	opts *publicqueue.StateTransitionOptions,
 ) (*publicqueue.StateTransition, error) {
 	current, err := s.FetchCurrent(ctx, params)
@@ -162,7 +162,7 @@ func (s *State) acquireLock(
 	params *publicqueue.Params,
 	owner publicqueue.LockOwner,
 	id string,
-	reason publicqueue.QueueStateTransitionReason,
+	reason publicqueue.TransitionReason,
 	opts *publicqueue.StateTransitionOptions,
 ) (*publicqueue.StateTransition, error) {
 	if id == "" {
@@ -196,7 +196,7 @@ func (s *State) releaseLock(
 	params *publicqueue.Params,
 	owner publicqueue.LockOwner,
 	id string,
-	reason publicqueue.QueueStateTransitionReason,
+	reason publicqueue.TransitionReason,
 	opts *publicqueue.StateTransitionOptions,
 ) (*publicqueue.StateTransition, error) {
 	if id == "" {
@@ -233,9 +233,9 @@ func (s *State) releaseLock(
 func (s *State) saveState(
 	ctx context.Context,
 	params *publicqueue.Params,
-	from *publicqueue.QueueState,
-	to publicqueue.QueueState,
-	reason publicqueue.QueueStateTransitionReason,
+	from *publicqueue.State,
+	to publicqueue.State,
+	reason publicqueue.TransitionReason,
 	opts *publicqueue.StateTransitionOptions,
 ) (*publicqueue.StateTransition, error) {
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
@@ -282,19 +282,19 @@ func (s *State) saveState(
 	return result, nil
 }
 
-func newInitialTransition(state publicqueue.QueueState) *publicqueue.StateTransition {
+func newInitialTransition(state publicqueue.State) *publicqueue.StateTransition {
 	return &publicqueue.StateTransition{
 		From:      nil,
 		To:        state,
-		Reason:    publicqueue.QueueStateTransitionReason(publicqueue.ReasonSystemInit),
+		Reason:    publicqueue.TransitionReason(publicqueue.ReasonSystemInit),
 		Timestamp: time.Now().UnixMilli(),
 	}
 }
 
 func newTransition(
-	from *publicqueue.QueueState,
-	to publicqueue.QueueState,
-	reason publicqueue.QueueStateTransitionReason,
+	from *publicqueue.State,
+	to publicqueue.State,
+	reason publicqueue.TransitionReason,
 	opts *publicqueue.StateTransitionOptions,
 ) *publicqueue.StateTransition {
 	t := &publicqueue.StateTransition{
@@ -323,11 +323,11 @@ func newTransition(
 	return t
 }
 
-func reasonFromOpts(opts *publicqueue.StateTransitionOptions) publicqueue.QueueStateTransitionReason {
+func reasonFromOpts(opts *publicqueue.StateTransitionOptions) publicqueue.TransitionReason {
 	if opts != nil && opts.Reason != nil {
-		return publicqueue.QueueStateTransitionReason(*opts.Reason)
+		return publicqueue.TransitionReason(*opts.Reason)
 	}
-	return publicqueue.QueueStateTransitionReason(publicqueue.ReasonManual)
+	return publicqueue.TransitionReason(publicqueue.ReasonManual)
 }
 
 func extractLockID(opts *publicqueue.StateTransitionOptions) string {

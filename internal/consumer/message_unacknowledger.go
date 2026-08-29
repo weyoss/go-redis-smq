@@ -113,7 +113,7 @@ func (mu *MessageUnacknowledger) UnacknowledgeBatch(ctx context.Context, entries
 
 // buildBatchLuaArgs builds the KEYS and ARGV for the UNACKNOWLEDGE_MESSAGE Lua script.
 func (mu *MessageUnacknowledger) buildBatchLuaArgs(
-	ctx context.Context,
+	_ context.Context,
 	qKey redisKeys.Queue,
 	entries []UnackEntry,
 ) ([]string, []interface{}) {
@@ -186,12 +186,13 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		}
 
 		deadLetteredAt := ""
-		if action == ActionDeadLetter {
+		switch action {
+		case ActionDeadLetter:
 			deadLetteredAt = fmt.Sprintf("%d", now)
 			deadLetteredCount++
-		} else if action == ActionDelay {
+		case ActionDelay:
 			delayedCount++
-		} else {
+		default:
 			requeuedCount++
 		}
 

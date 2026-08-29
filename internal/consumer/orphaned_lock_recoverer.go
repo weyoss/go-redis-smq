@@ -86,7 +86,7 @@ func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
 		return
 	}
 
-	if queue.QueueState(state) != queue.StateLocked {
+	if queue.State(state) != queue.StateLocked {
 		return
 	}
 

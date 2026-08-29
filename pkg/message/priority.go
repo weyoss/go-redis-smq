@@ -10,16 +10,16 @@
 
 package message
 
-// MessagePriority represents the priority level of a message.
+// Priority represents the priority level of a message.
 //
 // Lower integer values indicate higher priority. The values are persisted
 // in Redis and must match the TypeScript EMessagePriority enum for
 // cross-language compatibility.
-type MessagePriority int
+type Priority int
 
 const (
 	// PriorityHighest is the highest priority level (0).
-	PriorityHighest MessagePriority = iota
+	PriorityHighest Priority = iota
 
 	// PriorityVeryHigh is the second highest priority level (1).
 	PriorityVeryHigh
@@ -44,11 +44,11 @@ const (
 )
 
 // Int returns the integer representation for Redis storage.
-func (p MessagePriority) Int() int { return int(p) }
+func (p Priority) Int() int { return int(p) }
 
 // String returns a human-readable representation.
 // Unknown values return "unknown".
-func (p MessagePriority) String() string {
+func (p Priority) String() string {
 	switch p {
 	case PriorityHighest:
 		return "highest"
@@ -72,6 +72,6 @@ func (p MessagePriority) String() string {
 }
 
 // IsValid reports whether the priority value is within the valid range.
-func (p MessagePriority) IsValid() bool {
+func (p Priority) IsValid() bool {
 	return p >= PriorityHighest && p <= PriorityLowest
 }

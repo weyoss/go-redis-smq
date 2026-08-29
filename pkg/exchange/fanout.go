@@ -20,7 +20,7 @@ import (
 type FanoutExchange interface {
 	// Create creates a fanout exchange with the given queue policy.
 	// Returns TypeMismatchError if params.Type() is not TypeFanout.
-	Create(ctx context.Context, params *Params, policy ExchangePolicy) error
+	Create(ctx context.Context, params *Params, policy Policy) error
 
 	// Delete removes a fanout exchange and all its queue bindings.
 	// Returns ErrHasBoundQueues if any queues are still bound.

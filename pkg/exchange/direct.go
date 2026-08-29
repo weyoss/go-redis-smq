@@ -20,7 +20,7 @@ import (
 type DirectExchange interface {
 	// Create creates a direct exchange with the given queue policy.
 	// Returns TypeMismatchError if params.Type() is not TypeDirect.
-	Create(ctx context.Context, params *Params, policy ExchangePolicy) error
+	Create(ctx context.Context, params *Params, policy Policy) error
 
 	// Delete removes a direct exchange and all its routing key bindings.
 	Delete(ctx context.Context, params *Params) error

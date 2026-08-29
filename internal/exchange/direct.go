@@ -36,13 +36,13 @@ func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectS
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalqueue.NewQueueParamsCodec(),
+		queueCodec: internalqueue.NewParamsCodec(),
 	}
 }
 
 // Create creates a direct exchange with the given queue policy.
 // Returns ErrTypeMismatch if params.Type() is not TypeDirect.
-func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
+func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
 	if params.Type() != pubexchange.TypeDirect {
 		return pubexchange.ErrTypeMismatch
 	}

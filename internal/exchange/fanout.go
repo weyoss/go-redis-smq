@@ -39,13 +39,13 @@ func NewFanoutStore(store *Store, validator *Validator, codecs *Codecs) *FanoutS
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalQueue.NewQueueParamsCodec(),
+		queueCodec: internalQueue.NewParamsCodec(),
 	}
 }
 
 // Create creates a fanout exchange with the given queue policy.
 // Returns ErrTypeMismatch if params.Type() is not TypeFanout.
-func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
+func (fs *FanoutStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
 	if params.Type() != pubexchange.TypeFanout {
 		return pubexchange.ErrTypeMismatch
 	}

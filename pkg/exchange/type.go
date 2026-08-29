@@ -10,26 +10,26 @@
 
 package exchange
 
-// ExchangeType defines how an exchange routes messages to queues.
+// Type defines how an exchange routes messages to queues.
 // Integer values are persisted in Redis and must not be changed.
-type ExchangeType int
+type Type int
 
 const (
 	// TypeDirect routes messages to queues with an exact matching routing key.
-	TypeDirect ExchangeType = 0
+	TypeDirect Type = 0
 
 	// TypeFanout broadcasts messages to all bound queues, ignoring routing keys.
-	TypeFanout ExchangeType = 1
+	TypeFanout Type = 1
 
 	// TypeTopic routes messages using AMQP-style pattern matching (*, #).
-	TypeTopic ExchangeType = 2
+	TypeTopic Type = 2
 )
 
 // Int returns the integer representation for Redis storage.
-func (t ExchangeType) Int() int { return int(t) }
+func (t Type) Int() int { return int(t) }
 
 // String returns a human-readable representation.
-func (t ExchangeType) String() string {
+func (t Type) String() string {
 	switch t {
 	case TypeDirect:
 		return "direct"
@@ -43,4 +43,4 @@ func (t ExchangeType) String() string {
 }
 
 // IsValid reports whether the type value is within the valid range.
-func (t ExchangeType) IsValid() bool { return t >= TypeDirect && t <= TypeTopic }
+func (t Type) IsValid() bool { return t >= TypeDirect && t <= TypeTopic }

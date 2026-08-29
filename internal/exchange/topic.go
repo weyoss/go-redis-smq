@@ -41,13 +41,13 @@ func NewTopicStore(store *Store, validator *Validator, codecs *Codecs) *TopicSto
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalQueue.NewQueueParamsCodec(),
+		queueCodec: internalQueue.NewParamsCodec(),
 	}
 }
 
 // Create creates a topic exchange with the given queue policy.
 // Returns ErrTypeMismatch if params.Type() is not TypeTopic.
-func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
+func (ts *TopicStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
 	if params.Type() != pubexchange.TypeTopic {
 		return pubexchange.ErrTypeMismatch
 	}

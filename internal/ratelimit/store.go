@@ -8,7 +8,7 @@
  *
  */
 
-package rate_limit
+package ratelimit
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 )
 
 type Store struct {
-	codec *RateLimitCodec
+	codec *Codec
 }
 
 func NewStore() *Store {
@@ -31,7 +31,7 @@ func NewStore() *Store {
 	}
 }
 
-func (s *Store) Codec() *RateLimitCodec {
+func (s *Store) Codec() *Codec {
 	return s.codec
 }
 

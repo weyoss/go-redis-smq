@@ -30,7 +30,7 @@ import (
 type Params struct {
 	name string
 	ns   string
-	typ  ExchangeType
+	typ  Type
 }
 
 // NewExchangeParams creates exchange params with the default namespace.
@@ -38,7 +38,7 @@ type Params struct {
 // Example:
 //
 //	params, err := exchange.NewExchangeParams("orders", exchange.TypeDirect)
-func NewExchangeParams(name string, typ ExchangeType) (*Params, error) {
+func NewExchangeParams(name string, typ Type) (*Params, error) {
 	return NewExchangeParamsWithNS(name, "", typ)
 }
 
@@ -48,7 +48,7 @@ func NewExchangeParams(name string, typ ExchangeType) (*Params, error) {
 // Example:
 //
 //	params, err := exchange.NewExchangeParamsWithNS("orders", "production", exchange.TypeDirect)
-func NewExchangeParamsWithNS(name, namespace string, typ ExchangeType) (*Params, error) {
+func NewExchangeParamsWithNS(name, namespace string, typ Type) (*Params, error) {
 	if name == "" {
 		return nil, ErrNameRequired
 	}
@@ -80,7 +80,7 @@ func (p *Params) Name() string { return p.name }
 func (p *Params) Namespace() string { return p.ns }
 
 // Type returns the exchange routing type.
-func (p *Params) Type() ExchangeType { return p.typ }
+func (p *Params) Type() Type { return p.typ }
 
 // Clone returns a deep copy of the exchange params.
 func (p *Params) Clone() *Params {
@@ -106,9 +106,9 @@ func (p *Params) String() string {
 // custom representation, even when a Params value is passed directly.
 func (p Params) MarshalJSON() ([]byte, error) {
 	return json.Marshal(&struct {
-		Name string       `json:"name"`
-		NS   string       `json:"ns"`
-		Type ExchangeType `json:"type"`
+		Name string `json:"name"`
+		NS   string `json:"ns"`
+		Type Type   `json:"type"`
 	}{
 		Name: p.name,
 		NS:   p.ns,
@@ -120,9 +120,9 @@ func (p Params) MarshalJSON() ([]byte, error) {
 // Expects: {"name":"orders","ns":"production","type":0}
 func (p *Params) UnmarshalJSON(data []byte) error {
 	var aux struct {
-		Name string       `json:"name"`
-		NS   string       `json:"ns"`
-		Type ExchangeType `json:"type"`
+		Name string `json:"name"`
+		NS   string `json:"ns"`
+		Type Type   `json:"type"`
 	}
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
@@ -135,7 +135,7 @@ func (p *Params) UnmarshalJSON(data []byte) error {
 
 // MustExchangeParams creates exchange params and panics on error.
 // Useful for testing and initialization where params are known to be valid.
-func MustExchangeParams(name string, typ ExchangeType) *Params {
+func MustExchangeParams(name string, typ Type) *Params {
 	p, err := NewExchangeParams(name, typ)
 	if err != nil {
 		panic(err)
@@ -144,7 +144,7 @@ func MustExchangeParams(name string, typ ExchangeType) *Params {
 }
 
 // MustExchangeParamsWithNS creates exchange params with namespace and panics on error.
-func MustExchangeParamsWithNS(name, ns string, typ ExchangeType) *Params {
+func MustExchangeParamsWithNS(name, ns string, typ Type) *Params {
 	p, err := NewExchangeParamsWithNS(name, ns, typ)
 	if err != nil {
 		panic(err)

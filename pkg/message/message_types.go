@@ -36,7 +36,7 @@ type ProducibleMessage struct {
 	retryDelay            time.Duration
 	consumeTimeout        time.Duration
 	body                  interface{}
-	priority              *MessagePriority
+	priority              *Priority
 	scheduledCron         string
 	scheduledDelay        *time.Duration
 	scheduledRepeatPeriod *time.Duration
@@ -142,10 +142,10 @@ func (m *ProducibleMessage) SetBody(body interface{}) *ProducibleMessage {
 }
 
 // Priority returns the message priority, or nil if not set.
-func (m *ProducibleMessage) Priority() *MessagePriority { return m.priority }
+func (m *ProducibleMessage) Priority() *Priority { return m.priority }
 
 // SetPriority sets the priority level for the message.
-func (m *ProducibleMessage) SetPriority(priority MessagePriority) *ProducibleMessage {
+func (m *ProducibleMessage) SetPriority(priority Priority) *ProducibleMessage {
 	m.priority = &priority
 	return m
 }

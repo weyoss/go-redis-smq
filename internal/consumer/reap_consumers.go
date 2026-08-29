@@ -104,7 +104,7 @@ func (rc *ReapConsumers) reap(ctx context.Context) {
 		rc.log.Warn("dead consumer detected — recovering messages",
 			"deadConsumerID", cid,
 		)
-		rc.recoverConsumer(ctx, cid, qKey)
+		rc.recoverConsumer(ctx, cid)
 	}
 
 	if deadCount > 0 {
@@ -112,7 +112,7 @@ func (rc *ReapConsumers) reap(ctx context.Context) {
 	}
 }
 
-func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string, qKey redisKeys.Queue) {
+func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string) {
 	rc.log.Debug("recovering consumer",
 		"consumerID", consumerID,
 	)

@@ -252,13 +252,14 @@ func (r *MessageHandlerRunner) HandlerCount() (total, active, stopped, paused, l
 
 	total = len(r.handlers)
 	for _, h := range r.handlers {
-		if r.stateTracker.IsActive(h.queue) {
+		switch {
+		case r.stateTracker.IsActive(h.queue):
 			active++
-		} else if r.stateTracker.IsStopped(h.queue) {
+		case r.stateTracker.IsStopped(h.queue):
 			stopped++
-		} else if r.stateTracker.IsPaused(h.queue) {
+		case r.stateTracker.IsPaused(h.queue):
 			paused++
-		} else if r.stateTracker.IsLocked(h.queue) {
+		case r.stateTracker.IsLocked(h.queue):
 			locked++
 		}
 	}

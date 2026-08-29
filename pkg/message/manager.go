@@ -68,7 +68,7 @@ type DeleteResponse struct {
 // Manager is the public interface for message lifecycle operations.
 type Manager interface {
 	// Status retrieves the current status of a message.
-	Status(ctx context.Context, messageID string) (MessageStatus, error)
+	Status(ctx context.Context, messageID string) (Status, error)
 
 	// State retrieves the lifecycle state of a message.
 	State(ctx context.Context, messageID string) (*StateTransferable, error)

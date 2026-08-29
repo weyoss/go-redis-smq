@@ -71,7 +71,7 @@ func TestQueue_LockOwnerStringAndInt(t *testing.T) {
 }
 
 func TestQueue_StateIsValid(t *testing.T) {
-	for _, s := range []publicqueue.QueueState{
+	for _, s := range []publicqueue.State{
 		publicqueue.StateActive, publicqueue.StatePaused,
 		publicqueue.StateStopped, publicqueue.StateLocked,
 	} {
@@ -79,7 +79,7 @@ func TestQueue_StateIsValid(t *testing.T) {
 			t.Errorf("%v should be valid", s)
 		}
 	}
-	if publicqueue.QueueState(99).IsValid() {
+	if publicqueue.State(99).IsValid() {
 		t.Error("invalid state should not be valid")
 	}
 }

@@ -105,7 +105,7 @@ func TestNamespace_DiscoveryByNamespace(t *testing.T) {
 	config.Save(ctx, cfg)
 
 	params := publicqueue.MustQueueParams("test-ns-discovery")
-	internalQueue.NewQueueManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+	internalQueue.NewManager().Create(ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	// Should find queue in the namespace
 	queues, err := redissmq.NewQueueManager().ListByNamespace(ctx, "discovery-ns")

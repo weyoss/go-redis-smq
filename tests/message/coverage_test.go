@@ -58,7 +58,7 @@ func TestMessage_StateTimestampAccessors(t *testing.T) {
 }
 
 func TestMessage_PriorityStringAndIsValid(t *testing.T) {
-	cases := map[publicmessage.MessagePriority]string{
+	cases := map[publicmessage.Priority]string{
 		publicmessage.PriorityHighest:     "highest",
 		publicmessage.PriorityVeryHigh:    "very_high",
 		publicmessage.PriorityHigh:        "high",
@@ -78,10 +78,10 @@ func TestMessage_PriorityStringAndIsValid(t *testing.T) {
 		}
 	}
 
-	if publicmessage.MessagePriority(99).String() != "unknown" {
-		t.Errorf("invalid priority string = %q", publicmessage.MessagePriority(99).String())
+	if publicmessage.Priority(99).String() != "unknown" {
+		t.Errorf("invalid priority string = %q", publicmessage.Priority(99).String())
 	}
-	if publicmessage.MessagePriority(99).IsValid() {
+	if publicmessage.Priority(99).IsValid() {
 		t.Error("invalid priority should not be valid")
 	}
 }
@@ -100,7 +100,7 @@ func TestMessage_StatusStringAndPredicates(t *testing.T) {
 		t.Error("acknowledged and dead lettered should be requeuable")
 	}
 
-	for _, status := range []publicmessage.MessageStatus{
+	for _, status := range []publicmessage.Status{
 		publicmessage.StatusNew, publicmessage.StatusPending, publicmessage.StatusProcessing, publicmessage.StatusScheduled,
 		publicmessage.StatusAcknowledged, publicmessage.StatusUnackRequeuing, publicmessage.StatusUnackDelaying,
 		publicmessage.StatusDeadLettered,
@@ -110,7 +110,7 @@ func TestMessage_StatusStringAndPredicates(t *testing.T) {
 		}
 	}
 
-	if publicmessage.MessageStatus(99).IsValid() {
+	if publicmessage.Status(99).IsValid() {
 		t.Error("invalid status should not be valid")
 	}
 }

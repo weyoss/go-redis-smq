@@ -21,16 +21,16 @@ import (
 	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 )
 
-// ExchangeParamsCodec handles serialization of Params to/from Redis sets.
-type ExchangeParamsCodec struct{}
+// ParamsCodec handles serialization of Params to/from Redis sets.
+type ParamsCodec struct{}
 
 // NewExchangeParamsCodec creates a new Params codec.
-func NewExchangeParamsCodec() *ExchangeParamsCodec {
-	return &ExchangeParamsCodec{}
+func NewExchangeParamsCodec() *ParamsCodec {
+	return &ParamsCodec{}
 }
 
 // EncodeSet serializes Params to a JSON string for Redis set storage.
-func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *pubexchange.Params) (string, error) {
+func (c *ParamsCodec) EncodeSet(_ context.Context, params *pubexchange.Params) (string, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
 		return "", codec.NewEncodingError("exchange params", params.String(), err)
@@ -39,7 +39,7 @@ func (c *ExchangeParamsCodec) EncodeSet(ctx context.Context, params *pubexchange
 }
 
 // DecodeSet deserializes a JSON string from a Redis set back to Params.
-func (c *ExchangeParamsCodec) DecodeSet(ctx context.Context, data string) (*pubexchange.Params, error) {
+func (c *ParamsCodec) DecodeSet(_ context.Context, data string) (*pubexchange.Params, error) {
 	var params pubexchange.Params
 	if err := json.Unmarshal([]byte(data), &params); err != nil {
 		return nil, codec.NewDecodingError("exchange params", data, err)
@@ -50,16 +50,16 @@ func (c *ExchangeParamsCodec) DecodeSet(ctx context.Context, data string) (*pube
 	return &params, nil
 }
 
-// ExchangePropsCodec handles serialization of ExchangeProps to/from Redis hash.
-type ExchangePropsCodec struct{}
+// PropsCodec handles serialization of Props to/from Redis hash.
+type PropsCodec struct{}
 
-// NewExchangePropsCodec creates a new ExchangeProps codec.
-func NewExchangePropsCodec() *ExchangePropsCodec {
-	return &ExchangePropsCodec{}
+// NewExchangePropsCodec creates a new Props codec.
+func NewExchangePropsCodec() *PropsCodec {
+	return &PropsCodec{}
 }
 
-// EncodeHash serializes ExchangeProps to a Redis hash map.
-func (c *ExchangePropsCodec) EncodeHash(ctx context.Context, props *pubexchange.ExchangeProps) (map[string]interface{}, error) {
+// EncodeHash serializes Props to a Redis hash map.
+func (c *PropsCodec) EncodeHash(_ context.Context, props *pubexchange.Props) (map[string]interface{}, error) {
 	if props == nil {
 		return nil, codec.NewEncodingError("exchange props", "nil", codec.ErrInvalidFormat)
 	}
@@ -72,20 +72,20 @@ func (c *ExchangePropsCodec) EncodeHash(ctx context.Context, props *pubexchange.
 	return hash, nil
 }
 
-// DecodeHash deserializes a Redis hash map back to ExchangeProps.
-func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]string) (*pubexchange.ExchangeProps, error) {
+// DecodeHash deserializes a Redis hash map back to Props.
+func (c *PropsCodec) DecodeHash(_ context.Context, hash map[string]string) (*pubexchange.Props, error) {
 	if len(hash) == 0 {
 		return nil, codec.NewDecodingError("exchange props", "empty hash", codec.ErrInvalidFormat)
 	}
 
-	props := &pubexchange.ExchangeProps{}
+	props := &pubexchange.Props{}
 
 	if v, ok := hash[schema.ExchangeFieldType.Key()]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, codec.NewDecodingError("exchange props", fmt.Sprintf("type=%s", v), err)
 		}
-		props.Type = pubexchange.ExchangeType(n)
+		props.Type = pubexchange.Type(n)
 	}
 
 	if v, ok := hash[schema.ExchangeFieldPolicy.Key()]; ok {
@@ -93,7 +93,7 @@ func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]str
 		if err != nil {
 			return nil, codec.NewDecodingError("exchange props", fmt.Sprintf("policy=%s", v), err)
 		}
-		props.Policy = pubexchange.ExchangePolicy(n)
+		props.Policy = pubexchange.Policy(n)
 	}
 
 	return props, nil
@@ -101,6 +101,6 @@ func (c *ExchangePropsCodec) DecodeHash(ctx context.Context, hash map[string]str
 
 // Compile-time interface checks
 var (
-	_ codec.SetCodec[*pubexchange.Params]         = (*ExchangeParamsCodec)(nil)
-	_ codec.HashCodec[*pubexchange.ExchangeProps] = (*ExchangePropsCodec)(nil)
+	_ codec.SetCodec[*pubexchange.Params] = (*ParamsCodec)(nil)
+	_ codec.HashCodec[*pubexchange.Props] = (*PropsCodec)(nil)
 )

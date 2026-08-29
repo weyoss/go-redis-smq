@@ -21,7 +21,7 @@ import (
 // Codecs holds the codec instances for exchange serialization.
 type Codecs struct {
 	Params codec.SetCodec[*pubexchange.Params]
-	Props  codec.HashCodec[*pubexchange.ExchangeProps]
+	Props  codec.HashCodec[*pubexchange.Props]
 }
 
 func DefaultCodecs() *Codecs {
@@ -86,12 +86,12 @@ func (m *Manager) Fanout() *FanoutStore { return m.fanout }
 func (m *Manager) Topic() *TopicStore { return m.topic }
 
 // Create registers a new exchange with the given params and queue policy.
-func (m *Manager) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
+func (m *Manager) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
 	return m.store.Save(ctx, params, policy)
 }
 
 // Properties retrieves the stored configuration for an exchange.
-func (m *Manager) Properties(ctx context.Context, params *pubexchange.Params) (*pubexchange.ExchangeProps, error) {
+func (m *Manager) Properties(ctx context.Context, params *pubexchange.Params) (*pubexchange.Props, error) {
 	return m.store.Load(ctx, params)
 }
 
@@ -110,7 +110,7 @@ func (m *Manager) ValidateBinding(
 	ctx context.Context,
 	params *pubexchange.Params,
 	queueParams *queue.Params,
-) (*pubexchange.ExchangeProps, error) {
+) (*pubexchange.Props, error) {
 	return m.validator.ValidateQueueBinding(ctx, params, queueParams)
 }
 

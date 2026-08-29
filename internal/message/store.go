@@ -44,7 +44,7 @@ func NewStore(envelopeCodec *EnvelopeCodec, stateCodec *StateCodec) *Store {
 	}
 }
 
-func (s *Store) GetStatus(ctx context.Context, messageID string) (publicmessage.MessageStatus, error) {
+func (s *Store) GetStatus(ctx context.Context, messageID string) (publicmessage.Status, error) {
 	statusStr, err := redis.LoadHashField(ctx,
 		keys.System{}.Message(messageID),
 		MessageFieldStatus.Key(),
@@ -59,10 +59,10 @@ func (s *Store) GetStatus(ctx context.Context, messageID string) (publicmessage.
 		return 0, fmt.Errorf("parse message status: %w", err)
 	}
 
-	return publicmessage.MessageStatus(status), nil
+	return publicmessage.Status(status), nil
 }
 
-func (s *Store) GetState(ctx context.Context, messageID string) (*publicmessage.MessageState, error) {
+func (s *Store) GetState(ctx context.Context, messageID string) (*publicmessage.State, error) {
 	hash, err := redis.LoadHash(ctx, keys.System{}.Message(messageID), "message state")
 	if err != nil {
 		return nil, publicmessage.ErrNotFound

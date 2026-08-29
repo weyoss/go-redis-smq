@@ -14,7 +14,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/weyoss/go-redis-smq"
+	redissmq "github.com/weyoss/go-redis-smq"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/pkg/producer"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -25,7 +25,7 @@ import (
 // utilities and avoids dependency on public convenience functions.
 func CreateQueue(tb testing.TB, ctx context.Context, params *publicqueue.Params, queueType publicqueue.Type, deliveryModel publicqueue.DeliveryModel) {
 	tb.Helper()
-	qm := internalqueue.NewQueueManager()
+	qm := internalqueue.NewManager()
 	if err := qm.Create(ctx, params, queueType, deliveryModel); err != nil {
 		tb.Fatalf("create queue %s: %v", params.Name(), err)
 	}

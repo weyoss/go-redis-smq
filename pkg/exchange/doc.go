@@ -27,7 +27,7 @@
 //
 // # Exchange Types
 //
-// The package supports three exchange types, represented by ExchangeType:
+// The package supports three exchange types, represented by Type:
 //
 //   - TypeDirect: routes messages to queues with an exact matching routing key.
 //   - TypeTopic: routes messages using AMQP-style pattern matching (* and #).
@@ -35,7 +35,7 @@
 //
 // # Policies
 //
-// Each exchange can enforce a queue policy via ExchangePolicy:
+// Each exchange can enforce a queue policy via Policy:
 //
 //   - PolicyStandard: allows only FIFO and LIFO queues.
 //   - PolicyPriority: allows only priority queues.

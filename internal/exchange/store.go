@@ -33,7 +33,7 @@ func NewStore(codecs *Codecs) *Store {
 	return &Store{codecs: codecs}
 }
 
-func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pubexchange.ExchangePolicy) error {
+func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -44,7 +44,7 @@ func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pub
 		return fmt.Errorf("save exchange: %w", err)
 	}
 
-	props := &pubexchange.ExchangeProps{
+	props := &pubexchange.Props{
 		Type:   params.Type(),
 		Policy: policy,
 	}
@@ -82,7 +82,7 @@ func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pub
 	return redisClient.WithTransaction(ctx, watchKeys, 3, txf)
 }
 
-func (s *Store) Load(ctx context.Context, params *pubexchange.Params) (*pubexchange.ExchangeProps, error) {
+func (s *Store) Load(ctx context.Context, params *pubexchange.Params) (*pubexchange.Props, error) {
 	key := keys.Exchange{
 		Namespace: params.Namespace(),
 		Name:      params.Name(),
@@ -134,7 +134,7 @@ func (s *Store) ValidateType(ctx context.Context, params *pubexchange.Params, re
 		return fmt.Errorf("parse exchange type: %w", err)
 	}
 
-	actualType := pubexchange.ExchangeType(typeValue)
+	actualType := pubexchange.Type(typeValue)
 	if actualType != params.Type() {
 		return pubexchange.ErrTypeMismatch
 	}

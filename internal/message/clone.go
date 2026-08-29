@@ -21,7 +21,7 @@ import (
 // Matches TypeScript _fromMessage logic:
 //   - Creates a new ProducibleMessage with the same properties
 //   - Resets scheduled parameters on the new message
-//   - Creates a fresh MessageState with a new ID
+//   - Creates a fresh State with a new ID
 //   - Sets status to NEW
 //   - Preserves destination queue and consumer group
 func CloneMessage(source *Envelope) *Envelope {

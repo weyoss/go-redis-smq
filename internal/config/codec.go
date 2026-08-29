@@ -31,7 +31,7 @@ func NewCodec() *Codec {
 	return &Codec{}
 }
 
-func (c *Codec) EncodeHash(ctx context.Context, cfg *pubconfig.Config) (map[string]interface{}, error) {
+func (c *Codec) EncodeHash(_ context.Context, cfg *pubconfig.Config) (map[string]interface{}, error) {
 	if cfg == nil {
 		return nil, codec.NewEncodingError("config", "nil", codec.ErrInvalidFormat)
 	}
@@ -47,7 +47,7 @@ func (c *Codec) EncodeHash(ctx context.Context, cfg *pubconfig.Config) (map[stri
 	}, nil
 }
 
-func (c *Codec) DecodeHash(ctx context.Context, hash map[string]string) (*pubconfig.Config, error) {
+func (c *Codec) DecodeHash(_ context.Context, hash map[string]string) (*pubconfig.Config, error) {
 	if len(hash) == 0 {
 		return nil, codec.NewDecodingError("config", "empty hash", codec.ErrInvalidFormat)
 	}

@@ -32,21 +32,21 @@ func ValidateCron(expr string) error {
 }
 
 // ParseCron validates and wraps a CRON expression for scheduling.
-func ParseCron(expr string) (*CronSchedule, error) {
+func ParseCron(expr string) (*Schedule, error) {
 	if err := ValidateCron(expr); err != nil {
 		return nil, err
 	}
-	return &CronSchedule{expr: expr}, nil
+	return &Schedule{expr: expr}, nil
 }
 
-// CronSchedule wraps a validated CRON expression.
-type CronSchedule struct {
+// Schedule wraps a validated CRON expression.
+type Schedule struct {
 	expr string
 }
 
 // NextTick returns the next scheduled time after the given time.
 // Returns zero time if the expression is empty or no next time is found.
-func (s *CronSchedule) NextTick(after time.Time) time.Time {
+func (s *Schedule) NextTick(after time.Time) time.Time {
 	if s.expr == "" {
 		return time.Time{}
 	}

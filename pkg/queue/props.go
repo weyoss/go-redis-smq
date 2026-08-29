@@ -21,7 +21,7 @@ type Props struct {
 	DeliveryModel DeliveryModel
 
 	// OperationalState is the current operational state of the queue.
-	OperationalState QueueState
+	OperationalState State
 
 	// MessagesCount is the total number of messages in the queue.
 	MessagesCount int64

@@ -30,7 +30,7 @@ func NewParamsCodec() *ParamsCodec {
 }
 
 // Encode serializes message params to JSON bytes.
-func (c *ParamsCodec) Encode(ctx context.Context, params *publicmessage.Params) ([]byte, error) {
+func (c *ParamsCodec) Encode(_ context.Context, params *publicmessage.Params) ([]byte, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
 		return nil, fmt.Errorf("encode message params: %w", err)
@@ -39,7 +39,7 @@ func (c *ParamsCodec) Encode(ctx context.Context, params *publicmessage.Params) 
 }
 
 // Decode deserializes JSON bytes to message params.
-func (c *ParamsCodec) Decode(ctx context.Context, data []byte) (*publicmessage.Params, error) {
+func (c *ParamsCodec) Decode(_ context.Context, data []byte) (*publicmessage.Params, error) {
 	var params publicmessage.Params
 	if err := json.Unmarshal(data, &params); err != nil {
 		return nil, fmt.Errorf("decode message params: %w", err)
@@ -47,7 +47,7 @@ func (c *ParamsCodec) Decode(ctx context.Context, data []byte) (*publicmessage.P
 	return &params, nil
 }
 
-// StateCodec handles serialization of MessageState to/from Redis hash.
+// StateCodec handles serialization of State to/from Redis hash.
 type StateCodec struct{}
 
 // NewStateCodec creates a new State codec.
@@ -55,8 +55,8 @@ func NewStateCodec() *StateCodec {
 	return &StateCodec{}
 }
 
-// EncodeHash serializes MessageState to a Redis hash map.
-func (c *StateCodec) EncodeHash(ctx context.Context, state *publicmessage.MessageState) (map[string]interface{}, error) {
+// EncodeHash serializes State to a Redis hash map.
+func (c *StateCodec) EncodeHash(_ context.Context, state *publicmessage.State) (map[string]interface{}, error) {
 	if state == nil {
 		return nil, fmt.Errorf("encode message state: nil")
 	}
@@ -99,8 +99,8 @@ func (c *StateCodec) EncodeHash(ctx context.Context, state *publicmessage.Messag
 	return hash, nil
 }
 
-// DecodeHash deserializes a Redis hash map to MessageState.
-func (c *StateCodec) DecodeHash(ctx context.Context, hash map[string]string) (*publicmessage.MessageState, error) {
+// DecodeHash deserializes a Redis hash map to State.
+func (c *StateCodec) DecodeHash(_ context.Context, hash map[string]string) (*publicmessage.State, error) {
 	if len(hash) == 0 {
 		return nil, fmt.Errorf("decode message state: empty hash")
 	}
@@ -238,7 +238,7 @@ func (c *EnvelopeCodec) DecodeHash(ctx context.Context, hash map[string]string) 
 
 	envelope := NewEnvelope(message)
 	envelope.SetMessageState(state)
-	envelope.SetStatus(publicmessage.MessageStatus(status))
+	envelope.SetStatus(publicmessage.Status(status))
 	envelope.SetDestinationQueue(params.DestinationQueue)
 	if params.ConsumerGroupID != "" {
 		envelope.SetConsumerGroupID(params.ConsumerGroupID)
@@ -295,13 +295,13 @@ func boolToStr(b bool) string {
 	return "0"
 }
 
-func setOptionalTS(hash map[string]interface{}, prop MessageField, ts *int64) {
+func setOptionalTS(hash map[string]interface{}, prop Field, ts *int64) {
 	if ts != nil && *ts > 0 {
 		hash[prop.Key()] = strconv.FormatInt(*ts, 10)
 	}
 }
 
-func parseOptionalTS(hash map[string]string, prop MessageField, setter func(int64)) {
+func parseOptionalTS(hash map[string]string, prop Field, setter func(int64)) {
 	if v, ok := hash[prop.Key()]; ok {
 		ts, err := strconv.ParseInt(v, 10, 64)
 		if err == nil && ts > 0 {

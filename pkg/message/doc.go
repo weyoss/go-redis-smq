@@ -43,7 +43,7 @@
 //
 // # Message Status and State
 //
-// MessageStatus describes the current lifecycle stage (pending, processing,
+// Status describes the current lifecycle stage (pending, processing,
 // acknowledged, dead-lettered, etc.), while StateTransferable holds detailed
 // counters and timestamps such as attempts, expiry, and scheduling
 // information.

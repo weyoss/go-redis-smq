@@ -33,7 +33,7 @@ import (
 type TopicExchange interface {
 	// Create creates a topic exchange with the given queue policy.
 	// Returns TypeMismatchError if params.Type() is not TypeTopic.
-	Create(ctx context.Context, params *Params, policy ExchangePolicy) error
+	Create(ctx context.Context, params *Params, policy Policy) error
 
 	// Delete removes a topic exchange and all its pattern bindings.
 	// Returns ErrHasBoundQueues if any patterns still have bound queues.

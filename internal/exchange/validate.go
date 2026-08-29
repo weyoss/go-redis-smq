@@ -46,14 +46,14 @@ func NewValidator(store *Store) *Validator {
 //  4. Validate queue policy compatibility
 //
 // Returns:
-//   - ExchangeProps if the exchange exists and validation passes
+//   - Props if the exchange exists and validation passes
 //   - nil, nil if the exchange doesn't exist yet (new binding)
 //   - Error if validation fails
 func (v *Validator) ValidateQueueBinding(
 	ctx context.Context,
 	params *pubexchange.Params,
 	queueParams *publicqueue.Params,
-) (*pubexchange.ExchangeProps, error) {
+) (*pubexchange.Props, error) {
 	// Load queue properties first (matches TypeScript order)
 	queueProps, err := v.queueStore.Load(ctx, queueParams)
 	if err != nil {
@@ -91,7 +91,7 @@ func (v *Validator) ValidateQueueBinding(
 //
 //	STANDARD policy: only FIFO or LIFO queues allowed
 //	PRIORITY policy: only Priority queues allowed
-func checkPolicy(props *pubexchange.ExchangeProps, queueType publicqueue.Type) error {
+func checkPolicy(props *pubexchange.Props, queueType publicqueue.Type) error {
 	switch props.Policy {
 	case pubexchange.PolicyStandard:
 		// Standard exchanges require FIFO or LIFO queues

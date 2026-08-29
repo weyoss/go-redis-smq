@@ -10,11 +10,11 @@
 
 package exchange
 
-// ExchangeProps holds the stored configuration of an exchange.
-type ExchangeProps struct {
+// Props holds the stored configuration of an exchange.
+type Props struct {
 	// Type defines the routing strategy (Direct, Fanout, Topic).
-	Type ExchangeType `json:"type"`
+	Type Type `json:"type"`
 
 	// Policy restricts which queue types can bind to this exchange.
-	Policy ExchangePolicy `json:"queuePolicy"`
+	Policy Policy `json:"queuePolicy"`
 }

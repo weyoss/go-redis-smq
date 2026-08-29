@@ -10,15 +10,15 @@
 
 package message
 
-// MessageStatus represents the current lifecycle state of a message.
+// Status represents the current lifecycle state of a message.
 // Integer values are persisted in Redis and must not be changed.
 // Matches TypeScript EMessagePropertyStatus enum.
-type MessageStatus int
+type Status int
 
 const (
 	// StatusNew indicates that a message has been created but not yet
 	// published.
-	StatusNew MessageStatus = iota // 0
+	StatusNew Status = iota // 0
 
 	// StatusPending indicates that a message is waiting to be consumed.
 	StatusPending // 1
@@ -49,11 +49,11 @@ const (
 )
 
 // Int returns the integer representation for Redis storage.
-func (s MessageStatus) Int() int { return int(s) }
+func (s Status) Int() int { return int(s) }
 
 // String returns a human-readable representation.
 // Unknown values return "unknown".
-func (s MessageStatus) String() string {
+func (s Status) String() string {
 	switch s {
 	case StatusNew:
 		return "new"
@@ -78,23 +78,23 @@ func (s MessageStatus) String() string {
 
 // IsTerminal reports whether the message has reached a final state
 // (Acknowledged or DeadLettered).
-func (s MessageStatus) IsTerminal() bool {
+func (s Status) IsTerminal() bool {
 	return s == StatusAcknowledged || s == StatusDeadLettered
 }
 
 // IsPending reports whether the message is waiting to be consumed.
-func (s MessageStatus) IsPending() bool { return s == StatusPending }
+func (s Status) IsPending() bool { return s == StatusPending }
 
 // IsProcessing reports whether the message is currently being processed.
-func (s MessageStatus) IsProcessing() bool { return s == StatusProcessing }
+func (s Status) IsProcessing() bool { return s == StatusProcessing }
 
 // IsRequeuable reports whether the message can be requeued.
 // Only acknowledged and dead-lettered messages are requeuable.
-func (s MessageStatus) IsRequeuable() bool {
+func (s Status) IsRequeuable() bool {
 	return s == StatusAcknowledged || s == StatusDeadLettered
 }
 
 // IsValid reports whether the status value is within the valid range.
-func (s MessageStatus) IsValid() bool {
+func (s Status) IsValid() bool {
 	return s >= StatusNew && s <= StatusDeadLettered
 }

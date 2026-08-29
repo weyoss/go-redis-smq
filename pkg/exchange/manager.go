@@ -21,10 +21,10 @@ import (
 type Manager interface {
 	// Create registers a new exchange with the given params and queue policy.
 	// The exchange type is determined by params.Type().
-	Create(ctx context.Context, params *Params, policy ExchangePolicy) error
+	Create(ctx context.Context, params *Params, policy Policy) error
 
 	// Properties retrieves the stored configuration for an exchange.
-	Properties(ctx context.Context, params *Params) (*ExchangeProps, error)
+	Properties(ctx context.Context, params *Params) (*Props, error)
 
 	// Exists checks whether an exchange has been created.
 	Exists(ctx context.Context, params *Params) (bool, error)
@@ -36,7 +36,7 @@ type Manager interface {
 	// ValidateBinding checks whether a queue can be bound to this exchange.
 	// Returns the exchange properties if the exchange exists, nil if it doesn't exist yet.
 	// Validates exchange type compatibility and queue policy constraints.
-	ValidateBinding(ctx context.Context, params *Params, queueParams *queue.Params) (*ExchangeProps, error)
+	ValidateBinding(ctx context.Context, params *Params, queueParams *queue.Params) (*Props, error)
 
 	// Delete removes an exchange and all its queue bindings.
 	// For direct/topic exchanges, also removes routing keys and pattern bindings.

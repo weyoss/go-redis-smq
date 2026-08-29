@@ -12,10 +12,10 @@ package message
 
 import "strconv"
 
-type MessageField int
+type Field int
 
 const (
-	MessageFieldID MessageField = iota
+	MessageFieldID Field = iota
 	MessageFieldStatus
 	MessageFieldMessage
 	MessageFieldScheduledAt
@@ -41,5 +41,5 @@ const (
 	MessageFieldRequeuedMessageParentID
 )
 
-func (p MessageField) Key() string { return strconv.Itoa(int(p)) }
-func (p MessageField) Int() int    { return int(p) }
+func (p Field) Key() string { return strconv.Itoa(int(p)) }
+func (p Field) Int() int    { return int(p) }

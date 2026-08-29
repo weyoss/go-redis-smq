@@ -138,7 +138,7 @@ func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *publicqueue.Pa
 
 	jobID := uuid.New().String()
 
-	reason := publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeStart)
+	reason := publicqueue.TransitionReason(publicqueue.ReasonPurgeStart)
 	lockOpts := &publicqueue.StateTransitionOptions{
 		Description: ptr("Queue is being purged"),
 	}
@@ -390,16 +390,16 @@ func (pm *PurgeManager) validateFilter(filter publicqueue.BrowseFilter) error {
 }
 
 func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *publicqueue.Params, jobID string, status publicqueue.PurgeJobStatus, description string) {
-	var reason publicqueue.QueueStateTransitionReason
+	var reason publicqueue.TransitionReason
 	switch status {
 	case publicqueue.PurgeJobCompleted:
-		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeComplete)
+		reason = publicqueue.TransitionReason(publicqueue.ReasonPurgeComplete)
 	case publicqueue.PurgeJobFailed:
-		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeFail)
+		reason = publicqueue.TransitionReason(publicqueue.ReasonPurgeFail)
 	case publicqueue.PurgeJobCanceled:
-		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeCancel)
+		reason = publicqueue.TransitionReason(publicqueue.ReasonPurgeCancel)
 	default:
-		reason = publicqueue.QueueStateTransitionReason(publicqueue.ReasonPurgeComplete)
+		reason = publicqueue.TransitionReason(publicqueue.ReasonPurgeComplete)
 	}
 
 	opts := &publicqueue.StateTransitionOptions{

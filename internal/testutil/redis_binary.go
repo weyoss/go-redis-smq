@@ -39,16 +39,16 @@ var valkeyURLs = map[string]map[string]string{
 // findOrDownloadRedis returns the path to a Redis binary.
 // Checks PATH first, then the cache directory, then downloads a pre-built binary.
 func findOrDownloadRedis() (string, error) {
-	//fmt.Println("testutil: checking PATH for redis-server...")
+	// fmt.Println("testutil: checking PATH for redis-server...")
 	if path, err := exec.LookPath("redis-server"); err == nil {
-		//fmt.Printf("testutil: found redis-server in PATH: %s\n", path)
+		// fmt.Printf("testutil: found redis-server in PATH: %s\n", path)
 		return path, nil
 	}
 
 	cachePath := redisCachePath()
-	//fmt.Printf("testutil: checking cache: %s\n", cachePath)
+	// fmt.Printf("testutil: checking cache: %s\n", cachePath)
 	if _, err := os.Stat(cachePath); err == nil {
-		//fmt.Println("testutil: using cached binary")
+		// fmt.Println("testutil: using cached binary")
 		return cachePath, nil
 	}
 
@@ -57,11 +57,11 @@ func findOrDownloadRedis() (string, error) {
 		return "", fmt.Errorf("no pre-built binary for %s/%s", runtime.GOOS, runtime.GOARCH)
 	}
 
-	//fmt.Printf("testutil: downloading from %s...\n", url)
+	// fmt.Printf("testutil: downloading from %s...\n", url)
 	if err := downloadAndExtract(url, cachePath); err != nil {
 		return "", fmt.Errorf("download redis: %w", err)
 	}
-	//fmt.Println("testutil: download complete")
+	// fmt.Println("testutil: download complete")
 
 	if err := os.Chmod(cachePath, 0o755); err != nil {
 		return "", fmt.Errorf("chmod redis: %w", err)

@@ -18,7 +18,7 @@ import (
 
 	queueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	"github.com/weyoss/go-redis-smq/internal/queue/schema"
-	"github.com/weyoss/go-redis-smq/internal/rate_limit"
+	"github.com/weyoss/go-redis-smq/internal/ratelimit"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
@@ -29,7 +29,7 @@ const maxQueueStateHistorySize = 100
 
 type Store struct {
 	codecs         *Codecs
-	rateLimitStore *rate_limit.Store
+	rateLimitStore *ratelimit.Store
 }
 
 func NewStore(codecs *Codecs) *Store {
@@ -38,7 +38,7 @@ func NewStore(codecs *Codecs) *Store {
 	}
 	return &Store{
 		codecs:         codecs,
-		rateLimitStore: rate_limit.NewStore(),
+		rateLimitStore: ratelimit.NewStore(),
 	}
 }
 
@@ -78,7 +78,7 @@ func (s *Store) SaveWithRateLimit(
 	initialTransition := publicqueue.StateTransition{
 		From:      nil,
 		To:        publicqueue.StateActive,
-		Reason:    publicqueue.QueueStateTransitionReason(publicqueue.ReasonSystemInit),
+		Reason:    publicqueue.TransitionReason(publicqueue.ReasonSystemInit),
 		Timestamp: now,
 		Metadata: map[string]interface{}{
 			"queueType":     queueType.Int(),
@@ -224,7 +224,7 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		heartbeatKeys[i] = keys.System{}.ConsumerHeartbeat(cid)
 	}
 
-	var consumerGroupKeys []string
+	consumerGroupKeys := make([]string, 0, len(consumerGroups)*2)
 	for _, groupID := range consumerGroups {
 		gKey := keys.Queue{
 			Namespace: queueParams.NS(),

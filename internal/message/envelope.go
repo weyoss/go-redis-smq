@@ -23,8 +23,8 @@ import (
 // This is an internal runtime type, not exposed in the public API.
 type Envelope struct {
 	producibleMessage *publicmessage.ProducibleMessage
-	messageState      *publicmessage.MessageState
-	status            publicmessage.MessageStatus
+	messageState      *publicmessage.State
+	status            publicmessage.Status
 	destinationQueue  *publicqueue.Params
 	consumerGroupID   string
 }
@@ -50,12 +50,12 @@ func (e *Envelope) ProducibleMessage() *publicmessage.ProducibleMessage {
 }
 
 // MessageState returns the message lifecycle state.
-func (e *Envelope) MessageState() *publicmessage.MessageState {
+func (e *Envelope) MessageState() *publicmessage.State {
 	return e.messageState
 }
 
 // SetMessageState replaces the message state.
-func (e *Envelope) SetMessageState(state *publicmessage.MessageState) *Envelope {
+func (e *Envelope) SetMessageState(state *publicmessage.State) *Envelope {
 	e.messageState = state
 	return e
 }
@@ -64,10 +64,10 @@ func (e *Envelope) SetMessageState(state *publicmessage.MessageState) *Envelope 
 func (e *Envelope) ID() string { return e.messageState.ID() }
 
 // Status returns the current message status.
-func (e *Envelope) Status() publicmessage.MessageStatus { return e.status }
+func (e *Envelope) Status() publicmessage.Status { return e.status }
 
 // SetStatus updates the message status.
-func (e *Envelope) SetStatus(status publicmessage.MessageStatus) *Envelope {
+func (e *Envelope) SetStatus(status publicmessage.Status) *Envelope {
 	e.status = status
 	return e
 }

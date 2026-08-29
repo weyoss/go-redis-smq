@@ -26,16 +26,16 @@ func TestExchange_TypeStringAndIsValid(t *testing.T) {
 	if exchange.TypeTopic.String() != "topic" {
 		t.Errorf("TypeTopic.String() = %q", exchange.TypeTopic.String())
 	}
-	if exchange.ExchangeType(99).String() != "unknown" {
-		t.Errorf("invalid type string = %q", exchange.ExchangeType(99).String())
+	if exchange.Type(99).String() != "unknown" {
+		t.Errorf("invalid type string = %q", exchange.Type(99).String())
 	}
 
-	for _, typ := range []exchange.ExchangeType{exchange.TypeDirect, exchange.TypeFanout, exchange.TypeTopic} {
+	for _, typ := range []exchange.Type{exchange.TypeDirect, exchange.TypeFanout, exchange.TypeTopic} {
 		if !typ.IsValid() {
 			t.Errorf("%v should be valid", typ)
 		}
 	}
-	if exchange.ExchangeType(99).IsValid() {
+	if exchange.Type(99).IsValid() {
 		t.Error("invalid type should not be valid")
 	}
 }
@@ -47,13 +47,13 @@ func TestExchange_PolicyStringAndIsValid(t *testing.T) {
 	if exchange.PolicyPriority.String() != "priority" {
 		t.Errorf("PolicyPriority.String() = %q", exchange.PolicyPriority.String())
 	}
-	if exchange.ExchangePolicy(99).String() != "unknown" {
-		t.Errorf("invalid policy string = %q", exchange.ExchangePolicy(99).String())
+	if exchange.Policy(99).String() != "unknown" {
+		t.Errorf("invalid policy string = %q", exchange.Policy(99).String())
 	}
 	if !exchange.PolicyStandard.IsValid() || !exchange.PolicyPriority.IsValid() {
 		t.Error("valid policies should be valid")
 	}
-	if exchange.ExchangePolicy(99).IsValid() {
+	if exchange.Policy(99).IsValid() {
 		t.Error("invalid policy should not be valid")
 	}
 }

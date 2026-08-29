@@ -107,12 +107,12 @@ func NewQueueParamsWithNS(name, namespace string) (*Params, error) {
 
 	validName, err := redis.ValidateKey(name)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidName, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidName, err)
 	}
 
 	validNS, err := redis.ValidateKey(namespace)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidNamespace, err)
+		return nil, fmt.Errorf("%w: %w", ErrInvalidNamespace, err)
 	}
 
 	return &Params{

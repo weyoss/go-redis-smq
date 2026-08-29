@@ -37,7 +37,7 @@ func TestEnqueue_PendingMessages(t *testing.T) {
 	}
 
 	// Enqueue purge
-	jobID, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	jobID, err := internalqueue.NewManager().PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -60,7 +60,7 @@ func TestEnqueue_ScheduledMessages(t *testing.T) {
 		prod.Produce(ctx, msg.New().SetBody("sched").SetQueue(params).SetScheduledDelay(1*time.Hour))
 	}
 
-	jobID, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseScheduled)
+	jobID, err := internalqueue.NewManager().PurgeQueue(ctx, params, publicqueue.BrowseScheduled)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestEnqueue_AcknowledgedMessages_RequiresAudit(t *testing.T) {
 	params := publicqueue.MustQueueParams("test-purge-enqueue-ack-noaudit")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
+	_, err := internalqueue.NewManager().PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
 	if err == nil {
 		t.Fatal("expected error: audit disabled")
 	}
@@ -102,7 +102,7 @@ func TestEnqueue_AcknowledgedMessages_WithAudit(t *testing.T) {
 		consumeAndAck(t, ctx, params, ids[0])
 	}
 
-	jobID, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
+	jobID, err := internalqueue.NewManager().PurgeQueue(ctx, params, publicqueue.BrowseAcknowledged)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
 	}
@@ -118,7 +118,7 @@ func TestEnqueue_DeadLetteredMessages_RequiresAudit(t *testing.T) {
 	params := publicqueue.MustQueueParams("test-purge-enqueue-dlq-noaudit")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	_, err := internalqueue.NewQueueManager().PurgeQueue(ctx, params, publicqueue.BrowseDeadLettered)
+	_, err := internalqueue.NewManager().PurgeQueue(ctx, params, publicqueue.BrowseDeadLettered)
 	if err == nil {
 		t.Fatal("expected error: audit disabled")
 	}
@@ -134,7 +134,7 @@ func TestEnqueue_QueueLocked(t *testing.T) {
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	qm := internalqueue.NewQueueManager()
+	qm := internalqueue.NewManager()
 	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	if err != nil {
 		t.Fatalf("enqueue: %v", err)
@@ -169,7 +169,7 @@ func TestEnqueue_GetJob(t *testing.T) {
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
-	qm := internalqueue.NewQueueManager()
+	qm := internalqueue.NewManager()
 	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
 	job, err := qm.GetPurgeJob(ctx, jobID)

@@ -48,7 +48,7 @@ type Transferable struct {
 
 	// Priority is the message priority, if set. It is only relevant for
 	// priority queues.
-	Priority *MessagePriority `json:"priority,omitempty"`
+	Priority *Priority `json:"priority,omitempty"`
 
 	// ScheduledCron is the CRON expression used for scheduled delivery.
 	// Empty when not set.
@@ -84,5 +84,5 @@ type Transferable struct {
 	MessageState StateTransferable `json:"messageState"`
 
 	// Status is the current message status.
-	Status MessageStatus `json:"status"`
+	Status Status `json:"status"`
 }

@@ -237,7 +237,7 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 }
 
 func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cause UnacknowledgeCause) {
-	var entries []UnackEntry
+	entries := make([]UnackEntry, 0, len(ids))
 	for _, id := range ids {
 		msgKey := keys.System{}.Message(id)
 		hash, err := redisClient.LoadHash(ctx, msgKey, "message")

@@ -29,7 +29,7 @@ func NewManager() publicmessage.Manager {
 	}
 }
 
-func (m *Manager) Status(ctx context.Context, messageID string) (publicmessage.MessageStatus, error) {
+func (m *Manager) Status(ctx context.Context, messageID string) (publicmessage.Status, error) {
 	return m.store.GetStatus(ctx, messageID)
 }
 

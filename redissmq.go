@@ -243,7 +243,7 @@ func NewConsumer(opts ...publicconsumer.Option) publicconsumer.Consumer {
 // NewQueueManager returns a new queue manager that implements
 // publicqueue.Manager.
 func NewQueueManager() publicqueue.Manager {
-	return internalqueue.NewQueueManager()
+	return internalqueue.NewManager()
 }
 
 // NewStateManager returns a new state manager that implements

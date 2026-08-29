@@ -45,7 +45,7 @@ type Params struct {
 
 	// Priority is the message priority, if set. It is only relevant for
 	// priority queues.
-	Priority *MessagePriority `json:"priority,omitempty"`
+	Priority *Priority `json:"priority,omitempty"`
 
 	// ScheduledCron is the CRON expression used for scheduled delivery.
 	// Empty when not set.

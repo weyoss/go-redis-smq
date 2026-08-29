@@ -10,14 +10,14 @@
 
 package exchange
 
-// ExchangePolicy restricts which queue types can bind to an exchange.
+// Policy restricts which queue types can bind to an exchange.
 // Integer values are persisted in Redis and must not be changed.
-type ExchangePolicy int
+type Policy int
 
 const (
 	// PolicyStandard allows only FIFO and LIFO queues.
 	// Standard exchanges require ordered message delivery.
-	PolicyStandard ExchangePolicy = iota // 0
+	PolicyStandard Policy = iota // 0
 
 	// PolicyPriority allows only Priority queues.
 	// Priority exchanges require message prioritization.
@@ -25,10 +25,10 @@ const (
 )
 
 // Int returns the integer representation for Redis storage.
-func (p ExchangePolicy) Int() int { return int(p) }
+func (p Policy) Int() int { return int(p) }
 
 // String returns a human-readable representation.
-func (p ExchangePolicy) String() string {
+func (p Policy) String() string {
 	switch p {
 	case PolicyStandard:
 		return "standard"
@@ -40,4 +40,4 @@ func (p ExchangePolicy) String() string {
 }
 
 // IsValid reports whether the policy value is within the valid range.
-func (p ExchangePolicy) IsValid() bool { return p >= PolicyStandard && p <= PolicyPriority }
+func (p Policy) IsValid() bool { return p >= PolicyStandard && p <= PolicyPriority }
