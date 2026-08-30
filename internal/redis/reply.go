@@ -12,8 +12,6 @@ package redis
 
 import (
 	"fmt"
-
-	"github.com/weyoss/go-redis-smq/internal/errs"
 )
 
 // String extracts a string from a Redis Lua script reply.
@@ -21,7 +19,7 @@ import (
 func String(reply interface{}) (string, error) {
 	s, ok := reply.(string)
 	if !ok {
-		return "", fmt.Errorf("%w: expected string, got %T", errs.ErrUnexpectedScriptReply, reply)
+		return "", fmt.Errorf("%w: expected string, got %T", ErrUnexpectedScriptReply, reply)
 	}
 	return s, nil
 }
@@ -31,7 +29,7 @@ func String(reply interface{}) (string, error) {
 func Int64(reply interface{}) (int64, error) {
 	n, ok := reply.(int64)
 	if !ok {
-		return 0, fmt.Errorf("%w: expected int64, got %T", errs.ErrUnexpectedScriptReply, reply)
+		return 0, fmt.Errorf("%w: expected int64, got %T", ErrUnexpectedScriptReply, reply)
 	}
 	return n, nil
 }
@@ -41,7 +39,7 @@ func Int64(reply interface{}) (int64, error) {
 func Slice(reply interface{}) ([]interface{}, error) {
 	s, ok := reply.([]interface{})
 	if !ok {
-		return nil, fmt.Errorf("%w: expected []interface{}, got %T", errs.ErrUnexpectedScriptReply, reply)
+		return nil, fmt.Errorf("%w: expected []interface{}, got %T", ErrUnexpectedScriptReply, reply)
 	}
 	return s, nil
 }

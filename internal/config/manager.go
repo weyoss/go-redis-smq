@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	internalConfigEvents "github.com/weyoss/go-redis-smq/internal/config/events"
-	"github.com/weyoss/go-redis-smq/internal/errs"
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -270,7 +269,7 @@ func (m *Manager) saveLocked(ctx context.Context, c *pubconfig.Config, currentVe
 		if replyStr == "VERSION_MISMATCH" {
 			return 0, pubconfig.ErrVersionMismatch
 		}
-		return 0, fmt.Errorf("%w: %s", errs.ErrUnexpectedScriptReply, replyStr)
+		return 0, fmt.Errorf("%w: %s", pubconfig.ErrUnexpectedScriptReply, replyStr)
 	}
 
 	version, err := redisClient.Int64(reply)

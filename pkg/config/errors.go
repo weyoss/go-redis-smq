@@ -25,4 +25,7 @@ var (
 	// ErrInvalidConfig indicates that the configuration passed to Save is
 	// invalid.
 	ErrInvalidConfig = errors.New("invalid configuration")
+
+	// ErrUnexpectedScriptReply indicates a Lua script returned an unexpected value type.
+	ErrUnexpectedScriptReply = errors.New("unexpected script reply")
 )
