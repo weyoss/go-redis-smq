@@ -25,6 +25,7 @@ import (
 // It holds all subcomponents and also implements the public queue.Manager
 // interface by delegating to those components.
 type Manager struct {
+	codec         *Codec
 	store         *Store
 	lookup        *Lookup
 	validator     *Validator
@@ -34,25 +35,23 @@ type Manager struct {
 	purge         *PurgeManager
 }
 
-// NewManager creates a new internal queue manager with default codecs.
-// It returns the concrete *Manager for internal use, exposing access to
-// subcomponents (Store, Lookup, etc.).
+// NewManager creates a new internal queue manager with a default codec.
 func NewManager() *Manager {
-	return NewManagerWithCodecs(nil)
+	return NewManagerWithCodec(nil)
 }
 
-// NewManagerWithCodecs creates a new internal queue manager with custom codecs.
-func NewManagerWithCodecs(codecs *Codecs) *Manager {
-	if codecs == nil {
-		codecs = DefaultCodecs()
+// NewManagerWithCodec creates a new internal queue manager with a custom codec.
+// If codec is nil, a default QueueCodec is used.
+func NewManagerWithCodec(codec *Codec) *Manager {
+	if codec == nil {
+		codec = NewCodec()
 	}
-
-	store := NewStore(codecs)
+	store := NewStore(codec)
 	state := NewState()
-
 	return &Manager{
+		codec:         codec,
 		store:         store,
-		lookup:        NewLookup(codecs),
+		lookup:        NewLookup(codec),
 		validator:     NewValidator(store),
 		state:         state,
 		consumerGroup: NewConsumerGroupStore(),
@@ -61,12 +60,8 @@ func NewManagerWithCodecs(codecs *Codecs) *Manager {
 	}
 }
 
-// NewPublicManager returns a new queue manager that satisfies the public
-// queue.Manager interface. It is used by the root redissmq package to expose
-// the public API.
-func NewPublicManager() publicqueue.Manager {
-	return NewManager()
-}
+// Codec returns the internal queue codec.
+func (m *Manager) Codec() *Codec { return m.codec }
 
 // Store returns the internal store component.
 func (m *Manager) Store() *Store { return m.store }

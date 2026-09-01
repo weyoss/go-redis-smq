@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq/internal/codec"
 	exSchema "github.com/weyoss/go-redis-smq/internal/exchange/schema"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -28,7 +27,7 @@ type DirectStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*queue.Params]
+	queueCodec *internalqueue.Codec
 }
 
 func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectStore {
@@ -36,12 +35,11 @@ func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectS
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalqueue.NewParamsCodec(),
+		queueCodec: internalqueue.NewCodec(),
 	}
 }
 
 // Create creates a direct exchange with the given queue policy.
-// Returns ErrTypeMismatch if params.Type() is not TypeDirect.
 func (ds *DirectStore) Create(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
 	if params.Type() != pubexchange.TypeDirect {
 		return pubexchange.ErrTypeMismatch
@@ -68,7 +66,7 @@ func (ds *DirectStore) BindQueue(
 		Name:      queueParams.Name(),
 	}
 
-	queueStr, err := ds.queueCodec.EncodeSet(ctx, queueParams)
+	queueStr, err := ds.queueCodec.EncodeParams(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("bind queue: encode queue: %w", err)
 	}
@@ -140,7 +138,7 @@ func (ds *DirectStore) UnbindQueue(
 		Name:      queueParams.Name(),
 	}
 
-	queueStr, err := ds.queueCodec.EncodeSet(ctx, queueParams)
+	queueStr, err := ds.queueCodec.EncodeParams(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("unbind queue: encode queue: %w", err)
 	}
@@ -262,7 +260,7 @@ func (ds *DirectStore) BoundQueues(
 		return nil, err
 	}
 
-	return internalqueue.DecodeQueueParams(members)
+	return ds.queueCodec.DecodeParamsSlice(ctx, members)
 }
 
 func (ds *DirectStore) Bindings(

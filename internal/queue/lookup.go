@@ -12,27 +12,23 @@ package queue
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
-	x "github.com/weyoss/go-redis-smq/pkg/exchange"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// Lookup handles queue discovery and listing operations.
 type Lookup struct {
-	codecs *Codecs
+	codec *Codec
 }
 
-// NewLookup creates a new queue lookup with the given codecs.
-// If codecs is nil, DefaultCodecs is used.
-func NewLookup(codecs *Codecs) *Lookup {
-	if codecs == nil {
-		codecs = DefaultCodecs()
+func NewLookup(codec *Codec) *Lookup {
+	if codec == nil {
+		codec = NewCodec()
 	}
-	return &Lookup{codecs: codecs}
+	return &Lookup{codec: codec}
 }
 
 // All returns every queue across all namespaces.
@@ -42,7 +38,7 @@ func (l *Lookup) All(ctx context.Context) ([]publicqueue.Params, error) {
 	if err != nil {
 		return nil, err
 	}
-	return DecodeQueueParams(members)
+	return l.decodeParams(ctx, members)
 }
 
 // ByNamespace returns all queues within a specific namespace.
@@ -53,7 +49,7 @@ func (l *Lookup) ByNamespace(ctx context.Context, namespace string) ([]publicque
 	if err != nil {
 		return nil, err
 	}
-	return DecodeQueueParams(members)
+	return l.decodeParams(ctx, members)
 }
 
 // ByExchange returns all queues bound to a specific exchange.
@@ -66,13 +62,12 @@ func (l *Lookup) ByExchange(ctx context.Context, namespace, exchangeName string,
 	var allMembers []string
 
 	switch exchangeType {
-	case x.TypeDirect.Int():
+	case exchange.TypeDirect.Int():
 		routingKeys, err := redisClient.LoadSetMembers(ctx, exKey.RoutingKeys(),
 			fmt.Sprintf("routing keys for exchange %s/%s", namespace, exchangeName))
 		if err != nil {
 			return nil, err
 		}
-
 		for _, rk := range routingKeys {
 			members, err := redisClient.LoadSetMembers(ctx,
 				exKey.RoutingKeyQueues(rk),
@@ -83,13 +78,12 @@ func (l *Lookup) ByExchange(ctx context.Context, namespace, exchangeName string,
 			allMembers = append(allMembers, members...)
 		}
 
-	case x.TypeTopic.Int():
+	case exchange.TypeTopic.Int():
 		patterns, err := redisClient.LoadSetMembers(ctx, exKey.BindingPatterns(),
 			fmt.Sprintf("patterns for exchange %s/%s", namespace, exchangeName))
 		if err != nil {
 			return nil, err
 		}
-
 		for _, pattern := range patterns {
 			members, err := redisClient.LoadSetMembers(ctx,
 				exKey.PatternQueues(pattern),
@@ -100,7 +94,7 @@ func (l *Lookup) ByExchange(ctx context.Context, namespace, exchangeName string,
 			allMembers = append(allMembers, members...)
 		}
 
-	case x.TypeFanout.Int():
+	case exchange.TypeFanout.Int():
 		members, err := redisClient.LoadSetMembers(ctx, exKey.FanoutQueues(),
 			fmt.Sprintf("queues for fanout exchange %s/%s", namespace, exchangeName))
 		if err != nil {
@@ -119,7 +113,7 @@ func (l *Lookup) ByExchange(ctx context.Context, namespace, exchangeName string,
 		}
 	}
 
-	return DecodeQueueParams(uniqueMembers)
+	return l.decodeParams(ctx, uniqueMembers)
 }
 
 // AllNamespaces returns all registered namespaces.
@@ -132,18 +126,16 @@ func (l *Lookup) AllNamespaces(ctx context.Context) ([]string, error) {
 	return members, nil
 }
 
-// DecodeQueueParams decodes JSON-encoded queue params from Redis set members.
+// decodeParams decodes JSON-encoded queue params from Redis set members.
 // Malformed entries are silently skipped.
-func DecodeQueueParams(members []string) ([]publicqueue.Params, error) {
+func (l *Lookup) decodeParams(ctx context.Context, members []string) ([]publicqueue.Params, error) {
 	params := make([]publicqueue.Params, 0, len(members))
 	for _, member := range members {
-		var p publicqueue.Params
-		if err := json.Unmarshal([]byte(member), &p); err != nil {
+		p, err := l.codec.DecodeParams(ctx, member)
+		if err != nil {
 			continue
 		}
-		if p.Name() != "" && p.NS() != "" {
-			params = append(params, p)
-		}
+		params = append(params, *p)
 	}
 	return params, nil
 }

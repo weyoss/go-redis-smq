@@ -17,7 +17,6 @@ import (
 	"strings"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq/internal/codec"
 	exSchema "github.com/weyoss/go-redis-smq/internal/exchange/schema"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -32,7 +31,7 @@ type TopicStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*queue.Params]
+	queueCodec *internalQueue.Codec
 }
 
 // NewTopicStore creates a new topic exchange store.
@@ -41,7 +40,7 @@ func NewTopicStore(store *Store, validator *Validator, codecs *Codecs) *TopicSto
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalQueue.NewParamsCodec(),
+		queueCodec: internalQueue.NewCodec(),
 	}
 }
 
@@ -80,7 +79,7 @@ func (ts *TopicStore) BindQueue(
 		Name:      queueParams.Name(),
 	}
 
-	queueStr, err := ts.queueCodec.EncodeSet(ctx, queueParams)
+	queueStr, err := ts.queueCodec.EncodeParams(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("bind queue: encode queue: %w", err)
 	}
@@ -158,7 +157,7 @@ func (ts *TopicStore) UnbindQueue(
 		Name:      queueParams.Name(),
 	}
 
-	queueStr, err := ts.queueCodec.EncodeSet(ctx, queueParams)
+	queueStr, err := ts.queueCodec.EncodeParams(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("unbind queue: encode queue: %w", err)
 	}
@@ -423,7 +422,7 @@ func (ts *TopicStore) boundQueues(
 		return nil, err
 	}
 
-	return internalQueue.DecodeQueueParams(members)
+	return ts.queueCodec.DecodeParamsSlice(ctx, members)
 }
 
 // Topic pattern matching logic

@@ -27,7 +27,7 @@ type Store struct {
 
 func NewStore() *Store {
 	return &Store{
-		codec: NewRateLimitCodec(),
+		codec: NewCodec(),
 	}
 }
 

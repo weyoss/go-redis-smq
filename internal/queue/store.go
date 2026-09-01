@@ -28,16 +28,16 @@ import (
 const maxQueueStateHistorySize = 100
 
 type Store struct {
-	codecs         *Codecs
+	codec          *Codec
 	rateLimitStore *ratelimit.Store
 }
 
-func NewStore(codecs *Codecs) *Store {
-	if codecs == nil {
-		codecs = DefaultCodecs()
+func NewStore(codec *Codec) *Store {
+	if codec == nil {
+		codec = NewCodec()
 	}
 	return &Store{
-		codecs:         codecs,
+		codec:          codec,
 		rateLimitStore: ratelimit.NewStore(),
 	}
 }
@@ -70,9 +70,9 @@ func (s *Store) SaveWithRateLimit(
 	systemKeys := keys.System{}
 	queueKeys := keys.Queue{Namespace: namespace, Name: queueName}
 
-	queueParamsJSON, err := json.Marshal(queueParams)
+	queueParamsJSON, err := s.codec.EncodeParams(ctx, queueParams)
 	if err != nil {
-		return fmt.Errorf("marshal queue params: %w", err)
+		return fmt.Errorf("encode queue params: %w", err)
 	}
 
 	initialTransition := publicqueue.StateTransition{
@@ -100,12 +100,12 @@ func (s *Store) SaveWithRateLimit(
 
 	rateLimitJSON := ""
 	if rateLimit != nil {
-		rateLimitJSON, _ = s.rateLimitStore.Codec().EncodeJSON(context.Background(), rateLimit)
+		rateLimitJSON, _ = s.rateLimitStore.Codec().EncodeJSON(ctx, rateLimit)
 	}
 
 	argv := []interface{}{
 		namespace,
-		string(queueParamsJSON),
+		queueParamsJSON,
 		schema.QueueFieldType.Key(),
 		queueType.Int(),
 		schema.QueueFieldDeliveryModel.Key(),
@@ -177,7 +177,7 @@ func (s *Store) Load(ctx context.Context, queueParams *publicqueue.Params) (*pub
 		return nil, err
 	}
 
-	props, err := s.codecs.Props.DecodeHash(ctx, hash)
+	props, err := s.codec.DecodeProps(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("load queue: decode: %w", err)
 	}
@@ -204,19 +204,19 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		Name:      queueParams.Name(),
 	}
 
-	// Get consumer IDs from the consumer hash (HKEYS).
+	// Consumers is a Redis hash; use HKeys.
 	consumerIDs, err := redisClient.Client().HKeys(ctx, key.Consumers()).Result()
 	if err != nil {
 		return fmt.Errorf("delete queue: get consumers: %w", err)
 	}
 
-	// Get consumer group IDs from the set (SMEMBERS).
+	// ConsumerGroups is a Redis set; use SMembers.
 	consumerGroups, err := redisClient.Client().SMembers(ctx, key.ConsumerGroups()).Result()
 	if err != nil {
 		return fmt.Errorf("delete queue: get consumer groups: %w", err)
 	}
 
-	// Get processing queue keys from the processing queues hash (HKEYS).
+	// ProcessingQueues is a Redis hash; use HKeys.
 	processingQueues, err := redisClient.Client().HKeys(ctx, key.ProcessingQueues()).Result()
 	if err != nil {
 		return fmt.Errorf("delete queue: get processing queues: %w", err)

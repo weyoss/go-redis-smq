@@ -15,7 +15,6 @@ import (
 	"fmt"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq/internal/codec"
 	exSchema "github.com/weyoss/go-redis-smq/internal/exchange/schema"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -30,7 +29,7 @@ type FanoutStore struct {
 	store      *Store
 	validator  *Validator
 	codecs     *Codecs
-	queueCodec codec.SetCodec[*queue.Params]
+	queueCodec *internalQueue.Codec
 }
 
 // NewFanoutStore creates a new fanout exchange store.
@@ -39,7 +38,7 @@ func NewFanoutStore(store *Store, validator *Validator, codecs *Codecs) *FanoutS
 		store:      store,
 		validator:  validator,
 		codecs:     codecs,
-		queueCodec: internalQueue.NewParamsCodec(),
+		queueCodec: internalQueue.NewCodec(),
 	}
 }
 
@@ -73,7 +72,7 @@ func (fs *FanoutStore) BindQueue(
 		Name:      queueParams.Name(),
 	}
 
-	queueStr, err := fs.queueCodec.EncodeSet(ctx, queueParams)
+	queueStr, err := fs.queueCodec.EncodeParams(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("bind queue: encode queue: %w", err)
 	}
@@ -144,7 +143,7 @@ func (fs *FanoutStore) UnbindQueue(
 		Name:      queueParams.Name(),
 	}
 
-	queueStr, err := fs.queueCodec.EncodeSet(ctx, queueParams)
+	queueStr, err := fs.queueCodec.EncodeParams(ctx, queueParams)
 	if err != nil {
 		return fmt.Errorf("unbind queue: encode queue: %w", err)
 	}
@@ -215,7 +214,7 @@ func (fs *FanoutStore) BoundQueues(
 		return nil, err
 	}
 
-	return internalQueue.DecodeQueueParams(members)
+	return fs.queueCodec.DecodeParamsSlice(ctx, members)
 }
 
 // Delete removes a fanout exchange and all its queue bindings.

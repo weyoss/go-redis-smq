@@ -38,8 +38,8 @@ import (
 // Note: The JSON format uses "interval" as milliseconds to match TypeScript.
 type Codec struct{}
 
-// NewRateLimitCodec creates a new RateLimit codec.
-func NewRateLimitCodec() *Codec {
+// NewCodec creates a new RateLimit codec.
+func NewCodec() *Codec {
 	return &Codec{}
 }
 
