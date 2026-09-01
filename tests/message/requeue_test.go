@@ -19,6 +19,8 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
+	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
+	rediskeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
@@ -272,4 +274,72 @@ func TestRequeue_DeadLetteredMessage(t *testing.T) {
 		t.Fatal("expected new message ID from DLQ requeue")
 	}
 	t.Logf("requeued DLQ message: %s -> %s", ids[0], newID)
+}
+
+func TestRequeue_ConsumerGroupUsesGroupKey(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
+	defer cancel()
+
+	params := queue.MustQueueParams("test-requeue-group")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
+
+	groupID := "email-service"
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, groupID)
+
+	prod := testutil.StartProducer(t, ctx)
+	ids, err := prod.Produce(ctx, message.New().SetBody("requeue-me").SetQueue(params))
+	if err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("expected 1 message ID, got %d", len(ids))
+	}
+	originalID := ids[0]
+
+	// Consume and acknowledge the message.
+	received := make(chan struct{})
+	cons := redissmq.NewConsumer()
+	cons.ConsumeWithGroup(params, groupID, func(ctx context.Context, m *message.Transferable) error {
+		received <- struct{}{}
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+
+	select {
+	case <-received:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for consumption")
+	}
+
+	// Shut down the consumer so it won't immediately consume the requeued message.
+	cons.Shutdown()
+	time.Sleep(200 * time.Millisecond) // allow shutdown to finish
+
+	// Requeue the acknowledged message.
+	mm := redissmq.NewMessageManager()
+	newID, err := mm.Requeue(ctx, originalID)
+	if err != nil {
+		t.Fatalf("requeue: %v", err)
+	}
+
+	// Verify the new message is in the group-specific pending list.
+	qKey := rediskeys.Queue{Namespace: params.NS(), Name: params.Name()}
+	pendingKey := qKey.PendingWithGroup(groupID)
+	idsInList, err := internalredis.Client().LRange(ctx, pendingKey, 0, -1).Result()
+	if err != nil {
+		t.Fatalf("lrange pending with group: %v", err)
+	}
+	found := false
+	for _, id := range idsInList {
+		if id == newID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("message %s not found in group pending list: %v", newID, idsInList)
+	}
 }

@@ -16,8 +16,10 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
+	rediskeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -29,7 +31,7 @@ func TestDelete_Single(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("delete-me").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("delete-me").SetQueue(params))
 
 	mm := redissmq.NewMessageManager()
 
@@ -37,7 +39,7 @@ func TestDelete_Single(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete: %v", err)
 	}
-	if result.Status != publicmessage.DeleteStatusOK {
+	if result.Status != message.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 	if result.Stats.Success != 1 {
@@ -56,7 +58,7 @@ func TestDelete_Multiple(t *testing.T) {
 
 	var ids []string
 	for i := 0; i < 5; i++ {
-		id, _ := prod.Produce(ctx, publicmessage.New().SetBody("publicmessage").SetQueue(params))
+		id, _ := prod.Produce(ctx, message.New().SetBody("message").SetQueue(params))
 		ids = append(ids, id[0])
 	}
 
@@ -66,7 +68,7 @@ func TestDelete_Multiple(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
-	if result.Status != publicmessage.DeleteStatusOK {
+	if result.Status != message.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 	if result.Stats.Success != 5 {
@@ -101,7 +103,7 @@ func TestDelete_EmptyList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("delete all: %v", err)
 	}
-	if result.Status != publicmessage.DeleteStatusOK {
+	if result.Status != message.DeleteStatusOK {
 		t.Errorf("status = %s, want OK", result.Status)
 	}
 }
@@ -114,7 +116,7 @@ func TestDelete_MixedFoundAndNotFound(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("real").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("real").SetQueue(params))
 
 	searchIDs := []string{ids[0], "fake-id-1", "fake-id-2"}
 
@@ -143,12 +145,12 @@ func TestDelete_AcknowledgedMessage(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("ack-me").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("ack-me").SetQueue(params))
 
 	// Consume the message to acknowledge it
 	received := make(chan struct{})
 	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *publicmessage.Transferable) error {
+	cons.Consume(params, func(ctx context.Context, m *message.Transferable) error {
 		received <- struct{}{}
 		return nil
 	})
@@ -177,7 +179,7 @@ func TestDelete_DoubleDelete(t *testing.T) {
 	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
-	ids, _ := prod.Produce(ctx, publicmessage.New().SetBody("delete-twice").SetQueue(params))
+	ids, _ := prod.Produce(ctx, message.New().SetBody("delete-twice").SetQueue(params))
 
 	mm := redissmq.NewMessageManager()
 
@@ -191,5 +193,56 @@ func TestDelete_DoubleDelete(t *testing.T) {
 
 	if result2.Stats.NotFound != 1 {
 		t.Errorf("second delete notFound = %d, want 1", result2.Stats.NotFound)
+	}
+}
+
+func TestDelete_ConsumerGroupUsesGroupKey(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-delete-group")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
+
+	groupID := "sms-service"
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, groupID)
+
+	prod := testutil.StartProducer(t, ctx)
+	ids, err := prod.Produce(ctx, message.New().SetBody("delete-me").SetQueue(params))
+	if err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("expected 1 message ID, got %d", len(ids))
+	}
+	msgID := ids[0]
+
+	// Verify it's in group pending list before delete.
+	qKey := rediskeys.Queue{Namespace: params.NS(), Name: params.Name()}
+	pendingKey := qKey.PendingWithGroup(groupID)
+	count, err := internalredis.Client().LLen(ctx, pendingKey).Result()
+	if err != nil {
+		t.Fatalf("llen: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected 1 message in group pending, got %d", count)
+	}
+
+	// Delete the message.
+	mm := redissmq.NewMessageManager()
+	result, err := mm.Delete(ctx, msgID)
+	if err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if result.Stats.Success != 1 {
+		t.Fatalf("delete success = %d, want 1", result.Stats.Success)
+	}
+
+	// Verify group pending list is now empty.
+	count, err = internalredis.Client().LLen(ctx, pendingKey).Result()
+	if err != nil {
+		t.Fatalf("llen after delete: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected empty group pending, got %d", count)
 	}
 }
