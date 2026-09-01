@@ -109,19 +109,3 @@ func Close() {
 	scriptMgr.Swap(nil)
 	client.Swap(nil)
 }
-
-// Stats returns connection pool statistics for health checks and monitoring.
-func Stats() *goredis.PoolStats {
-	return Client().PoolStats()
-}
-
-// AddHook attaches a Hook to the shared client for observability.
-// Must be called after Init.
-func AddHook(hook Hook) {
-	Client().AddHook(hook)
-}
-
-// Conn returns a new connection from the shared client.
-func Conn() *goredis.Conn {
-	return Client().Conn()
-}
