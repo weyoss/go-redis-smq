@@ -17,6 +17,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
@@ -197,5 +199,161 @@ func TestPubSub_CancelGroup(t *testing.T) {
 
 	if afterCancel > beforeCancel {
 		t.Fatal("messages consumed after group cancelled")
+	}
+}
+
+// Scenario: PendingWithGroup uses group-specific pending list
+func TestPubSub_PendingWithGroupUsesGroupKey(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-pubsub-pending-with-group")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPubSub)
+
+	groupID := "email-service"
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, groupID)
+
+	prod := testutil.StartProducer(t, ctx)
+
+	m := msg.New().SetBody("hello").SetQueue(params)
+	ids, err := prod.Produce(ctx, m)
+	if err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("expected 1 message ID, got %d", len(ids))
+	}
+	messageID := ids[0]
+
+	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+	pendingKey := qKey.PendingWithGroup(groupID)
+
+	// Verify message is in group-specific pending list.
+	length, err := redis.Client().LLen(ctx, pendingKey).Result()
+	if err != nil {
+		t.Fatalf("llen pending with group: %v", err)
+	}
+	if length != 1 {
+		t.Fatalf("pending list length = %d, want 1", length)
+	}
+	idsInList, err := redis.Client().LRange(ctx, pendingKey, 0, -1).Result()
+	if err != nil {
+		t.Fatalf("lrange pending with group: %v", err)
+	}
+	if len(idsInList) != 1 || idsInList[0] != messageID {
+		t.Fatalf("pending list contents = %v, want [%s]", idsInList, messageID)
+	}
+
+	// Consume the message.
+	var consumed atomic.Int64
+	cons := redissmq.NewConsumer()
+	cons.ConsumeWithGroup(params, groupID, func(ctx context.Context, m *msg.Transferable) error {
+		consumed.Add(1)
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+	defer cons.Shutdown()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for consumption")
+		default:
+			if consumed.Load() == 1 {
+				goto consumedDone
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+consumedDone:
+
+	// Verify group pending list is now empty.
+	length, err = redis.Client().LLen(ctx, pendingKey).Result()
+	if err != nil {
+		t.Fatalf("llen after consume: %v", err)
+	}
+	if length != 0 {
+		t.Fatalf("pending list length after consume = %d, want 0", length)
+	}
+}
+
+// Scenario: PriorityWithGroup uses group-specific priority sorted set
+func TestPubSub_PriorityWithGroupUsesGroupKey(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-pubsub-priority-with-group")
+	testutil.CreateQueue(t, ctx, params, queue.TypePriority, queue.DeliveryPubSub)
+
+	groupID := "sms-service"
+	cgm := redissmq.NewConsumerGroupManager()
+	cgm.Save(ctx, params, groupID)
+
+	prod := testutil.StartProducer(t, ctx)
+
+	m := msg.New().SetBody("priority").SetQueue(params).SetPriority(msg.PriorityHigh)
+	ids, err := prod.Produce(ctx, m)
+	if err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+	if len(ids) != 1 {
+		t.Fatalf("expected 1 message ID, got %d", len(ids))
+	}
+	messageID := ids[0]
+
+	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+	priorityKey := qKey.PriorityWithGroup(groupID)
+
+	// Verify message is in group-specific priority sorted set.
+	count, err := redis.Client().ZCard(ctx, priorityKey).Result()
+	if err != nil {
+		t.Fatalf("zcard priority with group: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("priority set size = %d, want 1", count)
+	}
+	idsInSet, err := redis.Client().ZRange(ctx, priorityKey, 0, -1).Result()
+	if err != nil {
+		t.Fatalf("zrange priority with group: %v", err)
+	}
+	if len(idsInSet) != 1 || idsInSet[0] != messageID {
+		t.Fatalf("priority set contents = %v, want [%s]", idsInSet, messageID)
+	}
+
+	// Consume the message.
+	var consumed atomic.Int64
+	cons := redissmq.NewConsumer()
+	cons.ConsumeWithGroup(params, groupID, func(ctx context.Context, m *msg.Transferable) error {
+		consumed.Add(1)
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+	defer cons.Shutdown()
+
+	deadline := time.After(5 * time.Second)
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for consumption")
+		default:
+			if consumed.Load() == 1 {
+				goto priorityConsumed
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+	}
+priorityConsumed:
+
+	// Verify group priority set is now empty.
+	count, err = redis.Client().ZCard(ctx, priorityKey).Result()
+	if err != nil {
+		t.Fatalf("zcard after consume: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("priority set size after consume = %d, want 0", count)
 	}
 }
