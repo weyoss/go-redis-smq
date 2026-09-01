@@ -255,6 +255,28 @@ func TestFanout_DeleteAfterUnbind(t *testing.T) {
 	}
 }
 
+func TestFanout_MatchQueues(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	q1 := queue.MustQueueParams("test-fanout-match-q1")
+	q2 := queue.MustQueueParams("test-fanout-match-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	exchangeParams := exchange.MustExchangeParams("test-fanout-match-ex", exchange.TypeFanout)
+	fx := redissmq.NewFanoutExchange()
+	fx.BindQueue(ctx, q1, exchangeParams)
+	fx.BindQueue(ctx, q2, exchangeParams)
+
+	queues, err := fx.MatchQueues(ctx, exchangeParams)
+	if err != nil {
+		t.Fatalf("MatchQueues: %v", err)
+	}
+	if len(queues) != 2 {
+		t.Fatalf("MatchQueues returned %d queues, want 2", len(queues))
+	}
+}
+
 // Helper
 func startConsumer(t *testing.T, ctx context.Context, params *queue.Params, counter *atomic.Int64) {
 	t.Helper()

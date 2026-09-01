@@ -306,3 +306,58 @@ func TestDirect_MultipleRoutingKeys(t *testing.T) {
 		t.Errorf("order.cancelled should match q2 only, got %v", queues2)
 	}
 }
+
+func TestDirect_BoundQueues(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	queueParams := queue.MustQueueParams("test-direct-bound-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	exchangeParams := exchange.MustExchangeParams("test-direct-bound-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+
+	if err := dx.BindQueue(ctx, queueParams, exchangeParams, "order.created"); err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+
+	queues, err := dx.BoundQueues(ctx, exchangeParams, "order.created")
+	if err != nil {
+		t.Fatalf("BoundQueues: %v", err)
+	}
+	if len(queues) != 1 || queues[0].String() != queueParams.String() {
+		t.Errorf("BoundQueues = %v, want [%s]", queues, queueParams.String())
+	}
+}
+
+func TestDirect_Bindings(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	q1 := queue.MustQueueParams("test-direct-bindings-q1")
+	q2 := queue.MustQueueParams("test-direct-bindings-q2")
+	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	exchangeParams := exchange.MustExchangeParams("test-direct-bindings-ex", exchange.TypeDirect)
+	dx := redissmq.NewDirectExchange()
+
+	if err := dx.BindQueue(ctx, q1, exchangeParams, "order.created"); err != nil {
+		t.Fatalf("bind q1: %v", err)
+	}
+	if err := dx.BindQueue(ctx, q2, exchangeParams, "order.cancelled"); err != nil {
+		t.Fatalf("bind q2: %v", err)
+	}
+
+	bindings, err := dx.Bindings(ctx, exchangeParams)
+	if err != nil {
+		t.Fatalf("Bindings: %v", err)
+	}
+	if len(bindings) != 2 {
+		t.Fatalf("Bindings returned %d entries, want 2", len(bindings))
+	}
+	if len(bindings["order.created"]) != 1 || bindings["order.created"][0].String() != q1.String() {
+		t.Errorf("Bindings order.created = %v", bindings["order.created"])
+	}
+	if len(bindings["order.cancelled"]) != 1 || bindings["order.cancelled"][0].String() != q2.String() {
+		t.Errorf("Bindings order.cancelled = %v", bindings["order.cancelled"])
+	}
+}

@@ -18,8 +18,8 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
-	x "github.com/weyoss/go-redis-smq/pkg/exchange"
-	msg "github.com/weyoss/go-redis-smq/pkg/message"
+	"github.com/weyoss/go-redis-smq/pkg/exchange"
+	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -27,10 +27,10 @@ import (
 func TestTopic_Create(t *testing.T) {
 	ctx := testutil.Setup(t)
 
-	exchangeParams := x.MustExchangeParams("test-topic-create", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-create", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
-	err := tx.Create(ctx, exchangeParams, x.PolicyStandard)
+	err := tx.Create(ctx, exchangeParams, exchange.PolicyStandard)
 	if err != nil {
 		t.Fatalf("create: %v", err)
 	}
@@ -43,7 +43,7 @@ func TestTopic_BindQueue(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-bind-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-bind-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-bind-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
 	err := tx.BindQueue(ctx, queueParams, exchangeParams, "user.*")
@@ -59,7 +59,7 @@ func TestTopic_SingleWildcard(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-star-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-star-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-star-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 	tx.BindQueue(ctx, queueParams, exchangeParams, "user.*")
 
@@ -89,7 +89,7 @@ func TestTopic_HashWildcard(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-hash-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-hash-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-hash-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 	tx.BindQueue(ctx, queueParams, exchangeParams, "user.#")
 
@@ -119,7 +119,7 @@ func TestTopic_HashAtBeginning(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-hash-begin-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-hash-begin-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-hash-begin-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 	tx.BindQueue(ctx, queueParams, exchangeParams, "#")
 
@@ -138,7 +138,7 @@ func TestTopic_MultipleMatches(t *testing.T) {
 	testutil.CreateQueue(t, ctx, q1, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, q2, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-multi-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-multi-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
 	tx.BindQueue(ctx, q1, exchangeParams, "user.*")
@@ -158,7 +158,7 @@ func TestTopic_InvalidPattern(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-invalid-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-invalid-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-invalid-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
 	err := tx.BindQueue(ctx, queueParams, exchangeParams, "invalid..pattern")
@@ -174,7 +174,7 @@ func TestTopic_Patterns(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-patterns-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-patterns-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-patterns-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
 	tx.BindQueue(ctx, queueParams, exchangeParams, "user.*")
@@ -199,7 +199,7 @@ func TestTopic_ProduceConsume(t *testing.T) {
 	testutil.CreateQueue(t, ctx, userQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 	testutil.CreateQueue(t, ctx, orderQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-prod-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-prod-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 	tx.BindQueue(ctx, userQueue, exchangeParams, "user.*")
 	tx.BindQueue(ctx, orderQueue, exchangeParams, "order.#")
@@ -207,7 +207,7 @@ func TestTopic_ProduceConsume(t *testing.T) {
 	var userCount, orderCount atomic.Int64
 
 	cons1 := redissmq.NewConsumer()
-	cons1.Consume(userQueue, func(ctx context.Context, m *msg.Transferable) error {
+	cons1.Consume(userQueue, func(ctx context.Context, m *message.Transferable) error {
 		userCount.Add(1)
 		return nil
 	})
@@ -215,7 +215,7 @@ func TestTopic_ProduceConsume(t *testing.T) {
 	defer cons1.Shutdown()
 
 	cons2 := redissmq.NewConsumer()
-	cons2.Consume(orderQueue, func(ctx context.Context, m *msg.Transferable) error {
+	cons2.Consume(orderQueue, func(ctx context.Context, m *message.Transferable) error {
 		orderCount.Add(1)
 		return nil
 	})
@@ -225,14 +225,14 @@ func TestTopic_ProduceConsume(t *testing.T) {
 	prod := testutil.StartProducer(t, ctx)
 
 	// Should route to userQueue only
-	prod.Produce(ctx, msg.New().
+	prod.Produce(ctx, message.New().
 		SetBody("user-event").
 		SetTopicExchange(exchangeParams).
 		SetExchangeRoutingKey("user.created"),
 	)
 
 	// Should route to orderQueue only
-	prod.Produce(ctx, msg.New().
+	prod.Produce(ctx, message.New().
 		SetBody("order-event").
 		SetTopicExchange(exchangeParams).
 		SetExchangeRoutingKey("order.created"),
@@ -255,7 +255,7 @@ func TestTopic_Unbind(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-unbind-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-unbind-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-unbind-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
 	tx.BindQueue(ctx, queueParams, exchangeParams, "user.*")
@@ -274,7 +274,7 @@ func TestTopic_Bindings(t *testing.T) {
 	queueParams := queue.MustQueueParams("test-topic-bindings-q")
 	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
 
-	exchangeParams := x.MustExchangeParams("test-topic-bindings-ex", x.TypeTopic)
+	exchangeParams := exchange.MustExchangeParams("test-topic-bindings-ex", exchange.TypeTopic)
 	tx := redissmq.NewTopicExchange()
 
 	tx.BindQueue(ctx, queueParams, exchangeParams, "user.*")
@@ -286,5 +286,27 @@ func TestTopic_Bindings(t *testing.T) {
 	}
 	if len(bindings) != 2 {
 		t.Fatalf("bindings = %d, want 2", len(bindings))
+	}
+}
+
+func TestTopic_BoundQueues(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	queueParams := queue.MustQueueParams("test-topic-bound-q")
+	testutil.CreateQueue(t, ctx, queueParams, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	exchangeParams := exchange.MustExchangeParams("test-topic-bound-ex", exchange.TypeTopic)
+	tx := redissmq.NewTopicExchange()
+
+	if err := tx.BindQueue(ctx, queueParams, exchangeParams, "user.*"); err != nil {
+		t.Fatalf("bind: %v", err)
+	}
+
+	queues, err := tx.BoundQueues(ctx, exchangeParams, "user.*")
+	if err != nil {
+		t.Fatalf("BoundQueues: %v", err)
+	}
+	if len(queues) != 1 || queues[0].String() != queueParams.String() {
+		t.Errorf("BoundQueues = %v, want [%s]", queues, queueParams.String())
 	}
 }
