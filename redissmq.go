@@ -53,6 +53,7 @@ var (
 	systemStop context.CancelFunc
 	// purgeWorkerStop stops the background purge worker.
 	purgeWorkerStop func()
+	purgeWorker     *internalqueue.PurgeWorker
 
 	lifecycleMu sync.Mutex
 	initialized bool
@@ -131,7 +132,10 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 
 	systemCtx, systemStop = context.WithCancel(ctx)
 
-	purgeWorkerStop = internalqueue.StartPurgeWorker(systemCtx)
+	// Start the purge worker.
+	purgeManager := internalqueue.NewManager().Purge()
+	purgeWorker = internalqueue.NewPurgeWorker(purgeManager)
+	purgeWorkerStop = purgeWorker.Start(systemCtx)
 
 	go func() {
 		<-ctx.Done()
@@ -183,6 +187,7 @@ func Shutdown() {
 	if purgeWorkerStop != nil {
 		purgeWorkerStop()
 		purgeWorkerStop = nil
+		purgeWorker = nil
 	}
 
 	if systemStop != nil {

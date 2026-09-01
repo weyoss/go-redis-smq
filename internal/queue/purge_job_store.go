@@ -22,7 +22,18 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-func create(ctx context.Context, job *publicqueue.PurgeJob) error {
+// PurgeJobStore handles persistence and lifecycle operations for purge jobs.
+// It encapsulates all Redis interactions related to purge job CRUD and state
+// transitions.
+type PurgeJobStore struct{}
+
+// NewPurgeJobStore creates a new PurgeJobStore.
+func NewPurgeJobStore() *PurgeJobStore {
+	return &PurgeJobStore{}
+}
+
+// Create stores a new purge job and adds it to the pending list.
+func (s *PurgeJobStore) Create(ctx context.Context, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.CreateJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.PendingPurgeJobs()},
 		[]interface{}{job.ID, mustMarshal(job)},
@@ -30,19 +41,21 @@ func create(ctx context.Context, job *publicqueue.PurgeJob) error {
 	)
 }
 
-func start(ctx context.Context, jobID, workerID string, job *publicqueue.PurgeJob) error {
+// Start marks a job as processing and assigns it to a worker.
+func (s *PurgeJobStore) Start(ctx context.Context, jobID, workerID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.StartJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
 			jobID, workerID, mustMarshal(job),
-			(publicqueue.PurgeJobPending).String(), publicqueue.PurgeJobProcessing.String(),
+			publicqueue.PurgeJobPending.String(), publicqueue.PurgeJobProcessing.String(),
 			publicqueue.PurgeJobCompleted.String(), publicqueue.PurgeJobFailed.String(), publicqueue.PurgeJobCanceled.String(),
 		},
 		"start",
 	)
 }
 
-func complete(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
+// Complete marks a job as completed and removes it from the processing list.
+func (s *PurgeJobStore) Complete(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.CompleteJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
@@ -54,7 +67,8 @@ func complete(ctx context.Context, jobID string, job *publicqueue.PurgeJob) erro
 	)
 }
 
-func fail(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
+// Fail marks a job as failed and removes it from the processing list.
+func (s *PurgeJobStore) Fail(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.FailJob,
 		[]string{keys.System{}.PurgeJobs(), keys.System{}.ActivePurgeJobs(), keys.System{}.JobWorker(jobID)},
 		[]interface{}{
@@ -66,7 +80,8 @@ func fail(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	)
 }
 
-func cancel(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
+// Cancel cancels a job and removes it from all lists.
+func (s *PurgeJobStore) Cancel(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.CancelJob,
 		[]string{
 			keys.System{}.PurgeJobs(), keys.System{}.PendingPurgeJobs(),
@@ -81,7 +96,8 @@ func cancel(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error 
 	)
 }
 
-func recoverJob(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
+// Recover moves a stuck job from processing back to pending.
+func (s *PurgeJobStore) Recover(ctx context.Context, jobID string, job *publicqueue.PurgeJob) error {
 	return runJobScript(ctx, scripts.RecoverStuckJob,
 		[]string{
 			keys.System{}.PurgeJobs(), keys.System{}.PendingPurgeJobs(),
@@ -97,7 +113,8 @@ func recoverJob(ctx context.Context, jobID string, job *publicqueue.PurgeJob) er
 	)
 }
 
-func getJob(ctx context.Context, jobID string) (*publicqueue.PurgeJob, error) {
+// Get retrieves a job by ID.
+func (s *PurgeJobStore) Get(ctx context.Context, jobID string) (*publicqueue.PurgeJob, error) {
 	data, err := redisClient.Client().HGet(ctx, keys.System{}.PurgeJobs(), jobID).Result()
 	if err != nil {
 		return nil, fmt.Errorf("purge: job not found: %s", jobID)
@@ -109,19 +126,22 @@ func getJob(ctx context.Context, jobID string) (*publicqueue.PurgeJob, error) {
 	return &job, nil
 }
 
-func save(ctx context.Context, job *publicqueue.PurgeJob) error {
+// Save updates the job in Redis.
+func (s *PurgeJobStore) Save(ctx context.Context, job *publicqueue.PurgeJob) error {
 	job.UpdatedAt = time.Now().UnixMilli()
 	return redisClient.Client().HSet(ctx, keys.System{}.PurgeJobs(), job.ID, mustMarshal(job)).Err()
 }
 
-func isCanceled(ctx context.Context, jobID string) (bool, error) {
-	job, err := getJob(ctx, jobID)
+// IsCanceled checks if a job is currently cancelled.
+func (s *PurgeJobStore) IsCanceled(ctx context.Context, jobID string) (bool, error) {
+	job, err := s.Get(ctx, jobID)
 	if err != nil {
 		return false, err
 	}
 	return job.Status == publicqueue.PurgeJobCanceled, nil
 }
 
+// runJobScript executes a purge job Lua script and interprets the result.
 func runJobScript(ctx context.Context, id scripts.ID, keys []string, args []interface{}, operation string) error {
 	reply, err := redisClient.Eval(ctx, id, keys, args...)
 	if err != nil {
@@ -149,6 +169,7 @@ func runJobScript(ctx context.Context, id scripts.ID, keys []string, args []inte
 	}
 }
 
+// mustMarshal marshals any value to a JSON string, panicking on error.
 func mustMarshal(v interface{}) string {
 	data, err := json.Marshal(v)
 	if err != nil {

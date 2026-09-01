@@ -13,11 +13,11 @@ package consumer
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log/slog"
 	"strconv"
 	"time"
 
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -33,13 +33,34 @@ type OrphanedLockRecoverer struct {
 	log        *slog.Logger
 }
 
-func NewOrphanedLockRecoverer(q *queue.Params, consumerID string) *OrphanedLockRecoverer {
-	return &OrphanedLockRecoverer{
+// OrphanedLockRecovererOption is a functional option for OrphanedLockRecoverer.
+type OrphanedLockRecovererOption func(*OrphanedLockRecoverer)
+
+// WithOrphanedLockRecoverInterval sets the interval between recovery checks.
+func WithOrphanedLockRecoverInterval(d time.Duration) OrphanedLockRecovererOption {
+	return func(o *OrphanedLockRecoverer) {
+		if d > 0 {
+			o.interval = d
+		}
+	}
+}
+
+// NewOrphanedLockRecoverer creates a new OrphanedLockRecoverer.
+func NewOrphanedLockRecoverer(
+	q *queue.Params,
+	consumerID string,
+	opts ...OrphanedLockRecovererOption,
+) *OrphanedLockRecoverer {
+	r := &OrphanedLockRecoverer{
 		queue:      q,
 		consumerID: consumerID,
 		interval:   30 * time.Second,
 		log:        logger.New("consumer", "lock-recoverer", consumerID, q.Name()),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	return r
 }
 
 func (olr *OrphanedLockRecoverer) Run(ctx context.Context) {
@@ -71,52 +92,41 @@ func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
 		Name:      olr.queue.Name(),
 	}
 
-	stateStr, err := redisClient.LoadHashField(ctx, qKey.Properties(),
-		qSchema.QueueFieldOperationalState.Key(), "queue state")
+	// Load current state.
+	state, err := internalqueue.NewState().FetchCurrent(ctx, olr.queue)
 	if err != nil {
 		olr.log.Debug("failed to load queue state", "error", err)
 		return
 	}
-
-	state, err := strconv.Atoi(stateStr)
-	if err != nil {
-		olr.log.Error("invalid queue state value",
-			"value", stateStr,
-			"error", err,
-		)
+	if state.To != queue.StateLocked {
 		return
 	}
 
-	if queue.State(state) != queue.StateLocked {
+	// Check lock owner: only recover locks owned by the purge job.
+	if state.Owner == nil || *state.Owner != queue.LockOwnerPurgeJob {
+		olr.log.Debug("lock owner is not purge job; skipping", "owner", state.Owner)
 		return
 	}
 
-	lockID, err := redisClient.LoadHashField(ctx, qKey.Properties(),
-		qSchema.QueueFieldLockID.Key(), "lock ID")
-	if err != nil || lockID == "" {
-		olr.log.Debug("failed to load lock ID", "error", err)
+	lockID := ""
+	if state.LockID != nil {
+		lockID = *state.LockID
+	}
+	if lockID == "" {
+		olr.log.Debug("locked queue has empty lock ID; skipping")
 		return
 	}
 
 	olr.log.Debug("found locked queue", "lockID", lockID)
 
-	if !olr.isPurgeJobDone(ctx, lockID) {
-		olr.log.Debug("purge job still active — skipping unlock", "lockID", lockID)
+	// Check if the worker associated with the job is still alive.
+	if internalqueue.IsWorkerAlive(ctx, lockID) {
+		olr.log.Debug("purge worker still alive — skipping unlock", "lockID", lockID)
 		return
 	}
 
-	olr.log.Info("purge job completed — unlocking queue", "lockID", lockID)
+	olr.log.Info("purge worker is dead — unlocking queue", "lockID", lockID)
 	olr.unlockQueue(ctx, qKey, lockID)
-}
-
-func (olr *OrphanedLockRecoverer) isPurgeJobDone(ctx context.Context, jobID string) bool {
-	jobKey := keys.System{}.JobWorker(jobID)
-	exists, err := redisClient.Client().Exists(ctx, jobKey).Result()
-	if err != nil {
-		olr.log.Debug("failed to check job worker", "jobID", jobID, "error", err)
-		return false
-	}
-	return exists == 0
 }
 
 func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Queue, lockID string) {
@@ -138,25 +148,26 @@ func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Que
 	luaKeys := []string{qKey.Properties(), qKey.StateHistory()}
 	argv := []interface{}{
 		qSchema.QueueFieldOperationalState.Key(),
-		queue.StateActive.Int(),
+		strconv.Itoa(queue.StateActive.Int()),
 		string(transitionJSON),
-		queue.StateLocked.Int(), // expected previous state
-		queue.StateActive.Int(), // active state value
-		100,                     // max history size
-		queue.StateLocked.Int(), // locked state value
+		strconv.Itoa(queue.StateLocked.Int()), // expected previous state
+		strconv.Itoa(queue.StateActive.Int()), // active state value
+		"100",                                 // max history size
+		strconv.Itoa(queue.StateLocked.Int()), // locked state value
 		lockID,
 		qSchema.QueueFieldLastStateChangeAt.Key(),
 		strconv.FormatInt(now, 10),
 		qSchema.QueueFieldLockID.Key(),
 	}
 
-	_, err = redisClient.Eval(ctx, scripts.SetQueueState, luaKeys, argv...)
+	reply, err := redisClient.Eval(ctx, scripts.SetQueueState, luaKeys, argv...)
 	if err != nil {
 		olr.log.Error("failed to unlock queue", "lockID", lockID, "error", err)
-	} else {
-		olr.log.Info("queue unlocked successfully",
-			"queue", fmt.Sprintf("%s/%s", olr.queue.NS(), olr.queue.Name()),
-			"lockID", lockID,
-		)
+		return
 	}
+	if replyStr, ok := reply.(string); ok && replyStr != "OK" {
+		olr.log.Error("unlock queue script returned error", "reply", replyStr)
+		return
+	}
+	olr.log.Info("queue unlocked successfully", "lockID", lockID)
 }
