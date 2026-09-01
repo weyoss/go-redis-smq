@@ -1,13 +1,3 @@
-/*
- * Copyright (c) 2026
- * Weyoss <weyoss@outlook.com>
- * https://github.com/weyoss
- *
- * This source code is licensed under the MIT license found in the LICENSE file
- * in the root directory of this source tree.
- *
- */
-
 package consumer
 
 import (
@@ -105,7 +95,7 @@ func (rc *ReapConsumers) reap(ctx context.Context) {
 		rc.log.Warn("dead consumer detected — recovering messages",
 			"deadConsumerID", cid,
 		)
-		rc.recoverConsumer(ctx, cid)
+		rc.recoverConsumer(ctx, cid, qKey)
 	}
 
 	if deadCount > 0 {
@@ -113,10 +103,8 @@ func (rc *ReapConsumers) reap(ctx context.Context) {
 	}
 }
 
-func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string) {
-	rc.log.Debug("recovering consumer",
-		"consumerID", consumerID,
-	)
+func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string, qKey redisKeys.Queue) {
+	rc.log.Debug("recovering consumer", "consumerID", consumerID)
 
 	// Use the dead consumer's ID to create an unacknowledger for its processing queue.
 	deadUnack := NewMessageUnacknowledger(rc.queue, consumerID)
@@ -127,21 +115,35 @@ func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string)
 		)
 	}
 
-	if err := DeleteEphemeralConsumerGroup(ctx, consumerID, rc.queue, rc.groupID); err != nil {
-		rc.log.Error("failed to delete ephemeral group for dead consumer",
-			"consumerID", consumerID,
-			"error", err,
-		)
+	// Determine the ephemeral group ID for this consumer.
+	deadGroupID := ephemeralGroupID(consumerID)
+	groupExists, err := redisClient.Client().SIsMember(ctx, qKey.ConsumerGroups(), deadGroupID).Result()
+	if err == nil && groupExists {
+		// The dead consumer was using an ephemeral group. Delete it.
+		if err := DeleteEphemeralConsumerGroup(ctx, consumerID, rc.queue, deadGroupID); err != nil {
+			rc.log.Error("failed to delete ephemeral group for dead consumer",
+				"consumerID", consumerID,
+				"group", deadGroupID,
+				"error", err,
+			)
+		}
+		// Unsubscribe with the ephemeral group ID to remove from group members.
+		if err := UnsubscribeConsumer(ctx, consumerID, rc.queue, deadGroupID); err != nil {
+			rc.log.Error("failed to unsubscribe dead consumer from ephemeral group",
+				"consumerID", consumerID,
+				"group", deadGroupID,
+				"error", err,
+			)
+		}
+	} else {
+		// The dead consumer was using an explicit group or no group. Unsubscribe without group.
+		if err := UnsubscribeConsumer(ctx, consumerID, rc.queue, ""); err != nil {
+			rc.log.Error("failed to unsubscribe dead consumer",
+				"consumerID", consumerID,
+				"error", err,
+			)
+		}
 	}
 
-	if err := UnsubscribeConsumer(ctx, consumerID, rc.queue, rc.groupID); err != nil {
-		rc.log.Error("failed to unsubscribe dead consumer",
-			"consumerID", consumerID,
-			"error", err,
-		)
-	}
-
-	rc.log.Info("consumer recovered",
-		"consumerID", consumerID,
-	)
+	rc.log.Info("consumer recovered", "consumerID", consumerID)
 }
