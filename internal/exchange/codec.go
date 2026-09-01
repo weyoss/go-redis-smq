@@ -16,66 +16,56 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/weyoss/go-redis-smq/internal/codec"
 	"github.com/weyoss/go-redis-smq/internal/exchange/schema"
 	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 )
 
-// ParamsCodec handles serialization of Params to/from Redis sets.
-type ParamsCodec struct{}
+// Codec handles serialisation for exchange Params and Props.
+// It centralises all exchange‑related encoding and decoding.
+type Codec struct{}
 
-// NewExchangeParamsCodec creates a new Params codec.
-func NewExchangeParamsCodec() *ParamsCodec {
-	return &ParamsCodec{}
+// NewCodec creates a new Codec.
+func NewCodec() *Codec {
+	return &Codec{}
 }
 
-// EncodeSet serializes Params to a JSON string for Redis set storage.
-func (c *ParamsCodec) EncodeSet(_ context.Context, params *pubexchange.Params) (string, error) {
+// EncodeParams serialises Params to a JSON string for Redis set storage.
+func (c *Codec) EncodeParams(_ context.Context, params *pubexchange.Params) (string, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
-		return "", codec.NewEncodingError("exchange params", params.String(), err)
+		return "", fmt.Errorf("encode exchange params: %w", err)
 	}
 	return string(data), nil
 }
 
-// DecodeSet deserializes a JSON string from a Redis set back to Params.
-func (c *ParamsCodec) DecodeSet(_ context.Context, data string) (*pubexchange.Params, error) {
+// DecodeParams deserialises a JSON string from a Redis set back to Params.
+func (c *Codec) DecodeParams(_ context.Context, data string) (*pubexchange.Params, error) {
 	var params pubexchange.Params
 	if err := json.Unmarshal([]byte(data), &params); err != nil {
-		return nil, codec.NewDecodingError("exchange params", data, err)
+		return nil, fmt.Errorf("decode exchange params: %w", err)
 	}
 	if params.Name() == "" || params.Namespace() == "" {
-		return nil, codec.NewDecodingError("exchange params", data, codec.ErrInvalidFormat)
+		return nil, fmt.Errorf("decode exchange params: invalid format")
 	}
 	return &params, nil
 }
 
-// PropsCodec handles serialization of Props to/from Redis hash.
-type PropsCodec struct{}
-
-// NewExchangePropsCodec creates a new Props codec.
-func NewExchangePropsCodec() *PropsCodec {
-	return &PropsCodec{}
-}
-
-// EncodeHash serializes Props to a Redis hash map.
-func (c *PropsCodec) EncodeHash(_ context.Context, props *pubexchange.Props) (map[string]interface{}, error) {
+// EncodeProps serialises Props to a Redis hash map.
+func (c *Codec) EncodeProps(_ context.Context, props *pubexchange.Props) (map[string]interface{}, error) {
 	if props == nil {
-		return nil, codec.NewEncodingError("exchange props", "nil", codec.ErrInvalidFormat)
+		return nil, fmt.Errorf("encode exchange props: nil")
 	}
 
-	hash := map[string]interface{}{
+	return map[string]interface{}{
 		schema.ExchangeFieldType.Key():   strconv.Itoa(props.Type.Int()),
 		schema.ExchangeFieldPolicy.Key(): strconv.Itoa(props.Policy.Int()),
-	}
-
-	return hash, nil
+	}, nil
 }
 
-// DecodeHash deserializes a Redis hash map back to Props.
-func (c *PropsCodec) DecodeHash(_ context.Context, hash map[string]string) (*pubexchange.Props, error) {
+// DecodeProps deserialises a Redis hash map back to Props.
+func (c *Codec) DecodeProps(_ context.Context, hash map[string]string) (*pubexchange.Props, error) {
 	if len(hash) == 0 {
-		return nil, codec.NewDecodingError("exchange props", "empty hash", codec.ErrInvalidFormat)
+		return nil, fmt.Errorf("decode exchange props: empty hash")
 	}
 
 	props := &pubexchange.Props{}
@@ -83,7 +73,7 @@ func (c *PropsCodec) DecodeHash(_ context.Context, hash map[string]string) (*pub
 	if v, ok := hash[schema.ExchangeFieldType.Key()]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return nil, codec.NewDecodingError("exchange props", fmt.Sprintf("type=%s", v), err)
+			return nil, fmt.Errorf("decode exchange props type: %w", err)
 		}
 		props.Type = pubexchange.Type(n)
 	}
@@ -91,16 +81,10 @@ func (c *PropsCodec) DecodeHash(_ context.Context, hash map[string]string) (*pub
 	if v, ok := hash[schema.ExchangeFieldPolicy.Key()]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
-			return nil, codec.NewDecodingError("exchange props", fmt.Sprintf("policy=%s", v), err)
+			return nil, fmt.Errorf("decode exchange props policy: %w", err)
 		}
 		props.Policy = pubexchange.Policy(n)
 	}
 
 	return props, nil
 }
-
-// Compile-time interface checks
-var (
-	_ codec.SetCodec[*pubexchange.Params] = (*ParamsCodec)(nil)
-	_ codec.HashCodec[*pubexchange.Props] = (*PropsCodec)(nil)
-)

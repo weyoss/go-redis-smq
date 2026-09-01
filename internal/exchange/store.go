@@ -23,14 +23,14 @@ import (
 )
 
 type Store struct {
-	codecs *Codecs
+	codec *Codec
 }
 
-func NewStore(codecs *Codecs) *Store {
-	if codecs == nil {
-		codecs = DefaultCodecs()
+func NewStore(codec *Codec) *Store {
+	if codec == nil {
+		codec = NewCodec()
 	}
-	return &Store{codecs: codecs}
+	return &Store{codec: codec}
 }
 
 func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pubexchange.Policy) error {
@@ -39,7 +39,7 @@ func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pub
 		Name:      params.Name(),
 	}
 
-	paramsStr, err := s.codecs.Params.EncodeSet(ctx, params)
+	paramsStr, err := s.codec.EncodeParams(ctx, params)
 	if err != nil {
 		return fmt.Errorf("save exchange: %w", err)
 	}
@@ -48,7 +48,7 @@ func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pub
 		Type:   params.Type(),
 		Policy: policy,
 	}
-	propsHash, err := s.codecs.Props.EncodeHash(ctx, props)
+	propsHash, err := s.codec.EncodeProps(ctx, props)
 	if err != nil {
 		return fmt.Errorf("save exchange: %w", err)
 	}
@@ -93,7 +93,7 @@ func (s *Store) Load(ctx context.Context, params *pubexchange.Params) (*pubexcha
 		return nil, pubexchange.ErrNotFound
 	}
 
-	props, err := s.codecs.Props.DecodeHash(ctx, hash)
+	props, err := s.codec.DecodeProps(ctx, hash)
 	if err != nil {
 		return nil, fmt.Errorf("load exchange: %w", err)
 	}
@@ -200,7 +200,7 @@ func (s *Store) Delete(ctx context.Context, params *pubexchange.Params) error {
 	}
 
 	// No bound queues; proceed with deletion.
-	paramsStr, err := s.codecs.Params.EncodeSet(ctx, params)
+	paramsStr, err := s.codec.EncodeParams(ctx, params)
 	if err != nil {
 		return fmt.Errorf("delete exchange: %w", err)
 	}

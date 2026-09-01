@@ -22,16 +22,16 @@ import (
 
 // Lookup handles exchange discovery and listing operations.
 type Lookup struct {
-	codecs *Codecs
+	codec *Codec
 }
 
-// NewLookup creates a new exchange lookup with the given codecs.
-// If codecs is nil, DefaultCodecs is used.
-func NewLookup(codecs *Codecs) *Lookup {
-	if codecs == nil {
-		codecs = DefaultCodecs()
+// NewLookup creates a new exchange lookup with the given codec.
+// If codec is nil, a default ExchangeCodec is used.
+func NewLookup(codec *Codec) *Lookup {
+	if codec == nil {
+		codec = NewCodec()
 	}
-	return &Lookup{codecs: codecs}
+	return &Lookup{codec: codec}
 }
 
 // All returns every exchange across all namespaces.
@@ -79,15 +79,12 @@ func (l *Lookup) ByQueue(ctx context.Context, queueParams *queue.Params) ([]pube
 func (l *Lookup) decodeExchangeParams(ctx context.Context, members []string) ([]pubexchange.Params, error) {
 	params := make([]pubexchange.Params, 0, len(members))
 	for _, member := range members {
-		p, err := l.codecs.Params.DecodeSet(ctx, member)
+		p, err := l.codec.DecodeParams(ctx, member)
 		if err != nil {
 			// Skip malformed entries - don't fail the entire operation
 			continue
 		}
-		// Only include entries with required fields
-		if p.Name() != "" && p.Namespace() != "" {
-			params = append(params, *p)
-		}
+		params = append(params, *p)
 	}
 	return params, nil
 }

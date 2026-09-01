@@ -30,16 +30,16 @@ import (
 type TopicStore struct {
 	store      *Store
 	validator  *Validator
-	codecs     *Codecs
+	codec      *Codec
 	queueCodec *internalQueue.Codec
 }
 
 // NewTopicStore creates a new topic exchange store.
-func NewTopicStore(store *Store, validator *Validator, codecs *Codecs) *TopicStore {
+func NewTopicStore(store *Store, validator *Validator, codec *Codec) *TopicStore {
 	return &TopicStore{
 		store:      store,
 		validator:  validator,
-		codecs:     codecs,
+		codec:      codec,
 		queueCodec: internalQueue.NewCodec(),
 	}
 }
@@ -84,7 +84,7 @@ func (ts *TopicStore) BindQueue(
 		return fmt.Errorf("bind queue: encode queue: %w", err)
 	}
 
-	exchangeStr, err := ts.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := ts.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("bind queue: encode exchange: %w", err)
 	}
@@ -162,7 +162,7 @@ func (ts *TopicStore) UnbindQueue(
 		return fmt.Errorf("unbind queue: encode queue: %w", err)
 	}
 
-	exchangeStr, err := ts.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := ts.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("unbind queue: encode exchange: %w", err)
 	}
@@ -336,7 +336,7 @@ func (ts *TopicStore) Delete(ctx context.Context, exchangeParams *pubexchange.Pa
 		Name:      exchangeParams.Name(),
 	}
 
-	exchangeStr, err := ts.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := ts.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("delete: encode exchange: %w", err)
 	}

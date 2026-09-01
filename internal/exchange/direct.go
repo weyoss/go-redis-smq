@@ -26,15 +26,15 @@ import (
 type DirectStore struct {
 	store      *Store
 	validator  *Validator
-	codecs     *Codecs
+	codec      *Codec
 	queueCodec *internalqueue.Codec
 }
 
-func NewDirectStore(store *Store, validator *Validator, codecs *Codecs) *DirectStore {
+func NewDirectStore(store *Store, validator *Validator, codec *Codec) *DirectStore {
 	return &DirectStore{
 		store:      store,
 		validator:  validator,
-		codecs:     codecs,
+		codec:      codec,
 		queueCodec: internalqueue.NewCodec(),
 	}
 }
@@ -71,7 +71,7 @@ func (ds *DirectStore) BindQueue(
 		return fmt.Errorf("bind queue: encode queue: %w", err)
 	}
 
-	exchangeStr, err := ds.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := ds.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("bind queue: encode exchange: %w", err)
 	}
@@ -143,7 +143,7 @@ func (ds *DirectStore) UnbindQueue(
 		return fmt.Errorf("unbind queue: encode queue: %w", err)
 	}
 
-	exchangeStr, err := ds.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := ds.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("unbind queue: encode exchange: %w", err)
 	}
@@ -289,7 +289,7 @@ func (ds *DirectStore) Delete(ctx context.Context, exchangeParams *pubexchange.P
 		Name:      exchangeParams.Name(),
 	}
 
-	exchangeStr, err := ds.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := ds.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("delete: encode exchange: %w", err)
 	}

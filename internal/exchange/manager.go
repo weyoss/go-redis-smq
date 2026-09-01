@@ -13,28 +13,15 @@ package exchange
 import (
 	"context"
 
-	"github.com/weyoss/go-redis-smq/internal/codec"
 	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// Codecs holds the codec instances for exchange serialization.
-type Codecs struct {
-	Params codec.SetCodec[*pubexchange.Params]
-	Props  codec.HashCodec[*pubexchange.Props]
-}
-
-func DefaultCodecs() *Codecs {
-	return &Codecs{
-		Params: NewExchangeParamsCodec(),
-		Props:  NewExchangePropsCodec(),
-	}
-}
-
 // Manager provides Redis-backed exchange operations.
-// It implements the pubexchange.Manager interface and wires together
+// It implements the public exchange.Manager interface and wires together
 // store, lookup, validator, and type-specific sub-stores.
 type Manager struct {
+	codec     *Codec
 	store     *Store
 	lookup    *Lookup
 	validator *Validator
@@ -43,29 +30,32 @@ type Manager struct {
 	topic     *TopicStore
 }
 
-// NewManager creates a new exchange manager with default codecs.
+// NewManager creates a new exchange manager with a default codec.
 func NewManager() *Manager {
-	return NewManagerWithCodecs(nil)
+	return NewManagerWithCodec(nil)
 }
 
-// NewManagerWithCodecs creates a new exchange manager with custom codecs.
-func NewManagerWithCodecs(codecs *Codecs) *Manager {
-	if codecs == nil {
-		codecs = DefaultCodecs()
+// NewManagerWithCodec creates a new exchange manager with a custom codec.
+// If codec is nil, a default ExchangeCodec is used.
+func NewManagerWithCodec(codec *Codec) *Manager {
+	if codec == nil {
+		codec = NewCodec()
 	}
-
-	store := NewStore(codecs)
+	store := NewStore(codec)
 	validator := NewValidator(store)
-
 	return &Manager{
+		codec:     codec,
 		store:     store,
-		lookup:    NewLookup(codecs),
+		lookup:    NewLookup(codec),
 		validator: validator,
-		direct:    NewDirectStore(store, validator, codecs),
-		fanout:    NewFanoutStore(store, validator, codecs),
-		topic:     NewTopicStore(store, validator, codecs),
+		direct:    NewDirectStore(store, validator, codec),
+		fanout:    NewFanoutStore(store, validator, codec),
+		topic:     NewTopicStore(store, validator, codec),
 	}
 }
+
+// Codec returns the internal exchange codec.
+func (m *Manager) Codec() *Codec { return m.codec }
 
 // Store returns the exchange store for persistence operations.
 func (m *Manager) Store() *Store { return m.store }

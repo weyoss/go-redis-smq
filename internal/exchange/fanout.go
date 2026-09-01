@@ -28,16 +28,16 @@ import (
 type FanoutStore struct {
 	store      *Store
 	validator  *Validator
-	codecs     *Codecs
+	codec      *Codec
 	queueCodec *internalQueue.Codec
 }
 
 // NewFanoutStore creates a new fanout exchange store.
-func NewFanoutStore(store *Store, validator *Validator, codecs *Codecs) *FanoutStore {
+func NewFanoutStore(store *Store, validator *Validator, codec *Codec) *FanoutStore {
 	return &FanoutStore{
 		store:      store,
 		validator:  validator,
-		codecs:     codecs,
+		codec:      codec,
 		queueCodec: internalQueue.NewCodec(),
 	}
 }
@@ -77,7 +77,7 @@ func (fs *FanoutStore) BindQueue(
 		return fmt.Errorf("bind queue: encode queue: %w", err)
 	}
 
-	exchangeStr, err := fs.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := fs.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("bind queue: encode exchange: %w", err)
 	}
@@ -148,7 +148,7 @@ func (fs *FanoutStore) UnbindQueue(
 		return fmt.Errorf("unbind queue: encode queue: %w", err)
 	}
 
-	exchangeStr, err := fs.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := fs.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("unbind queue: encode exchange: %w", err)
 	}
@@ -225,7 +225,7 @@ func (fs *FanoutStore) Delete(ctx context.Context, exchangeParams *pubexchange.P
 		Name:      exchangeParams.Name(),
 	}
 
-	exchangeStr, err := fs.codecs.Params.EncodeSet(ctx, exchangeParams)
+	exchangeStr, err := fs.codec.EncodeParams(ctx, exchangeParams)
 	if err != nil {
 		return fmt.Errorf("delete: encode exchange: %w", err)
 	}
