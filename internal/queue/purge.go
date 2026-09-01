@@ -234,6 +234,17 @@ func (pm *PurgeManager) execute(ctx context.Context, jobID string) {
 		return
 	}
 
+	// Check if the job was cancelled during processing.
+	canceled, err := isCanceled(ctx, jobID)
+	if err != nil {
+		pm.log.Error("check canceled failed", "jobID", jobID, "error", err)
+	}
+	if canceled {
+		pm.log.Info("job was cancelled", "jobID", jobID)
+		// Do not overwrite the cancellation status.
+		return
+	}
+
 	job.Status = publicqueue.PurgeJobCompleted
 	if job.Meta == nil {
 		job.Meta = &publicqueue.PurgeJobMeta{}
