@@ -114,15 +114,32 @@ func (sp *ScheduledPublisher) publishDue(ctx context.Context) {
 		return
 	}
 
-	sp.enqueueScheduled(ctx, qKey, messages)
+	// Group messages by consumer group ID.
+	groups := make(map[string][]*internalMessage.Envelope)
+	for _, msg := range messages {
+		cgID := msg.ConsumerGroupID()
+		groups[cgID] = append(groups[cgID], msg)
+	}
+
+	// Process each group separately with its own set of static keys.
+	for cgID, msgs := range groups {
+		sp.enqueueScheduled(ctx, qKey, msgs, cgID)
+	}
 }
 
-func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope) {
+func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope, consumerGroupID string) {
+	pendingKey := qKey.Pending()
+	priorityKey := qKey.Priority()
+	if consumerGroupID != "" {
+		pendingKey = qKey.PendingWithGroup(consumerGroupID)
+		priorityKey = qKey.PriorityWithGroup(consumerGroupID)
+	}
+
 	luaKeys := []string{
 		qKey.Properties(),
-		qKey.Pending(),
+		pendingKey,
 		qKey.Published(),
-		qKey.Priority(),
+		priorityKey,
 		qKey.Scheduled(),
 		qKey.DeadLetter(),
 		qKey.ConsumerGroups(),
@@ -140,7 +157,6 @@ func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 
 		nextSchedule := msg.NextScheduledTimestamp()
 		isPeriodic := msg.IsPeriodic()
-		consumerGroupID := msg.ConsumerGroupID()
 		priority := ""
 		if msg.ProducibleMessage().HasPriority() {
 			priority = fmt.Sprintf("%d", msg.ProducibleMessage().Priority().Int())
@@ -196,6 +212,7 @@ func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 		"total", len(messages),
 		"simple", simpleCount,
 		"repeating", repeatCount,
+		"group", consumerGroupID,
 	)
 
 	reply, err := redisClient.Eval(ctx, scripts.PublishScheduled, luaKeys, argv...)
@@ -215,7 +232,6 @@ func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 }
 
 // buildScheduledArgs builds the static ARGV for the PublishScheduled Lua script.
-// This script needs 14 queue properties + 3 status constants + 24 message property keys.
 func buildScheduledArgs() []interface{} {
 	return []interface{}{
 		qSchema.QueueFieldType.Key(),

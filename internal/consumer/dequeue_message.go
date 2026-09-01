@@ -176,6 +176,14 @@ func (d *DequeueMessage) pop(ctx context.Context) (string, error) {
 	qKey := keys.Queue{Namespace: d.queue.NS(), Name: d.queue.Name()}
 	dst := qKey.ConsumerProcessing(d.consumerID)
 
+	// Use group-specific keys when a consumer group is present.
+	if d.groupID != "" {
+		if *d.queueType == queue.TypePriority {
+			return d.popPriority(ctx, qKey.PriorityWithGroup(d.groupID), dst)
+		}
+		return d.popFIFO(ctx, qKey.PendingWithGroup(d.groupID), dst)
+	}
+
 	if *d.queueType == queue.TypePriority {
 		return d.popPriority(ctx, qKey.Priority(), dst)
 	}

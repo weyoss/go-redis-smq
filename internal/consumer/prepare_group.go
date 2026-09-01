@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
+	queueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -26,11 +27,6 @@ import (
 // PrepareConsumerGroup ensures a consumer group exists for PUB/SUB queues.
 // If no groupID is provided, creates an ephemeral group based on the consumer ID.
 // Returns the effective group ID to use.
-//
-//   - Load queue properties
-//   - If PUB/SUB: create consumer group (ephemeral if no groupID provided)
-//   - If POINT_TO_POINT with groupID: error
-//   - If POINT_TO_POINT without groupID: OK, no group needed
 func PrepareConsumerGroup(ctx context.Context, consumerID string, q *queue.Params, groupID string) (string, error) {
 	log := logger.New("consumer", "prepare-group", consumerID, q.Name())
 
@@ -41,9 +37,7 @@ func PrepareConsumerGroup(ctx context.Context, consumerID string, q *queue.Param
 		return "", fmt.Errorf("prepare consumer group: %w", err)
 	}
 
-	log.Debug("loaded queue properties",
-		"deliveryModel", props.DeliveryModel.String(),
-	)
+	log.Debug("loaded queue properties", "deliveryModel", props.DeliveryModel.String())
 
 	// PUB/SUB queues require a consumer group
 	if props.DeliveryModel == queue.DeliveryPubSub {
@@ -92,8 +86,8 @@ func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, q *que
 
 	luaKeys := []string{
 		qKey.ConsumerGroups(),
-		qKey.Pending(),
-		qKey.Priority(),
+		qKey.PendingWithGroup(effectiveGroupID),
+		qKey.PriorityWithGroup(effectiveGroupID),
 		qKey.Properties(),
 		qKey.ConsumerGroupMembers(effectiveGroupID),
 	}
@@ -133,7 +127,8 @@ func ephemeralGroupID(consumerID string) string {
 	return "cid-" + consumerID
 }
 
-// createConsumerGroup creates a consumer group for a queue.
+// createConsumerGroup creates a consumer group for a queue and publishes an
+// event if the group is newly created.
 func createConsumerGroup(ctx context.Context, q *queue.Params, groupID string) error {
 	log := logger.New("consumer", "create-group", q.Name())
 
@@ -150,6 +145,8 @@ func createConsumerGroup(ctx context.Context, q *queue.Params, groupID string) e
 
 	if result == 1 {
 		log.Debug("consumer group created", "group", groupID)
+		// Notify producers that a new consumer group exists.
+		queueEvents.PublishConsumerGroupCreated(ctx, *q, groupID)
 	} else {
 		log.Debug("consumer group already exists", "group", groupID)
 	}

@@ -165,8 +165,13 @@ func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 		}
 
 		destKey := keys.Queue{Namespace: ir.queue.NS(), Name: ir.queue.Name()}
-
-		luaKeys = append(luaKeys, msgKey, destKey.Pending(), destKey.Priority())
+		pendingKey := destKey.Pending()
+		priorityKey := destKey.Priority()
+		if consumerGroupID != "" {
+			pendingKey = destKey.PendingWithGroup(consumerGroupID)
+			priorityKey = destKey.PriorityWithGroup(consumerGroupID)
+		}
+		luaKeys = append(luaKeys, msgKey, pendingKey, priorityKey)
 
 		argv = append(argv,
 			msgID,

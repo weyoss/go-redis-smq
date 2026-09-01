@@ -159,8 +159,13 @@ func (dr *DelayedRequeuer) enqueueDelayed(ctx context.Context, qKey keys.Queue, 
 		}
 
 		destKey := keys.Queue{Namespace: dr.queue.NS(), Name: dr.queue.Name()}
-
-		luaKeys = append(luaKeys, msgKey, destKey.Pending(), destKey.Priority())
+		pendingKey := destKey.Pending()
+		priorityKey := destKey.Priority()
+		if consumerGroupID != "" {
+			pendingKey = destKey.PendingWithGroup(consumerGroupID)
+			priorityKey = destKey.PriorityWithGroup(consumerGroupID)
+		}
+		luaKeys = append(luaKeys, msgKey, pendingKey, priorityKey)
 
 		argv = append(argv, msgID, priority, consumerGroupID)
 		requeuedCount++

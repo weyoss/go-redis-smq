@@ -12,6 +12,7 @@ package consumer
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -119,22 +120,37 @@ func (olr *OrphanedLockRecoverer) isPurgeJobDone(ctx context.Context, jobID stri
 }
 
 func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Queue, lockID string) {
+	now := time.Now().UnixMilli()
+	from := queue.StateLocked
+	transition := queue.StateTransition{
+		From:      &from,
+		To:        queue.StateActive,
+		Reason:    queue.TransitionReason(queue.ReasonPurgeComplete),
+		Timestamp: now,
+		LockID:    &lockID,
+	}
+	transitionJSON, err := json.Marshal(transition)
+	if err != nil {
+		olr.log.Error("failed to marshal unlock transition", "error", err)
+		return
+	}
+
 	luaKeys := []string{qKey.Properties(), qKey.StateHistory()}
 	argv := []interface{}{
 		qSchema.QueueFieldOperationalState.Key(),
 		queue.StateActive.Int(),
-		"",
-		queue.StateLocked.Int(),
-		queue.StateActive.Int(),
-		100,
-		queue.StateLocked.Int(),
+		string(transitionJSON),
+		queue.StateLocked.Int(), // expected previous state
+		queue.StateActive.Int(), // active state value
+		100,                     // max history size
+		queue.StateLocked.Int(), // locked state value
 		lockID,
 		qSchema.QueueFieldLastStateChangeAt.Key(),
-		time.Now().UnixMilli(),
+		strconv.FormatInt(now, 10),
 		qSchema.QueueFieldLockID.Key(),
 	}
 
-	_, err := redisClient.Eval(ctx, scripts.SetQueueState, luaKeys, argv...)
+	_, err = redisClient.Eval(ctx, scripts.SetQueueState, luaKeys, argv...)
 	if err != nil {
 		olr.log.Error("failed to unlock queue", "lockID", lockID, "error", err)
 	} else {

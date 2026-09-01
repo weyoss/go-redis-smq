@@ -168,11 +168,23 @@ func (s *Store) deleteMessageGroup(
 ) (*publicmessage.DeleteStats, error) {
 	qKey := keys.Queue{Namespace: queue.NS(), Name: queue.Name()}
 
+	consumerGroupID := ""
+	if len(messages) > 0 {
+		consumerGroupID = messages[0].ConsumerGroupID()
+	}
+
+	pendingKey := qKey.Pending()
+	priorityKey := qKey.Priority()
+	if consumerGroupID != "" {
+		pendingKey = qKey.PendingWithGroup(consumerGroupID)
+		priorityKey = qKey.PriorityWithGroup(consumerGroupID)
+	}
+
 	luaKeys := []string{
 		qKey.Properties(),
 		qKey.Published(),
-		qKey.Pending(),
-		qKey.Priority(),
+		pendingKey,
+		priorityKey,
 		qKey.Scheduled(),
 		qKey.Acknowledged(),
 		qKey.DeadLetter(),
@@ -272,10 +284,17 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 
 	qKey := keys.Queue{Namespace: destQueue.NS(), Name: destQueue.Name()}
 
+	priorityKey := qKey.Priority()
+	pendingKey := qKey.Pending()
+	if consumerGroupID != "" {
+		priorityKey = qKey.PriorityWithGroup(consumerGroupID)
+		pendingKey = qKey.PendingWithGroup(consumerGroupID)
+	}
+
 	luaKeys := []string{
 		qKey.Properties(),
-		qKey.Priority(),
-		qKey.Pending(),
+		priorityKey,
+		pendingKey,
 		qKey.Published(),
 		qKey.Scheduled(),
 		qKey.ConsumerGroups(),
@@ -296,7 +315,6 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 	}
 
 	argv := []interface{}{
-		// Queue Property Constants (ARGV[1-13])
 		qSchema.QueueFieldType.Key(),
 		qSchema.QueueFieldMessagesCount.Key(),
 		qSchema.QueueFieldPendingMessagesCount.Key(),
@@ -311,11 +329,9 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 		publicqueue.StateStopped.Int(),
 		publicqueue.StateLocked.Int(),
 
-		// Message Status Constants (ARGV[14-15])
 		publicmessage.StatusScheduled.Int(),
 		publicmessage.StatusPending.Int(),
 
-		// Message Property Keys (ARGV[16-39]) - 24 keys
 		MessageFieldID.Key(),
 		MessageFieldStatus.Key(),
 		MessageFieldMessage.Key(),
@@ -341,8 +357,7 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 		MessageFieldRequeuedMessageParentID.Key(),
 		MessageFieldLastProcessedAt.Key(),
 
-		"", // ARGV[40] operationLockId
-
+		"",
 		newID,
 		string(newMessageJSON),
 		priority,

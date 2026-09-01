@@ -316,10 +316,17 @@ func (prod *Producer) dispatch(
 	}
 	msgKey := keys.System{}.Message(messageID)
 
+	priorityKey := qKey.Priority()
+	pendingKey := qKey.Pending()
+	if envelope.ConsumerGroupID() != "" {
+		priorityKey = qKey.PriorityWithGroup(envelope.ConsumerGroupID())
+		pendingKey = qKey.PendingWithGroup(envelope.ConsumerGroupID())
+	}
+
 	luaKeys := []string{
 		qKey.Properties(),
-		qKey.Priority(),
-		qKey.Pending(),
+		priorityKey,
+		pendingKey,
 		qKey.Scheduled(),
 		qKey.Published(),
 		qKey.ConsumerGroups(),
