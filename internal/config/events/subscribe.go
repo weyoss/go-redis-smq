@@ -14,9 +14,11 @@ import (
 	"encoding/json"
 
 	"github.com/weyoss/go-redis-smq/internal/eventbus"
-	"github.com/weyoss/go-redis-smq/pkg/config"
+	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
 )
 
+// decodeArg converts a positional event argument (typically a
+// map[string]interface{}) into the target Go type.
 func decodeArg(arg interface{}, target interface{}) error {
 	data, err := json.Marshal(arg)
 	if err != nil {
@@ -26,19 +28,31 @@ func decodeArg(arg interface{}, target interface{}) error {
 }
 
 // SubscribeUpdated subscribes to configuration.updated events on the system bus.
+//
+// The handler receives an UpdatedPayload containing the new configuration,
+// its version, and the epoch of the configuration record that generated the
+// event.
 func SubscribeUpdated(handler func(UpdatedPayload)) (*eventbus.Subscription, error) {
 	return eventbus.System().Subscribe(func(_ string, args []interface{}) {
-		if len(args) < 2 {
+		if len(args) < 3 {
 			return
 		}
-		var cfg config.Config
+		var config pubconfig.Config
 		var version int
-		if err := decodeArg(args[0], &cfg); err != nil {
+		var epoch string
+		if err := decodeArg(args[0], &config); err != nil {
 			return
 		}
 		if err := decodeArg(args[1], &version); err != nil {
 			return
 		}
-		handler(UpdatedPayload{Config: &cfg, Version: version})
+		if err := decodeArg(args[2], &epoch); err != nil {
+			return
+		}
+		handler(UpdatedPayload{
+			Config:  &config,
+			Version: version,
+			Epoch:   epoch,
+		})
 	}, EventUpdated)
 }

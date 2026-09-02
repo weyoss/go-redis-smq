@@ -15,19 +15,24 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/eventmultiplexer"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
-	"github.com/weyoss/go-redis-smq/pkg/config"
+	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
 )
+
+var log = logger.New("config", "events")
 
 // PublishUpdated publishes a configuration.updated event to the system bus.
 //
 // This event is internal-only and is used to synchronise configuration
 // changes across connected instances.
-func PublishUpdated(ctx context.Context, config *config.Config, version int) {
-	if err := eventmultiplexer.Publish(ctx, EventUpdated, config, version); err != nil {
-		logger.New("config", "events").
-			Error("failed to publish configuration update",
-				"version", version,
-				"error", err,
-			)
+//
+// The epoch uniquely identifies the generation of the configuration record.
+// Subscribers compare it with their local epoch to determine whether the
+// event is relevant or stale.
+func PublishUpdated(ctx context.Context, cfg *pubconfig.Config, version int, epoch string) {
+	if err := eventmultiplexer.Publish(ctx, EventUpdated, cfg, version, epoch); err != nil {
+		log.Error("failed to publish event",
+			"event", EventUpdated,
+			"error", err,
+		)
 	}
 }

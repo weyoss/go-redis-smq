@@ -31,6 +31,15 @@ const EventUpdated = "configuration.updated"
 //
 //	(config: IRedisSMQParsedConfig, version: number) => void
 type UpdatedPayload struct {
-	Config  *pubconfig.Config `json:"config"`
-	Version int               `json:"version"`
+	// Config is the full configuration that was saved.
+	Config *pubconfig.Config `json:"config"`
+
+	// Version is the configuration version after the update.
+	Version int `json:"version"`
+
+	// Epoch is the unique generation identifier of the configuration record.
+	// It changes whenever the configuration is re-created from scratch
+	// (for example, after a Redis flush). It allows subscribers to ignore
+	// stale events from a previous generation.
+	Epoch string `json:"epoch"`
 }

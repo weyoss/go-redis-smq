@@ -16,61 +16,62 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/weyoss/go-redis-smq/internal/codec"
-	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
+	"github.com/weyoss/go-redis-smq/pkg/config"
 )
 
 const (
-	ConfigFieldVersion = "version"
-	ConfigFieldData    = "data"
+	FieldVersion = "version"
+	FieldData    = "data"
 )
 
+// Codec handles serialisation for Config to/from Redis hashes.
 type Codec struct{}
 
+// NewCodec creates a new Codec.
 func NewCodec() *Codec {
 	return &Codec{}
 }
 
-func (c *Codec) EncodeHash(_ context.Context, cfg *pubconfig.Config) (map[string]interface{}, error) {
+// Encode serialises Config to a Redis hash map.
+func (c *Codec) Encode(_ context.Context, cfg *config.Config) (map[string]string, error) {
 	if cfg == nil {
-		return nil, codec.NewEncodingError("config", "nil", codec.ErrInvalidFormat)
+		return nil, fmt.Errorf("encode config: nil")
 	}
 
 	data, err := json.Marshal(cfg)
 	if err != nil {
-		return nil, codec.NewEncodingError("config", "json", err)
+		return nil, fmt.Errorf("encode config: %w", err)
 	}
 
-	return map[string]interface{}{
-		ConfigFieldVersion: cfg.Version,
-		ConfigFieldData:    string(data),
+	return map[string]string{
+		FieldVersion: strconv.Itoa(cfg.Version),
+		FieldData:    string(data),
 	}, nil
 }
 
-func (c *Codec) DecodeHash(_ context.Context, hash map[string]string) (*pubconfig.Config, error) {
+// Decode deserialises a Redis hash map back to Config.
+func (c *Codec) Decode(_ context.Context, hash map[string]string) (*config.Config, error) {
 	if len(hash) == 0 {
-		return nil, codec.NewDecodingError("config", "empty hash", codec.ErrInvalidFormat)
+		return nil, fmt.Errorf("decode config: empty hash")
 	}
 
-	data, ok := hash[ConfigFieldData]
+	data, ok := hash[FieldData]
 	if !ok || data == "" {
-		return nil, codec.NewDecodingError("config", "missing data field", codec.ErrInvalidFormat)
+		return nil, fmt.Errorf("decode config: missing data field")
 	}
 
-	var cfg pubconfig.Config
+	var cfg config.Config
 	if err := json.Unmarshal([]byte(data), &cfg); err != nil {
-		return nil, codec.NewDecodingError("config", "json", err)
+		return nil, fmt.Errorf("decode config: %w", err)
 	}
 
-	if v, ok := hash[ConfigFieldVersion]; ok {
+	if v, ok := hash[FieldVersion]; ok {
 		version, err := strconv.Atoi(v)
 		if err != nil {
-			return nil, codec.NewDecodingError("config", fmt.Sprintf("version=%s", v), err)
+			return nil, fmt.Errorf("decode config version: %w", err)
 		}
 		cfg.Version = version
 	}
 
 	return &cfg, nil
 }
-
-var _ codec.HashCodec[*pubconfig.Config] = (*Codec)(nil)
