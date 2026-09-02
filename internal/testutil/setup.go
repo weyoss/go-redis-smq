@@ -23,14 +23,15 @@ func Setup(tb testing.TB) context.Context {
 	tb.Helper()
 	ctx := context.Background()
 
+	// Reset the configuration manager entirely: close (unsubscribe) and
+	// re-initialize to ensure a fresh subscription and default state.
+	internalconfig.Close()
+
 	// Flush all Redis data.
 	if err := redis.Client().FlushAll(ctx).Err(); err != nil {
 		tb.Fatalf("flush redis: %v", err)
 	}
 
-	// Reset the configuration manager entirely: close (unsubscribe) and
-	// re-initialize to ensure a fresh subscription and default state.
-	internalconfig.Close()
 	if err := internalconfig.Init(ctx); err != nil {
 		tb.Fatalf("init config: %v", err)
 	}
