@@ -25,7 +25,7 @@ type Manager struct {
 // public message.Manager interface.
 func NewManager() publicmessage.Manager {
 	return &Manager{
-		store: NewStore(NewEnvelopeCodec(), NewStateCodec()),
+		store: NewStore(NewCodec()),
 	}
 }
 

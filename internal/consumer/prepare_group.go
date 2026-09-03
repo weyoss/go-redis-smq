@@ -93,14 +93,14 @@ func DeleteEphemeralConsumerGroup(ctx context.Context, consumerID string, q *que
 	}
 
 	argv := []interface{}{
-		qSchema.QueueFieldType.Key(),
+		qSchema.Type.Key(),
 		queue.TypePriority.Int(),
-		qSchema.QueueFieldDeliveryModel.Key(),
+		qSchema.DeliveryModel.Key(),
 		queue.DeliveryPubSub.Int(),
 		effectiveGroupID,
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.OperationalState.Key(),
 		queue.StateLocked.String(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.LockID.Key(),
 		"",
 	}
 

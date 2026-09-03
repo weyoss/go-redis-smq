@@ -115,7 +115,7 @@ func (ts *TopicStore) BindQueue(
 
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, exKey.Properties(),
-				exSchema.ExchangeFieldType.Key(), exchangeParams.Type().Int(),
+				exSchema.Type.Key(), exchangeParams.Type().Int(),
 			)
 
 			pipe.SAdd(ctx, keys.System{}.AllExchanges(), exchangeStr)

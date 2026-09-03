@@ -61,7 +61,7 @@ func (s *Store) Save(ctx context.Context, params *pubexchange.Params, policy pub
 
 	txf := func(tx *redis.Tx) error {
 		exists, err := tx.HExists(ctx, key.Properties(),
-			exSchema.ExchangeFieldType.Key()).Result()
+			exSchema.Type.Key()).Result()
 		if err != nil {
 			return err
 		}
@@ -121,7 +121,7 @@ func (s *Store) ValidateType(ctx context.Context, params *pubexchange.Params, re
 	}.Properties()
 
 	storedType, err := redisClient.LoadHashField(ctx, key,
-		exSchema.ExchangeFieldType.Key(), "exchange type")
+		exSchema.Type.Key(), "exchange type")
 	if err != nil {
 		if required {
 			return pubexchange.ErrNotFound

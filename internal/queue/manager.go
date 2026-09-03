@@ -56,7 +56,7 @@ func NewManagerWithCodec(codec *Codec) *Manager {
 		state:         state,
 		consumerGroup: NewConsumerGroupStore(),
 		browse:        NewBrowse(store),
-		purge:         NewPurgeManager(state, internalMessage.NewStore(nil, nil)),
+		purge:         NewPurgeManager(state, internalMessage.NewStore(nil)),
 	}
 }
 

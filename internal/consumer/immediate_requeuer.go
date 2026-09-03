@@ -17,6 +17,7 @@ import (
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -92,8 +93,8 @@ func (ir *ImmediateRequeuer) requeue(ctx context.Context) {
 			ir.log.Debug("failed to load requeued message", "messageID", id, "error", err)
 			continue
 		}
-		codec := internalMessage.NewEnvelopeCodec()
-		env, err := codec.DecodeHash(ctx, hash)
+		codec := internalMessage.NewCodec()
+		env, err := codec.DecodeEnvelope(ctx, hash)
 		if err != nil {
 			ir.log.Debug("failed to decode requeued message", "messageID", id, "error", err)
 			continue
@@ -120,20 +121,20 @@ func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 	timestamp := time.Now().UnixMilli()
 
 	argv := []interface{}{
-		qSchema.QueueFieldType.Key(),
-		qSchema.QueueFieldRequeuedMessagesCount.Key(),
-		qSchema.QueueFieldDelayedMessagesCount.Key(),
-		qSchema.QueueFieldPendingMessagesCount.Key(),
-		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),
-		internalMessage.MessageFieldStatus.Key(),
+		qSchema.Type.Key(),
+		qSchema.RequeuedMessagesCount.Key(),
+		qSchema.DelayedMessagesCount.Key(),
+		qSchema.PendingMessagesCount.Key(),
+		qSchema.DeadLetteredMessagesCount.Key(),
+		schema.Status.Key(),
 		publicmessage.StatusPending.Int(),
 		publicmessage.StatusDeadLettered.Int(),
-		internalMessage.MessageFieldDeadLetteredAt.Key(),
+		schema.DeadLetteredAt.Key(),
 		publicmessage.StatusUnackDelaying.Int(),
-		internalMessage.MessageFieldLastRetriedAttemptAt.Key(),
+		schema.LastRetriedAttemptAt.Key(),
 		queue.TypeLIFO.Int(),
 		queue.TypeFIFO.Int(),
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.OperationalState.Key(),
 		queue.StateActive.Int(),
 		queue.StatePaused.Int(),
 		queue.StateStopped.Int(),

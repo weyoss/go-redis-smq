@@ -19,7 +19,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq/internal/config"
-	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -179,16 +180,16 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 		expireStoredMessages,
 		storedMessagesSize,
 		now,
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.OperationalState.Key(),
 		queue.StateActive.Int(),
 		queue.StatePaused.Int(),
 		queue.StateStopped.Int(),
 		queue.StateLocked.Int(),
-		internalMessage.MessageFieldStatus.Key(),
+		schema.Status.Key(),
 		publicmessage.StatusAcknowledged.Int(),
-		internalMessage.MessageFieldAcknowledgedAt.Key(),
-		qSchema.QueueFieldAcknowledgedMessagesCount.Key(),
-		qSchema.QueueFieldProcessingMessagesCount.Key(),
+		schema.AcknowledgedAt.Key(),
+		qSchema.AcknowledgedMessagesCount.Key(),
+		qSchema.ProcessingMessagesCount.Key(),
 	}
 	for _, id := range ids {
 		argv = append(argv, id)
@@ -245,8 +246,8 @@ func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cau
 			ba.log.Debug("failed to load message for unacknowledgment", "messageID", id, "error", err)
 			continue
 		}
-		codec := internalMessage.NewEnvelopeCodec()
-		env, err := codec.DecodeHash(ctx, hash)
+		codec := message.NewCodec()
+		env, err := codec.DecodeEnvelope(ctx, hash)
 		if err != nil {
 			ba.log.Debug("failed to decode message for unacknowledgment", "messageID", id, "error", err)
 			continue

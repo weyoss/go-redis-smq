@@ -15,6 +15,7 @@ import (
 	"fmt"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/util"
 	publicmessage "github.com/weyoss/go-redis-smq/pkg/message"
@@ -89,15 +90,15 @@ func BuildPublishArgs(envelope *internalMessage.Envelope) []interface{} {
 // These are the first 13 ARGV values used by publish-message.lua shared procedure.
 func buildQueuePropertyArgs() []interface{} {
 	return []interface{}{
-		qSchema.QueueFieldType.Key(),
-		qSchema.QueueFieldMessagesCount.Key(),
-		qSchema.QueueFieldPendingMessagesCount.Key(),
-		qSchema.QueueFieldScheduledMessagesCount.Key(),
+		qSchema.Type.Key(),
+		qSchema.MessagesCount.Key(),
+		qSchema.PendingMessagesCount.Key(),
+		qSchema.ScheduledMessagesCount.Key(),
 		queue.TypePriority.Int(),
 		queue.TypeLIFO.Int(),
 		queue.TypeFIFO.Int(),
-		qSchema.QueueFieldOperationalState.Key(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.OperationalState.Key(),
+		qSchema.LockID.Key(),
 		queue.StateActive.Int(),
 		queue.StatePaused.Int(),
 		queue.StateStopped.Int(),
@@ -109,29 +110,29 @@ func buildQueuePropertyArgs() []interface{} {
 // These are the 24 ARGV values used by publish-message.lua shared procedure.
 func buildMessagePropertyKeys() []interface{} {
 	return []interface{}{
-		internalMessage.MessageFieldID.Key(),
-		internalMessage.MessageFieldStatus.Key(),
-		internalMessage.MessageFieldMessage.Key(),
-		internalMessage.MessageFieldScheduledAt.Key(),
-		internalMessage.MessageFieldPublishedAt.Key(),
-		internalMessage.MessageFieldProcessingStartedAt.Key(),
-		internalMessage.MessageFieldDeadLetteredAt.Key(),
-		internalMessage.MessageFieldAcknowledgedAt.Key(),
-		internalMessage.MessageFieldUnacknowledgedAt.Key(),
-		internalMessage.MessageFieldLastUnacknowledgedAt.Key(),
-		internalMessage.MessageFieldLastScheduledAt.Key(),
-		internalMessage.MessageFieldRequeuedAt.Key(),
-		internalMessage.MessageFieldRequeueCount.Key(),
-		internalMessage.MessageFieldLastRequeuedAt.Key(),
-		internalMessage.MessageFieldLastRetriedAttemptAt.Key(),
-		internalMessage.MessageFieldScheduledCronFired.Key(),
-		internalMessage.MessageFieldAttempts.Key(),
-		internalMessage.MessageFieldScheduledRepeatCount.Key(),
-		internalMessage.MessageFieldExpired.Key(),
-		internalMessage.MessageFieldEffectiveScheduledDelay.Key(),
-		internalMessage.MessageFieldScheduledTimes.Key(),
-		internalMessage.MessageFieldScheduledMessageParentID.Key(),
-		internalMessage.MessageFieldRequeuedMessageParentID.Key(),
-		internalMessage.MessageFieldLastProcessedAt.Key(),
+		schema.ID.Key(),
+		schema.Status.Key(),
+		schema.Message.Key(),
+		schema.ScheduledAt.Key(),
+		schema.PublishedAt.Key(),
+		schema.ProcessingStartedAt.Key(),
+		schema.DeadLetteredAt.Key(),
+		schema.AcknowledgedAt.Key(),
+		schema.UnacknowledgedAt.Key(),
+		schema.LastUnacknowledgedAt.Key(),
+		schema.LastScheduledAt.Key(),
+		schema.RequeuedAt.Key(),
+		schema.RequeueCount.Key(),
+		schema.LastRequeuedAt.Key(),
+		schema.LastRetriedAttemptAt.Key(),
+		schema.ScheduledCronFired.Key(),
+		schema.Attempts.Key(),
+		schema.ScheduledRepeatCount.Key(),
+		schema.Expired.Key(),
+		schema.EffectiveScheduledDelay.Key(),
+		schema.ScheduledTimes.Key(),
+		schema.ScheduledMessageParentID.Key(),
+		schema.RequeuedMessageParentID.Key(),
+		schema.LastProcessedAt.Key(),
 	}
 }

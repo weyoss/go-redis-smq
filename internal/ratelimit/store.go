@@ -21,39 +21,36 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// Store handles rate limit persistence for queues.
 type Store struct {
 	codec *Codec
 }
 
+// NewStore creates a new rate limit store.
 func NewStore() *Store {
-	return &Store{
-		codec: NewCodec(),
-	}
+	return &Store{codec: NewCodec()}
 }
 
-func (s *Store) Codec() *Codec {
-	return s.codec
-}
-
+// Set stores the given rate limit on a queue.
 func (s *Store) Set(ctx context.Context, queueParams *publicqueue.Params, rl *publicqueue.RateLimitParams) error {
 	queueKeys := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),
 	}
 
-	rateLimitJSON, err := s.codec.EncodeJSON(ctx, rl)
+	rateLimitJSON, err := MarshalRateLimitParams(ctx, rl)
 	if err != nil {
-		return fmt.Errorf("set rate limit: encode: %w", err)
+		return fmt.Errorf("set rate limit: marshal: %w", err)
 	}
 
 	luaKeys := []string{queueKeys.Properties()}
 
 	argv := []interface{}{
-		qSchema.QueueFieldRateLimit.Key(),
+		qSchema.RateLimit.Key(),
 		rateLimitJSON,
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.OperationalState.Key(),
 		publicqueue.StateLocked.String(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.LockID.Key(),
 		"",
 	}
 
@@ -79,6 +76,7 @@ func (s *Store) Set(ctx context.Context, queueParams *publicqueue.Params, rl *pu
 	}
 }
 
+// Clear removes the rate limit from a queue.
 func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.Params) error {
 	queueKeys := keys.Queue{
 		Namespace: queueParams.NS(),
@@ -91,10 +89,10 @@ func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.Params) erro
 	}
 
 	argv := []interface{}{
-		qSchema.QueueFieldRateLimit.Key(),
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.RateLimit.Key(),
+		qSchema.OperationalState.Key(),
 		publicqueue.StateLocked.String(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.LockID.Key(),
 		"",
 	}
 
@@ -120,6 +118,7 @@ func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.Params) erro
 	}
 }
 
+// Get retrieves the current rate limit for a queue.
 func (s *Store) Get(ctx context.Context, queueParams *publicqueue.Params) (*publicqueue.RateLimitParams, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
@@ -127,7 +126,7 @@ func (s *Store) Get(ctx context.Context, queueParams *publicqueue.Params) (*publ
 	}.Properties()
 
 	rateLimitJSON, err := redisClient.LoadHashField(ctx, key,
-		qSchema.QueueFieldRateLimit.Key(), "rate limit")
+		qSchema.RateLimit.Key(), "rate limit")
 	if err != nil {
 		return nil, nil
 	}
@@ -136,5 +135,5 @@ func (s *Store) Get(ctx context.Context, queueParams *publicqueue.Params) (*publ
 		return nil, nil
 	}
 
-	return s.codec.DecodeJSON(ctx, rateLimitJSON)
+	return UnmarshalRateLimitParams(ctx, rateLimitJSON)
 }

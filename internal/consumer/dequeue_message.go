@@ -18,6 +18,7 @@ import (
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -245,16 +246,16 @@ func (d *DequeueMessage) checkout(ctx context.Context, messageID string) (*inter
 	reply, err := redisClient.Eval(ctx, scripts.CheckoutMessage,
 		[]string{msgKey, qKey.Properties()},
 		[]interface{}{
-			internalMessage.MessageFieldProcessingStartedAt.Key(),
-			internalMessage.MessageFieldLastProcessedAt.Key(),
+			schema.ProcessingStartedAt.Key(),
+			schema.LastProcessedAt.Key(),
 			time.Now().UnixMilli(),
-			internalMessage.MessageFieldStatus.Key(),
+			schema.Status.Key(),
 			publicmessage.StatusProcessing.Int(),
 			publicmessage.StatusPending.Int(),
-			internalMessage.MessageFieldAttempts.Key(),
-			qSchema.QueueFieldProcessingMessagesCount.Key(),
-			qSchema.QueueFieldPendingMessagesCount.Key(),
-			qSchema.QueueFieldOperationalState.Key(),
+			schema.Attempts.Key(),
+			qSchema.ProcessingMessagesCount.Key(),
+			qSchema.PendingMessagesCount.Key(),
+			qSchema.OperationalState.Key(),
 			queue.StateActive.Int(),
 			queue.StatePaused.Int(),
 			queue.StateStopped.Int(),
@@ -306,8 +307,8 @@ func (d *DequeueMessage) checkout(ctx context.Context, messageID string) (*inter
 		}
 	}
 
-	codec := internalMessage.NewEnvelopeCodec()
-	envelope, err := codec.DecodeHash(ctx, hashMap)
+	codec := internalMessage.NewCodec()
+	envelope, err := codec.DecodeEnvelope(ctx, hashMap)
 	if err != nil {
 		d.log.Error("failed to decode message", "messageID", messageID, "error", err)
 		return nil, fmt.Errorf("decode message: %w", err)

@@ -147,7 +147,7 @@ func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Que
 
 	luaKeys := []string{qKey.Properties(), qKey.StateHistory()}
 	argv := []interface{}{
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.OperationalState.Key(),
 		strconv.Itoa(queue.StateActive.Int()),
 		string(transitionJSON),
 		strconv.Itoa(queue.StateLocked.Int()), // expected previous state
@@ -155,9 +155,9 @@ func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Que
 		"100",                                 // max history size
 		strconv.Itoa(queue.StateLocked.Int()), // locked state value
 		lockID,
-		qSchema.QueueFieldLastStateChangeAt.Key(),
+		qSchema.LastStateChangeAt.Key(),
 		strconv.FormatInt(now, 10),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.LockID.Key(),
 	}
 
 	reply, err := redisClient.Eval(ctx, scripts.SetQueueState, luaKeys, argv...)

@@ -19,6 +19,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -101,8 +102,8 @@ func (sp *ScheduledPublisher) publishDue(ctx context.Context) {
 			sp.log.Debug("failed to load scheduled message", "messageID", id, "error", err)
 			continue
 		}
-		codec := internalMessage.NewEnvelopeCodec()
-		env, err := codec.DecodeHash(ctx, hash)
+		codec := internalMessage.NewCodec()
+		env, err := codec.DecodeEnvelope(ctx, hash)
 		if err != nil {
 			sp.log.Debug("failed to decode scheduled message", "messageID", id, "error", err)
 			continue
@@ -234,16 +235,16 @@ func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 // buildScheduledArgs builds the static ARGV for the PublishScheduled Lua script.
 func buildScheduledArgs() []interface{} {
 	return []interface{}{
-		qSchema.QueueFieldType.Key(),
-		qSchema.QueueFieldMessagesCount.Key(),
-		qSchema.QueueFieldPendingMessagesCount.Key(),
-		qSchema.QueueFieldScheduledMessagesCount.Key(),
-		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),
+		qSchema.Type.Key(),
+		qSchema.MessagesCount.Key(),
+		qSchema.PendingMessagesCount.Key(),
+		qSchema.ScheduledMessagesCount.Key(),
+		qSchema.DeadLetteredMessagesCount.Key(),
 		queue.TypePriority.Int(),
 		queue.TypeLIFO.Int(),
 		queue.TypeFIFO.Int(),
-		qSchema.QueueFieldOperationalState.Key(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.OperationalState.Key(),
+		qSchema.LockID.Key(),
 		queue.StateActive.Int(),
 		queue.StatePaused.Int(),
 		queue.StateStopped.Int(),
@@ -251,29 +252,29 @@ func buildScheduledArgs() []interface{} {
 		publicmessage.StatusPending.Int(),
 		publicmessage.StatusScheduled.Int(),
 		publicmessage.StatusDeadLettered.Int(),
-		internalMessage.MessageFieldID.Key(),
-		internalMessage.MessageFieldStatus.Key(),
-		internalMessage.MessageFieldMessage.Key(),
-		internalMessage.MessageFieldScheduledAt.Key(),
-		internalMessage.MessageFieldPublishedAt.Key(),
-		internalMessage.MessageFieldProcessingStartedAt.Key(),
-		internalMessage.MessageFieldDeadLetteredAt.Key(),
-		internalMessage.MessageFieldAcknowledgedAt.Key(),
-		internalMessage.MessageFieldUnacknowledgedAt.Key(),
-		internalMessage.MessageFieldLastUnacknowledgedAt.Key(),
-		internalMessage.MessageFieldLastScheduledAt.Key(),
-		internalMessage.MessageFieldRequeuedAt.Key(),
-		internalMessage.MessageFieldRequeueCount.Key(),
-		internalMessage.MessageFieldLastRequeuedAt.Key(),
-		internalMessage.MessageFieldLastRetriedAttemptAt.Key(),
-		internalMessage.MessageFieldScheduledCronFired.Key(),
-		internalMessage.MessageFieldAttempts.Key(),
-		internalMessage.MessageFieldScheduledRepeatCount.Key(),
-		internalMessage.MessageFieldExpired.Key(),
-		internalMessage.MessageFieldEffectiveScheduledDelay.Key(),
-		internalMessage.MessageFieldScheduledTimes.Key(),
-		internalMessage.MessageFieldScheduledMessageParentID.Key(),
-		internalMessage.MessageFieldRequeuedMessageParentID.Key(),
-		internalMessage.MessageFieldLastProcessedAt.Key(),
+		schema.ID.Key(),
+		schema.Status.Key(),
+		schema.Message.Key(),
+		schema.ScheduledAt.Key(),
+		schema.PublishedAt.Key(),
+		schema.ProcessingStartedAt.Key(),
+		schema.DeadLetteredAt.Key(),
+		schema.AcknowledgedAt.Key(),
+		schema.UnacknowledgedAt.Key(),
+		schema.LastUnacknowledgedAt.Key(),
+		schema.LastScheduledAt.Key(),
+		schema.RequeuedAt.Key(),
+		schema.RequeueCount.Key(),
+		schema.LastRequeuedAt.Key(),
+		schema.LastRetriedAttemptAt.Key(),
+		schema.ScheduledCronFired.Key(),
+		schema.Attempts.Key(),
+		schema.ScheduledRepeatCount.Key(),
+		schema.Expired.Key(),
+		schema.EffectiveScheduledDelay.Key(),
+		schema.ScheduledTimes.Key(),
+		schema.ScheduledMessageParentID.Key(),
+		schema.RequeuedMessageParentID.Key(),
+		schema.LastProcessedAt.Key(),
 	}
 }

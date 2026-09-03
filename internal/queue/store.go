@@ -100,32 +100,32 @@ func (s *Store) SaveWithRateLimit(
 
 	rateLimitJSON := ""
 	if rateLimit != nil {
-		rateLimitJSON, _ = s.rateLimitStore.Codec().EncodeJSON(ctx, rateLimit)
+		rateLimitJSON, _ = ratelimit.MarshalRateLimitParams(ctx, rateLimit)
 	}
 
 	argv := []interface{}{
 		namespace,
 		queueParamsJSON,
-		schema.QueueFieldType.Key(),
+		schema.Type.Key(),
 		queueType.Int(),
-		schema.QueueFieldDeliveryModel.Key(),
+		schema.DeliveryModel.Key(),
 		deliveryModel.Int(),
-		schema.QueueFieldRateLimit.Key(),
+		schema.RateLimit.Key(),
 		rateLimitJSON,
-		schema.QueueFieldMessagesCount.Key(),
-		schema.QueueFieldAcknowledgedMessagesCount.Key(),
-		schema.QueueFieldDeadLetteredMessagesCount.Key(),
-		schema.QueueFieldPendingMessagesCount.Key(),
-		schema.QueueFieldScheduledMessagesCount.Key(),
-		schema.QueueFieldProcessingMessagesCount.Key(),
-		schema.QueueFieldDelayedMessagesCount.Key(),
-		schema.QueueFieldRequeuedMessagesCount.Key(),
-		schema.QueueFieldOperationalState.Key(),
+		schema.MessagesCount.Key(),
+		schema.AcknowledgedMessagesCount.Key(),
+		schema.DeadLetteredMessagesCount.Key(),
+		schema.PendingMessagesCount.Key(),
+		schema.ScheduledMessagesCount.Key(),
+		schema.ProcessingMessagesCount.Key(),
+		schema.DelayedMessagesCount.Key(),
+		schema.RequeuedMessagesCount.Key(),
+		schema.OperationalState.Key(),
 		publicqueue.StateActive.Int(),
 		maxQueueStateHistorySize,
-		schema.QueueFieldLastStateChangeAt.Key(),
+		schema.LastStateChangeAt.Key(),
 		fmt.Sprintf("%d", now),
-		schema.QueueFieldLockID.Key(),
+		schema.LockID.Key(),
 		string(initialTransitionJSON),
 	}
 
@@ -285,11 +285,11 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 	queueParamsJSON, _ := json.Marshal(queueParams)
 	argv := []interface{}{
 		string(queueParamsJSON),
-		schema.QueueFieldMessagesCount.Key(),
+		schema.MessagesCount.Key(),
 		len(heartbeatKeys),
-		schema.QueueFieldOperationalState.Key(),
+		schema.OperationalState.Key(),
 		publicqueue.StateLocked.Int(),
-		schema.QueueFieldLockID.Key(),
+		schema.LockID.Key(),
 		"",
 	}
 	for _, cid := range consumerIDs {

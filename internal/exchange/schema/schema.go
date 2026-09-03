@@ -12,16 +12,16 @@ package schema
 
 import "strconv"
 
-// ExchangeField identifies exchange property fields in Redis hash storage.
-type ExchangeField int
+// Field identifies exchange property fields in Redis hash storage.
+type Field int
 
 const (
-	ExchangeFieldType   ExchangeField = iota // 0 - Exchange routing type
-	ExchangeFieldPolicy                      // 1 - Queue policy constraint
+	Type   Field = iota // 0 - Exchange routing type
+	Policy              // 1 - Queue policy constraint
 )
 
 // Key returns the string representation for Redis hash field access.
-func (f ExchangeField) Key() string { return strconv.Itoa(int(f)) }
+func (f Field) Key() string { return strconv.Itoa(int(f)) }
 
 // Int returns the integer representation.
-func (f ExchangeField) Int() int { return int(f) }
+func (f Field) Int() int { return int(f) }

@@ -79,14 +79,14 @@ func (cgs *ConsumerGroupStore) Delete(ctx context.Context, queueParams *publicqu
 	}
 
 	argv := []interface{}{
-		schema.QueueFieldType.Key(),
+		schema.Type.Key(),
 		publicqueue.TypePriority.Int(),
-		schema.QueueFieldDeliveryModel.Key(),
+		schema.DeliveryModel.Key(),
 		publicqueue.DeliveryPubSub.Int(),
 		groupID,
-		schema.QueueFieldOperationalState.Key(),
+		schema.OperationalState.Key(),
 		publicqueue.StateLocked.String(),
-		schema.QueueFieldLockID.Key(),
+		schema.LockID.Key(),
 		"",
 	}
 

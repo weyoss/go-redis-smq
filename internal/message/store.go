@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -27,27 +28,22 @@ import (
 )
 
 type Store struct {
-	envelopeCodec *EnvelopeCodec
-	stateCodec    *StateCodec
+	codec *Codec
 }
 
-func NewStore(envelopeCodec *EnvelopeCodec, stateCodec *StateCodec) *Store {
-	if envelopeCodec == nil {
-		envelopeCodec = NewEnvelopeCodec()
-	}
-	if stateCodec == nil {
-		stateCodec = NewStateCodec()
+func NewStore(codec *Codec) *Store {
+	if codec == nil {
+		codec = NewCodec()
 	}
 	return &Store{
-		envelopeCodec: envelopeCodec,
-		stateCodec:    stateCodec,
+		codec: codec,
 	}
 }
 
 func (s *Store) GetStatus(ctx context.Context, messageID string) (publicmessage.Status, error) {
 	statusStr, err := redis.LoadHashField(ctx,
 		keys.System{}.Message(messageID),
-		MessageFieldStatus.Key(),
+		schema.Status.Key(),
 		"message status",
 	)
 	if err != nil {
@@ -67,7 +63,7 @@ func (s *Store) GetState(ctx context.Context, messageID string) (*publicmessage.
 	if err != nil {
 		return nil, publicmessage.ErrNotFound
 	}
-	return s.stateCodec.DecodeHash(ctx, hash)
+	return s.codec.DecodeState(ctx, hash)
 }
 
 func (s *Store) GetMessage(ctx context.Context, messageID string) (*Envelope, error) {
@@ -75,7 +71,7 @@ func (s *Store) GetMessage(ctx context.Context, messageID string) (*Envelope, er
 	if err != nil {
 		return nil, publicmessage.ErrNotFound
 	}
-	return s.envelopeCodec.DecodeHash(ctx, hash)
+	return s.codec.DecodeEnvelope(ctx, hash)
 }
 
 func (s *Store) GetMessages(ctx context.Context, messageIDs []string) ([]*Envelope, error) {
@@ -193,18 +189,18 @@ func (s *Store) deleteMessageGroup(
 	}
 
 	luaArgs := []interface{}{
-		qSchema.QueueFieldType.Key(),
-		qSchema.QueueFieldMessagesCount.Key(),
-		qSchema.QueueFieldAcknowledgedMessagesCount.Key(),
-		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),
-		qSchema.QueueFieldPendingMessagesCount.Key(),
-		qSchema.QueueFieldScheduledMessagesCount.Key(),
-		qSchema.QueueFieldDelayedMessagesCount.Key(),
-		qSchema.QueueFieldRequeuedMessagesCount.Key(),
+		qSchema.Type.Key(),
+		qSchema.MessagesCount.Key(),
+		qSchema.AcknowledgedMessagesCount.Key(),
+		qSchema.DeadLetteredMessagesCount.Key(),
+		qSchema.PendingMessagesCount.Key(),
+		qSchema.ScheduledMessagesCount.Key(),
+		qSchema.DelayedMessagesCount.Key(),
+		qSchema.RequeuedMessagesCount.Key(),
 		publicqueue.TypePriority.Int(),
 		publicqueue.TypeLIFO.Int(),
 		publicqueue.TypeFIFO.Int(),
-		MessageFieldStatus.Key(),
+		schema.Status.Key(),
 		publicmessage.StatusProcessing.Int(),
 		publicmessage.StatusAcknowledged.Int(),
 		publicmessage.StatusPending.Int(),
@@ -212,9 +208,9 @@ func (s *Store) deleteMessageGroup(
 		publicmessage.StatusDeadLettered.Int(),
 		publicmessage.StatusUnackDelaying.Int(),
 		publicmessage.StatusUnackRequeuing.Int(),
-		qSchema.QueueFieldOperationalState.Key(),
+		qSchema.OperationalState.Key(),
 		publicqueue.StateLocked.Int(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.LockID.Key(),
 		lockID,
 	}
 
@@ -315,15 +311,15 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 	}
 
 	argv := []interface{}{
-		qSchema.QueueFieldType.Key(),
-		qSchema.QueueFieldMessagesCount.Key(),
-		qSchema.QueueFieldPendingMessagesCount.Key(),
-		qSchema.QueueFieldScheduledMessagesCount.Key(),
+		qSchema.Type.Key(),
+		qSchema.MessagesCount.Key(),
+		qSchema.PendingMessagesCount.Key(),
+		qSchema.ScheduledMessagesCount.Key(),
 		publicqueue.TypePriority.Int(),
 		publicqueue.TypeLIFO.Int(),
 		publicqueue.TypeFIFO.Int(),
-		qSchema.QueueFieldOperationalState.Key(),
-		qSchema.QueueFieldLockID.Key(),
+		qSchema.OperationalState.Key(),
+		qSchema.LockID.Key(),
 		publicqueue.StateActive.Int(),
 		publicqueue.StatePaused.Int(),
 		publicqueue.StateStopped.Int(),
@@ -332,30 +328,30 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 		publicmessage.StatusScheduled.Int(),
 		publicmessage.StatusPending.Int(),
 
-		MessageFieldID.Key(),
-		MessageFieldStatus.Key(),
-		MessageFieldMessage.Key(),
-		MessageFieldScheduledAt.Key(),
-		MessageFieldPublishedAt.Key(),
-		MessageFieldProcessingStartedAt.Key(),
-		MessageFieldDeadLetteredAt.Key(),
-		MessageFieldAcknowledgedAt.Key(),
-		MessageFieldUnacknowledgedAt.Key(),
-		MessageFieldLastUnacknowledgedAt.Key(),
-		MessageFieldLastScheduledAt.Key(),
-		MessageFieldRequeuedAt.Key(),
-		MessageFieldRequeueCount.Key(),
-		MessageFieldLastRequeuedAt.Key(),
-		MessageFieldLastRetriedAttemptAt.Key(),
-		MessageFieldScheduledCronFired.Key(),
-		MessageFieldAttempts.Key(),
-		MessageFieldScheduledRepeatCount.Key(),
-		MessageFieldExpired.Key(),
-		MessageFieldEffectiveScheduledDelay.Key(),
-		MessageFieldScheduledTimes.Key(),
-		MessageFieldScheduledMessageParentID.Key(),
-		MessageFieldRequeuedMessageParentID.Key(),
-		MessageFieldLastProcessedAt.Key(),
+		schema.ID.Key(),
+		schema.Status.Key(),
+		schema.Message.Key(),
+		schema.ScheduledAt.Key(),
+		schema.PublishedAt.Key(),
+		schema.ProcessingStartedAt.Key(),
+		schema.DeadLetteredAt.Key(),
+		schema.AcknowledgedAt.Key(),
+		schema.UnacknowledgedAt.Key(),
+		schema.LastUnacknowledgedAt.Key(),
+		schema.LastScheduledAt.Key(),
+		schema.RequeuedAt.Key(),
+		schema.RequeueCount.Key(),
+		schema.LastRequeuedAt.Key(),
+		schema.LastRetriedAttemptAt.Key(),
+		schema.ScheduledCronFired.Key(),
+		schema.Attempts.Key(),
+		schema.ScheduledRepeatCount.Key(),
+		schema.Expired.Key(),
+		schema.EffectiveScheduledDelay.Key(),
+		schema.ScheduledTimes.Key(),
+		schema.ScheduledMessageParentID.Key(),
+		schema.RequeuedMessageParentID.Key(),
+		schema.LastProcessedAt.Key(),
 
 		"",
 		newID,

@@ -20,7 +20,7 @@ import (
 	pubexchange "github.com/weyoss/go-redis-smq/pkg/exchange"
 )
 
-// Codec handles serialisation for exchange Params and Props.
+// Codec handles serialization for exchange Params and Props.
 // It centralises all exchange‑related encoding and decoding.
 type Codec struct{}
 
@@ -29,7 +29,7 @@ func NewCodec() *Codec {
 	return &Codec{}
 }
 
-// EncodeParams serialises Params to a JSON string for Redis set storage.
+// EncodeParams serializes Params to a JSON string for Redis set storage.
 func (c *Codec) EncodeParams(_ context.Context, params *pubexchange.Params) (string, error) {
 	data, err := json.Marshal(params)
 	if err != nil {
@@ -38,7 +38,7 @@ func (c *Codec) EncodeParams(_ context.Context, params *pubexchange.Params) (str
 	return string(data), nil
 }
 
-// DecodeParams deserialises a JSON string from a Redis set back to Params.
+// DecodeParams deserializes a JSON string from a Redis set back to Params.
 func (c *Codec) DecodeParams(_ context.Context, data string) (*pubexchange.Params, error) {
 	var params pubexchange.Params
 	if err := json.Unmarshal([]byte(data), &params); err != nil {
@@ -50,19 +50,18 @@ func (c *Codec) DecodeParams(_ context.Context, data string) (*pubexchange.Param
 	return &params, nil
 }
 
-// EncodeProps serialises Props to a Redis hash map.
-func (c *Codec) EncodeProps(_ context.Context, props *pubexchange.Props) (map[string]interface{}, error) {
+// EncodeProps serializes Props to a Redis hash map.
+func (c *Codec) EncodeProps(_ context.Context, props *pubexchange.Props) (map[string]string, error) {
 	if props == nil {
 		return nil, fmt.Errorf("encode exchange props: nil")
 	}
-
-	return map[string]interface{}{
-		schema.ExchangeFieldType.Key():   strconv.Itoa(props.Type.Int()),
-		schema.ExchangeFieldPolicy.Key(): strconv.Itoa(props.Policy.Int()),
+	return map[string]string{
+		schema.Type.Key():   strconv.Itoa(props.Type.Int()),
+		schema.Policy.Key(): strconv.Itoa(props.Policy.Int()),
 	}, nil
 }
 
-// DecodeProps deserialises a Redis hash map back to Props.
+// DecodeProps deserializes a Redis hash map back to Props.
 func (c *Codec) DecodeProps(_ context.Context, hash map[string]string) (*pubexchange.Props, error) {
 	if len(hash) == 0 {
 		return nil, fmt.Errorf("decode exchange props: empty hash")
@@ -70,7 +69,7 @@ func (c *Codec) DecodeProps(_ context.Context, hash map[string]string) (*pubexch
 
 	props := &pubexchange.Props{}
 
-	if v, ok := hash[schema.ExchangeFieldType.Key()]; ok {
+	if v, ok := hash[schema.Type.Key()]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, fmt.Errorf("decode exchange props type: %w", err)
@@ -78,7 +77,7 @@ func (c *Codec) DecodeProps(_ context.Context, hash map[string]string) (*pubexch
 		props.Type = pubexchange.Type(n)
 	}
 
-	if v, ok := hash[schema.ExchangeFieldPolicy.Key()]; ok {
+	if v, ok := hash[schema.Policy.Key()]; ok {
 		n, err := strconv.Atoi(v)
 		if err != nil {
 			return nil, fmt.Errorf("decode exchange props policy: %w", err)

@@ -20,6 +20,7 @@ import (
 
 	"github.com/weyoss/go-redis-smq/internal/config"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
+	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -146,27 +147,27 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 	}
 
 	staticArgv := []interface{}{
-		strconv.Itoa(int(ActionDelay)),                         // ARGV[1]: ERetryActionDelay
-		strconv.Itoa(int(ActionRequeue)),                       // ARGV[2]: ERetryActionRequeue
-		storeMessages,                                          // ARGV[3]
-		expireStoredMessages,                                   // ARGV[4]
-		storedMessagesSize,                                     // ARGV[5]
-		internalMessage.MessageFieldStatus.Key(),               // ARGV[6]
-		qSchema.QueueFieldProcessingMessagesCount.Key(),        // ARGV[7]
-		qSchema.QueueFieldDeadLetteredMessagesCount.Key(),      // ARGV[8]
-		qSchema.QueueFieldRequeuedMessagesCount.Key(),          // ARGV[9]
-		publicmessage.StatusUnackRequeuing.Int(),               // ARGV[10]
-		publicmessage.StatusDeadLettered.Int(),                 // ARGV[11]
-		internalMessage.MessageFieldDeadLetteredAt.Key(),       // ARGV[12]
-		internalMessage.MessageFieldUnacknowledgedAt.Key(),     // ARGV[13]
-		internalMessage.MessageFieldLastUnacknowledgedAt.Key(), // ARGV[14]
-		internalMessage.MessageFieldExpired.Key(),              // ARGV[15]
-		qSchema.QueueFieldOperationalState.Key(),               // ARGV[16]
-		queue.StateActive.Int(),                                // ARGV[17]
-		queue.StatePaused.Int(),                                // ARGV[18]
-		queue.StateStopped.Int(),                               // ARGV[19]
-		queue.StateLocked.Int(),                                // ARGV[20]
-		strconv.Itoa(maxHistorySize),                           // ARGV[21]
+		strconv.Itoa(int(ActionDelay)),           // ARGV[1]: ERetryActionDelay
+		strconv.Itoa(int(ActionRequeue)),         // ARGV[2]: ERetryActionRequeue
+		storeMessages,                            // ARGV[3]
+		expireStoredMessages,                     // ARGV[4]
+		storedMessagesSize,                       // ARGV[5]
+		schema.Status.Key(),                      // ARGV[6]
+		qSchema.ProcessingMessagesCount.Key(),    // ARGV[7]
+		qSchema.DeadLetteredMessagesCount.Key(),  // ARGV[8]
+		qSchema.RequeuedMessagesCount.Key(),      // ARGV[9]
+		publicmessage.StatusUnackRequeuing.Int(), // ARGV[10]
+		publicmessage.StatusDeadLettered.Int(),   // ARGV[11]
+		schema.DeadLetteredAt.Key(),              // ARGV[12]
+		schema.UnacknowledgedAt.Key(),            // ARGV[13]
+		schema.LastUnacknowledgedAt.Key(),        // ARGV[14]
+		schema.Expired.Key(),                     // ARGV[15]
+		qSchema.OperationalState.Key(),           // ARGV[16]
+		queue.StateActive.Int(),                  // ARGV[17]
+		queue.StatePaused.Int(),                  // ARGV[18]
+		queue.StateStopped.Int(),                 // ARGV[19]
+		queue.StateLocked.Int(),                  // ARGV[20]
+		strconv.Itoa(maxHistorySize),             // ARGV[21]
 	}
 
 	deadLetteredCount := 0
@@ -247,8 +248,8 @@ func (mu *MessageUnacknowledger) loadMessages(ctx context.Context, ids []string)
 			mu.log.Debug("message not found during load", "messageID", id)
 			continue
 		}
-		codec := internalMessage.NewEnvelopeCodec()
-		env, err := codec.DecodeHash(ctx, hash)
+		codec := internalMessage.NewCodec()
+		env, err := codec.DecodeEnvelope(ctx, hash)
 		if err != nil {
 			mu.log.Debug("failed to decode message during load", "messageID", id, "error", err)
 			continue

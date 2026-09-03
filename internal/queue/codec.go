@@ -81,49 +81,49 @@ func (c *Codec) DecodeProps(ctx context.Context, hash map[string]string) (*publi
 	props := &publicqueue.Props{}
 
 	// Queue type
-	if v, ok := hash[schema.QueueFieldType.Key()]; ok {
+	if v, ok := hash[schema.Type.Key()]; ok {
 		n, _ := strconv.Atoi(v)
 		props.Type = publicqueue.Type(n)
 	}
 
 	// Delivery model
-	if v, ok := hash[schema.QueueFieldDeliveryModel.Key()]; ok {
+	if v, ok := hash[schema.DeliveryModel.Key()]; ok {
 		n, _ := strconv.Atoi(v)
 		props.DeliveryModel = publicqueue.DeliveryModel(n)
 	}
 
 	// Message counters
-	props.MessagesCount = parseInt64Field(hash, schema.QueueFieldMessagesCount.Key())
-	props.ScheduledMessagesCount = parseInt64Field(hash, schema.QueueFieldScheduledMessagesCount.Key())
-	props.PendingMessagesCount = parseInt64Field(hash, schema.QueueFieldPendingMessagesCount.Key())
-	props.ProcessingMessagesCount = parseInt64Field(hash, schema.QueueFieldProcessingMessagesCount.Key())
-	props.AcknowledgedMessagesCount = parseInt64Field(hash, schema.QueueFieldAcknowledgedMessagesCount.Key())
-	props.DeadLetteredMessagesCount = parseInt64Field(hash, schema.QueueFieldDeadLetteredMessagesCount.Key())
-	props.DelayedMessagesCount = parseInt64Field(hash, schema.QueueFieldDelayedMessagesCount.Key())
-	props.RequeuedMessagesCount = parseInt64Field(hash, schema.QueueFieldRequeuedMessagesCount.Key())
+	props.MessagesCount = parseInt64Field(hash, schema.MessagesCount.Key())
+	props.ScheduledMessagesCount = parseInt64Field(hash, schema.ScheduledMessagesCount.Key())
+	props.PendingMessagesCount = parseInt64Field(hash, schema.PendingMessagesCount.Key())
+	props.ProcessingMessagesCount = parseInt64Field(hash, schema.ProcessingMessagesCount.Key())
+	props.AcknowledgedMessagesCount = parseInt64Field(hash, schema.AcknowledgedMessagesCount.Key())
+	props.DeadLetteredMessagesCount = parseInt64Field(hash, schema.DeadLetteredMessagesCount.Key())
+	props.DelayedMessagesCount = parseInt64Field(hash, schema.DelayedMessagesCount.Key())
+	props.RequeuedMessagesCount = parseInt64Field(hash, schema.RequeuedMessagesCount.Key())
 
 	// Operational state
-	if v, ok := hash[schema.QueueFieldOperationalState.Key()]; ok {
+	if v, ok := hash[schema.OperationalState.Key()]; ok {
 		n, _ := strconv.Atoi(v)
 		props.OperationalState = publicqueue.State(n)
 	}
 
 	// Rate limit - JSON encoded in hash field
-	if v, ok := hash[schema.QueueFieldRateLimit.Key()]; ok && v != "" {
-		rl, err := c.rateLimitCodec.DecodeJSON(ctx, v)
+	if v, ok := hash[schema.RateLimit.Key()]; ok && v != "" {
+		rl, err := ratelimit.UnmarshalRateLimitParams(ctx, v)
 		if err == nil && rl != nil {
 			props.RateLimit = rl
 		}
 	}
 
 	// Last state change timestamp (Unix milliseconds)
-	if v, ok := hash[schema.QueueFieldLastStateChangeAt.Key()]; ok {
+	if v, ok := hash[schema.LastStateChangeAt.Key()]; ok {
 		ms, _ := strconv.ParseInt(v, 10, 64)
 		props.LastStateChangeAt = time.UnixMilli(ms)
 	}
 
 	// Lock ID
-	if v, ok := hash[schema.QueueFieldLockID.Key()]; ok {
+	if v, ok := hash[schema.LockID.Key()]; ok {
 		props.LockID = v
 	}
 

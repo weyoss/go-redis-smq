@@ -12,25 +12,25 @@ package schema
 
 import "strconv"
 
-// QueueField identifies queue property fields in Redis hash storage.
-type QueueField int
+// Field identifies queue property fields in Redis hash storage.
+type Field int
 
 const (
-	QueueFieldType                      QueueField = iota // 0
-	QueueFieldRateLimit                                   // 1
-	QueueFieldMessagesCount                               // 2
-	QueueFieldDeliveryModel                               // 3
-	QueueFieldScheduledMessagesCount                      // 4
-	QueueFieldPendingMessagesCount                        // 5
-	QueueFieldProcessingMessagesCount                     // 6
-	QueueFieldAcknowledgedMessagesCount                   // 7
-	QueueFieldDeadLetteredMessagesCount                   // 8
-	QueueFieldDelayedMessagesCount                        // 9
-	QueueFieldRequeuedMessagesCount                       // 10
-	QueueFieldOperationalState                            // 11
-	QueueFieldLastStateChangeAt                           // 12
-	QueueFieldLockID                                      // 13
+	Type                      Field = iota // 0
+	RateLimit                              // 1
+	MessagesCount                          // 2
+	DeliveryModel                          // 3
+	ScheduledMessagesCount                 // 4
+	PendingMessagesCount                   // 5
+	ProcessingMessagesCount                // 6
+	AcknowledgedMessagesCount              // 7
+	DeadLetteredMessagesCount              // 8
+	DelayedMessagesCount                   // 9
+	RequeuedMessagesCount                  // 10
+	OperationalState                       // 11
+	LastStateChangeAt                      // 12
+	LockID                                 // 13
 )
 
-func (f QueueField) Key() string { return strconv.Itoa(int(f)) }
-func (f QueueField) Int() int    { return int(f) }
+func (f Field) Key() string { return strconv.Itoa(int(f)) }
+func (f Field) Int() int    { return int(f) }

@@ -12,17 +12,17 @@ package schema
 
 import "strconv"
 
-// RateLimitField identifies rate limit fields in Redis hash storage.
+// Field identifies rate limit fields in Redis hash storage.
 // Used for the dedicated rate limit hash key (separate from queue properties).
-type RateLimitField int
+type Field int
 
 const (
-	RateLimitFieldLimit    RateLimitField = iota // 0 - Maximum messages allowed
-	RateLimitFieldInterval                       // 1 - Time window in milliseconds
+	Limit    Field = iota // 0 - Maximum messages allowed
+	Interval              // 1 - Time window in milliseconds
 )
 
 // Key returns the string representation for Redis hash field access.
-func (f RateLimitField) Key() string { return strconv.Itoa(int(f)) }
+func (f Field) Key() string { return strconv.Itoa(int(f)) }
 
 // Int returns the integer representation.
-func (f RateLimitField) Int() int { return int(f) }
+func (f Field) Int() int { return int(f) }

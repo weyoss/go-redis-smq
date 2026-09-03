@@ -45,7 +45,7 @@ func (s *State) FetchCurrent(
 	historyKey := qKey.StateHistory()
 	client := redisClient.Client()
 
-	raw, err := client.HGet(ctx, propsKey, schema.QueueFieldOperationalState.Key()).Result()
+	raw, err := client.HGet(ctx, propsKey, schema.OperationalState.Key()).Result()
 	if err != nil {
 		exists, existsErr := client.Exists(ctx, propsKey).Result()
 		if existsErr != nil {
@@ -254,7 +254,7 @@ func (s *State) saveState(
 
 	luaKeys := []string{qKey.Properties(), qKey.StateHistory()}
 	argv := []interface{}{
-		schema.QueueFieldOperationalState.Key(),
+		schema.OperationalState.Key(),
 		strconv.Itoa(to.Int()),
 		string(tJSON),
 		expectedPrev,
@@ -262,9 +262,9 @@ func (s *State) saveState(
 		maxHistorySize,
 		strconv.Itoa(publicqueue.StateLocked.Int()),
 		extractLockID(opts),
-		schema.QueueFieldLastStateChangeAt.Key(),
+		schema.LastStateChangeAt.Key(),
 		strconv.FormatInt(t.Timestamp, 10),
-		schema.QueueFieldLockID.Key(),
+		schema.LockID.Key(),
 	}
 
 	reply, err := redisClient.Eval(ctx, scripts.SetQueueState, luaKeys, argv...)
