@@ -1,49 +1,107 @@
-# Go Documentation
+# Scheduling Messages
 
-Welcome to the Go implementation of RedisSMQ. These guides cover the public API, configuration, and operational patterns.
+Schedule messages for future delivery using delays, CRON expressions, or repeating patterns.
 
-For language‑agnostic concepts (architecture, queues, exchanges, reliability, etc.), see the
-[RedisSMQ documentation](https://github.com/weyoss/redis-smq-docs).
+## Quick Start
 
-## Getting Started
+```go
+import (
+    "time"
 
-- [Quick Start](quick-start.md) — Install, initialize, send and receive your first message
-- [Configuration](configuration.md) — System configuration API and manager
-- [Graceful Shutdown](graceful-shutdown.md) — Clean shutdown patterns
+    "github.com/weyoss/go-redis-smq/pkg/message"
+)
 
-## Core Operations
+// One-time delay
+m := message.New().
+    SetQueue(queueParams).
+    SetBody(data).
+    SetScheduledDelay(30 * time.Second)
+```
 
-- [Producing Messages](producing-messages.md) — How to publish messages
-- [Consuming Messages](consuming-messages.md) — How to subscribe and process messages
-- [Queue Management](queue-management.md) — Create, inspect, delete queues
-- [Queue State Management](queue-state-management.md) — Pause, resume, stop queues
-- [Queue Rate Limiting](queue-rate-limiting.md) — Control consumption speed
-- [Message Management](message-management.md) — Retrieve, delete, and requeue messages
-- [Message Browsing](message-browsing.md) — Browse published, pending, scheduled, and audited messages
-- [Exchange Management](exchange-management.md) — Direct, topic, and fanout exchanges
-- [Scheduling Messages](scheduling-messages.md) — Delays, CRON, and repeating delivery
-- [Consumer Groups](consumer-groups.md) — Pub/Sub consumer groups
-- [Namespaces](namespaces.md) — Namespace management
+## One-Time Delay
 
-## Events & Monitoring
+Deliver a message after a fixed delay:
 
-- [Event Bus](event-bus.md) — Real‑time public system events
+```go
+m := message.New().
+    SetQueue(queueParams).
+    SetBody(data).
+    SetScheduledDelay(10 * time.Second)
+```
 
-## Operations
+The message is stored in the scheduled queue and moved to pending when the delay elapses.
 
-- [Error Handling](error-handling.md) — Error types and handling patterns
+## CRON Schedule
 
-## Architecture
+Schedule using standard CRON expressions. Both 5-field and 6-field formats are supported:
 
-RedisSMQ uses a clean layered architecture:
+- **5 fields:** minute hour day-of-month month day-of-week  
+  Example: `"30 9 * * 1-5"` — Weekdays at 9:30 AM (seconds default to 0)
+- **6 fields:** second minute hour day-of-month month day-of-week  
+  Example: `"0 30 9 * * 1-5"` — Weekdays at 9:30:00 AM
 
-- **Public packages (`pkg/...`)** — interfaces, types, and documentation only.
-- **Internal packages (`internal/...`)** — concrete Redis-backed implementations.
-- **Root `redissmq` package** — composition root and factory functions.
+```go
+m := message.New().
+    SetQueue(queueParams).
+    SetBody(data).
+    SetScheduledCron("30 9 * * 1-5") // Weekdays at 9:30 AM
+```
 
-All managers, producers, consumers, exchanges, and other components are obtained via factory functions in `redissmq` (e.g., `redissmq.NewQueueManager()`, `redissmq.NewProducer()`). Public packages are designed to be used without importing internal code.
+Invalid CRON expressions (wrong field count or invalid syntax) are rejected and the message will not be scheduled; if no other scheduling is configured, the message is treated as immediate.
 
-## Additional Resources
+## Repeating Delivery
 
-- [BUILD.md](../BUILD.md) — build, test, and coverage instructions
-- [redis-smq-docs](https://github.com/weyoss/redis-smq-docs) — language-agnostic concepts
+Repeat a message a fixed number of times (or indefinitely) after an initial delay.
+
+```go
+m := message.New().
+    SetQueue(queueParams).
+    SetBody(data).
+    SetScheduledDelay(10 * time.Second).      // First delivery after 10s
+    SetScheduledRepeat(5).                    // Repeat 5 times after the first delivery
+    SetScheduledRepeatPeriod(60 * time.Second) // Every 60 seconds between repeats
+```
+
+- `SetScheduledRepeat(0)` means repeat indefinitely.
+- If `SetScheduledRepeatPeriod` is not set, repeats occur immediately (or with the same delay as the first delivery) depending on implementation.
+
+## Clearing Scheduling
+
+Remove all scheduling parameters from a message:
+
+```go
+m.ResetScheduledParams()
+```
+
+After reset, the message is treated as immediate.
+
+## Browse Scheduled Messages
+
+Use the queue manager to browse scheduled messages:
+
+```go
+qm := redissmq.NewQueueManager()
+
+result, err := qm.BrowseMessages(ctx, params, &queue.BrowseParams{
+    Filter: queue.BrowseScheduled,
+    Offset: 0,
+    Count:  100,
+})
+if err != nil {
+    log.Fatal(err)
+}
+```
+
+See [Message Browsing](message-browsing.md) for details.
+
+## Scheduling Rules
+
+- **Delay** takes precedence over CRON and repeat for the *first* delivery.
+- **CRON + Repeat** — the repeat period is used between CRON-triggered deliveries, but the first delivery occurs at the next CRON tick (unless a delay is set, which overrides the first tick).
+- **Repeat only** — first delivery is immediate if no delay, subsequent deliveries follow the repeat period.
+
+## Related
+
+- [Scheduling Messages Concepts](https://github.com/weyoss/redis-smq-docs) — How scheduling works
+- [Producing Messages](producing-messages.md) — Publishing messages
+- [Message Browsing](message-browsing.md) — Viewing scheduled messages

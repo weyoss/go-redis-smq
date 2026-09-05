@@ -18,16 +18,25 @@ import (
 	"github.com/adhocore/gronx"
 )
 
-// ValidateCron checks if a 5-field CRON expression is valid.
-// Format: second minute hour dom month dow
+// ValidateCron checks if a CRON expression is valid.
+//
+// Supported formats:
+//   - 5 fields: minute hour day-of-month month day-of-week (seconds default to 0)
+//   - 6 fields: second minute hour day-of-month month day-of-week
+//
+// The validation is delegated to gronx after checking the field count.
 func ValidateCron(expr string) error {
 	fields := strings.Fields(expr)
-	if len(fields) == 5 {
-		expr = "0 " + expr // Add seconds field
+
+	if len(fields) != 5 && len(fields) != 6 {
+		return fmt.Errorf("cron: invalid expression: %s. Only 5 and 6 field expressions are accepted", expr)
 	}
+
+	// gronx supports both 5 and 6 field expressions natively.
 	if !gronx.IsValid(expr) {
 		return fmt.Errorf("cron: invalid expression: %s", expr)
 	}
+
 	return nil
 }
 
