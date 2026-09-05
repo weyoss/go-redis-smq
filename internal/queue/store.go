@@ -255,6 +255,7 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		key.ConsumerGroups(),
 		key.WorkersLock(),
 		key.ExchangeBindings(),
+		key.StateHistory(),
 	}
 	keysToDelete = append(keysToDelete, consumerGroupKeys...)
 	keysToDelete = append(keysToDelete, processingQueues...)
