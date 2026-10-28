@@ -105,9 +105,12 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 		err = c.invokeHandler(ctx, m)
 	}()
 
-	// If the forced timer already fired, the message was already
-	// unacknowledged. Do not ack or unack again.
-	if timedOut.Load() {
+	// CAS on the same flag the timeout goroutine uses. Whichever path CASes
+	// first wins; the loser returns without doing anything. This closes the
+	// race where the timer's CAS could land between the previous Load() and
+	// Ack(), buffering both an ack and an unack for the same message.
+	if !timedOut.CompareAndSwap(false, true) {
+		c.log.Debug("timeout already fired — discarding handler result", "messageID", m.ID)
 		return
 	}
 

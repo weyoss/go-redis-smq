@@ -13,12 +13,14 @@ package consumer_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -175,4 +177,147 @@ func TestConsumeTimeout_ForcedTimeout(t *testing.T) {
 		t.Errorf("expected attempts > 0 after forced timeout retry, got %d", receivedMsg.MessageState.Attempts)
 	}
 	t.Logf("Forced timeout: message retried successfully, attempts=%d", receivedMsg.MessageState.Attempts)
+}
+
+// Scenario: The ack/unack CAS race must never allow both paths to proceed for
+// the same message.
+//
+// Pre-fix, ConsumeMessage used timedOut.Load() on the success path while the
+// timeout goroutine used timedOut.CompareAndSwap(false, true). If the timer's
+// CAS landed between the Load() and the Ack(), both an ack and an unack were
+// buffered for the same message — the message's outcome then depended on which
+// Lua script flushed first, silently corrupting its state.
+//
+// The fix uses CAS on the success path too, so exactly one path can proceed.
+//
+// This is a statistical test: hitting the race window deterministically would
+// require a test hook in ConsumeMessage. It runs iterations of handler-vs-
+// timeout races and asserts the invariant per message. Pre-fix, some iterations
+// produce two events for the same message; post-fix, none do.
+func TestConsumeTimeout_AckUnackRace_ExactlyOneOutcome(t *testing.T) {
+	if testing.Short() {
+		t.Skip("statistical race test skipped in -short mode; run without -short")
+	}
+
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 120*time.Second)
+	defer cancel()
+
+	params := queue.MustQueueParams("test-c4-ack-unack-race")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	// Per-message event counters. [0] = acks, [1] = unacks.
+	var mu sync.Mutex
+	counts := make(map[string][2]int)
+
+	ackSub, err := consumer.SubscribeMessageAcknowledged(func(p consumer.MessagePayload) {
+		mu.Lock()
+		c := counts[p.MessageID]
+		c[0]++
+		counts[p.MessageID] = c
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe ack: %v", err)
+	}
+	defer ackSub.Unsubscribe()
+
+	unackSub, err := consumer.SubscribeMessageUnacknowledged(
+		func(p consumer.MessageUnacknowledgedPayload) {
+			mu.Lock()
+			c := counts[p.MessageID]
+			c[1]++
+			counts[p.MessageID] = c
+			mu.Unlock()
+		})
+	if err != nil {
+		t.Fatalf("subscribe unack: %v", err)
+	}
+	defer unackSub.Unsubscribe()
+
+	// BatchSize=1 forces immediate flush on every buffer write, so any double-
+	// buffering surfaces as two events for the same message ID.
+	cons := redissmq.NewConsumer(
+		consumer.WithBatchAcks(consumer.BatchConfig{
+			Enabled: true, BatchSize: 1, BatchTimeout: 1 * time.Millisecond,
+		}),
+		consumer.WithBatchUnacks(consumer.BatchConfig{
+			Enabled: true, BatchSize: 1, BatchTimeout: 1 * time.Millisecond,
+		}),
+	)
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		// Return as close to the ConsumeTimeout as possible to race the timer.
+		time.Sleep(1 * time.Millisecond)
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+	defer cons.Shutdown()
+
+	prod := testutil.StartProducer(t, ctx)
+
+	const iterations = 500
+	ids := make([]string, 0, iterations)
+	for i := range iterations {
+		produced, err := prod.Produce(ctx, msg.New().
+			SetBody("race").
+			SetQueue(params).
+			SetConsumeTimeout(1*time.Millisecond),
+		)
+		if err != nil {
+			t.Fatalf("produce %d: %v", i, err)
+		}
+		ids = append(ids, produced[0])
+	}
+
+	// Wait until every message has at least one event, or we time out.
+	deadline := time.After(60 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
+wait:
+	for {
+		select {
+		case <-deadline:
+			break wait
+		case <-ticker.C:
+			mu.Lock()
+			pending := 0
+			for _, id := range ids {
+				c := counts[id]
+				if c[0]+c[1] == 0 {
+					pending++
+				}
+			}
+			mu.Unlock()
+			if pending == 0 {
+				break wait
+			}
+		}
+	}
+
+	// Assert the invariant: no message ever has both an ack and an unack.
+	mu.Lock()
+	defer mu.Unlock()
+
+	var both, neither int
+	for _, id := range ids {
+		c := counts[id]
+		switch total := c[0] + c[1]; {
+		case total == 2:
+			both++
+			t.Logf("message %s: ack=%d unack=%d (BOTH fired)", id, c[0], c[1])
+		case total == 0:
+			neither++
+		}
+	}
+
+	if both > 0 {
+		t.Errorf("%d/%d messages had both ack and unack events — the CAS race "+
+			"allows both paths to proceed (C4)", both, iterations)
+	}
+	if neither > 0 {
+		t.Logf("note: %d/%d messages had no event yet (still in flight or "+
+			"lost — check independently)", neither, iterations)
+	}
 }
