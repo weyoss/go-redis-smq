@@ -71,6 +71,7 @@ var scriptDefs = map[ID][]string{
 	FailJob:         {"scripts/jobs/fail-job.lua"},
 	CancelJob:       {"scripts/jobs/cancel-job.lua"},
 	RecoverStuckJob: {"scripts/jobs/recover-stuck-job.lua"},
+	SaveJobProgress: {"scripts/jobs/save-job-progress.lua"},
 }
 
 // ScriptManager loads Lua scripts from the embedded filesystem and registers

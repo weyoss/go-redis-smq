@@ -126,10 +126,43 @@ func (s *PurgeJobStore) Get(ctx context.Context, jobID string) (*publicqueue.Pur
 	return &job, nil
 }
 
-// Save updates the job in Redis.
-func (s *PurgeJobStore) Save(ctx context.Context, job *publicqueue.PurgeJob) error {
+// SaveProgress updates the progress fields of a job (meta.purged, updatedAt)
+// via a status-checked Lua script.
+//
+// It returns (true, nil) if the update was applied, or (false, nil) if the job
+// is no longer in PROCESSING state — which means another operation (typically
+// Cancel) has already moved it to a terminal state. Callers should treat
+// (false, nil) as "stop processing" and return early.
+func (s *PurgeJobStore) SaveProgress(ctx context.Context, job *publicqueue.PurgeJob) (bool, error) {
 	job.UpdatedAt = time.Now().UnixMilli()
-	return redisClient.Client().HSet(ctx, keys.System{}.PurgeJobs(), job.ID, mustMarshal(job)).Err()
+
+	reply, err := redisClient.Eval(ctx, scripts.SaveJobProgress,
+		[]string{keys.System{}.PurgeJobs()},
+		[]interface{}{
+			job.ID,
+			mustMarshal(job),
+			publicqueue.PurgeJobProcessing.String(),
+		},
+	)
+	if err != nil {
+		return false, fmt.Errorf("purge: save progress: %w", err)
+	}
+
+	n, err := redisClient.Int64(reply)
+	if err != nil {
+		return false, fmt.Errorf("purge: save progress: unexpected reply: %v", reply)
+	}
+
+	switch n {
+	case 1:
+		return true, nil
+	case 0:
+		return false, fmt.Errorf("purge: job not found for save progress")
+	case -1:
+		return false, nil
+	default:
+		return false, fmt.Errorf("purge: save progress: unexpected reply: %d", n)
+	}
 }
 
 // IsCanceled checks if a job is currently cancelled.

@@ -190,8 +190,19 @@ func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.Purg
 			job.Meta = &publicqueue.PurgeJobMeta{}
 		}
 		job.Meta.Purged = purged
-		if err := pm.jobStore.Save(ctx, job); err != nil {
+
+		updated, err := pm.jobStore.SaveProgress(ctx, job)
+		if err != nil {
+			// Redis is unreachable / misbehaving. Log and continue — the next batch's
+			// SaveProgress will retry, and the final Complete/Fail will reconcile.
 			pm.log.Error("save job progress failed", "jobID", job.ID, "error", err)
+		} else if !updated {
+			// Job transitioned out of PROCESSING (almost always: concurrent Cancel).
+			// Stop processing immediately — the caller will observe via IsCanceled
+			// and return, leaving status untouched.
+			pm.log.Info("job transitioned out of PROCESSING; stopping batch loop",
+				"jobID", job.ID, "purgedSoFar", purged)
+			return purged, nil
 		}
 
 		if len(ids) == job.BatchSize {

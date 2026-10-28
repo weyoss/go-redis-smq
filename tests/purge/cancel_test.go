@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -164,5 +165,76 @@ func TestCancel_AlreadyCompleted(t *testing.T) {
 		t.Log("cancel of already-canceled job succeeded (idempotent)")
 	} else {
 		t.Logf("cancel of already-canceled job failed (expected): %v", err)
+	}
+}
+
+// Scenario: A stale SaveProgress (in-memory job struct still says Processing)
+// must not clobber a Cancel that landed in the meantime.
+func TestCancel_StaleSaveDoesNotClobberStatus(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := publicqueue.MustQueueParams("test-cancel-stale-save")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
+
+	// 1. Enqueue a job — status is PENDING.
+	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	if err != nil {
+		t.Fatalf("enqueue: %v", err)
+	}
+
+	// 2. Transition to PROCESSING (real Lua script via the store).
+	js := internalqueue.NewPurgeJobStore()
+	job, err := js.Get(ctx, jobID)
+	if err != nil {
+		t.Fatalf("get job: %v", err)
+	}
+	job.Status = publicqueue.PurgeJobProcessing
+	job.StartedAt = time.Now().UnixMilli()
+	if err := js.Start(ctx, jobID, "test-worker", job); err != nil {
+		t.Fatalf("start job: %v", err)
+	}
+
+	// 3. Simulate one batch: save progress, then verify it landed.
+	job.Meta = &publicqueue.PurgeJobMeta{Purged: 100}
+	updated, err := js.SaveProgress(ctx, job)
+	if err != nil {
+		t.Fatalf("save progress (batch 1): %v", err)
+	}
+	if !updated {
+		t.Fatalf("save progress (batch 1) unexpectedly rejected")
+	}
+
+	// 4. Cancel the job via the public API (real Cancel path, unlocks queue).
+	if err := qm.CancelPurgeJob(ctx, params, jobID); err != nil {
+		t.Fatalf("cancel: %v", err)
+	}
+
+	// 5. Now simulate a stale in-memory job (Status still PROCESSING, purged=200)
+	//    trying to save progress. This is exactly what purgeMessages would do
+	//    with a job captured before Cancel landed.
+	job.Meta.Purged = 200
+	updated, err = js.SaveProgress(ctx, job)
+	if err != nil {
+		t.Fatalf("save progress (stale): %v", err)
+	}
+	if updated {
+		t.Fatal("SaveProgress must return false after Cancel; the write was " +
+			"accepted and would have clobbered the Canceled status")
+	}
+
+	// 6. Verify Redis still has the Canceled status and the pre-Cancel progress.
+	final, err := js.Get(ctx, jobID)
+	if err != nil {
+		t.Fatalf("get final: %v", err)
+	}
+	if final.Status != publicqueue.PurgeJobCanceled {
+		t.Fatalf("status = %s, want CANCELED (stale save clobbered it)",
+			final.Status.String())
+	}
+	if final.Meta == nil || final.Meta.Purged != 100 {
+		t.Errorf("meta.purged = %v, want 100 (stale write must be rejected)",
+			final.Meta)
 	}
 }

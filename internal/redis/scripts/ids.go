@@ -50,4 +50,5 @@ const (
 	FailJob         = "FAIL_JOB"
 	CancelJob       = "CANCEL_JOB"
 	RecoverStuckJob = "RECOVER_STUCK_JOB"
+	SaveJobProgress = "SAVE_JOB_PROGRESS"
 )
