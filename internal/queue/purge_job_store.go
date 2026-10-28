@@ -22,6 +22,38 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// jobScriptErrorMessages maps each Lua job script's numeric failure codes to
+// human-readable messages. The same code means different things in different
+// scripts — e.g. complete-job.lua returns -1 when the job is already FAILED,
+// while start-job.lua returns -1 when the job is already COMPLETED. A single
+// uniform mapping (the previous behaviour) produced misleading error messages
+// such as "purge: complete job: job already completed" for a job that had
+// actually failed.
+var jobScriptErrorMessages = map[scripts.ID]map[int64]string{
+	scripts.StartJob: {
+		-1: "job already completed",
+		-2: "job already failed",
+		-3: "job already cancelled",
+	},
+	scripts.CompleteJob: {
+		-1: "job already failed",
+		-2: "job already cancelled",
+	},
+	scripts.FailJob: {
+		-1: "job already completed",
+		-2: "job already cancelled",
+	},
+	scripts.CancelJob: {
+		-1: "job already completed",
+		-2: "job already failed",
+	},
+	scripts.RecoverStuckJob: {
+		-1: "job already completed",
+		-2: "job already failed",
+		-3: "job already cancelled",
+	},
+}
+
 // PurgeJobStore handles persistence and lifecycle operations for purge jobs.
 // It encapsulates all Redis interactions related to purge job CRUD and state
 // transitions.
@@ -183,23 +215,24 @@ func runJobScript(ctx context.Context, id scripts.ID, keys []string, args []inte
 
 	n, err := redisClient.Int64(reply)
 	if err != nil {
-		return fmt.Errorf("purge: unexpected %s reply: %v", operation, reply)
+		return fmt.Errorf("purge: %s job: unexpected reply: %v", operation, reply)
 	}
 
 	switch n {
 	case 1, 2:
+		// 1 = success; 2 = already in the desired state. Both are idempotent
+		// successes from the caller's perspective.
 		return nil
 	case 0:
-		return fmt.Errorf("purge: job not found for %s", operation)
-	case -1:
-		return fmt.Errorf("purge: job already completed")
-	case -2:
-		return fmt.Errorf("purge: job already failed")
-	case -3:
-		return fmt.Errorf("purge: job already cancelled")
-	default:
-		return fmt.Errorf("purge: unexpected %s reply: %d", operation, n)
+		return fmt.Errorf("purge: %s job: not found", operation)
 	}
+
+	if msgs, ok := jobScriptErrorMessages[id]; ok {
+		if msg, ok := msgs[n]; ok {
+			return fmt.Errorf("purge: %s job: %s", operation, msg)
+		}
+	}
+	return fmt.Errorf("purge: %s job: unexpected reply: %d", operation, n)
 }
 
 // mustMarshal marshals any value to a JSON string, panicking on error.
