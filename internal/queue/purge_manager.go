@@ -254,12 +254,23 @@ func (pm *PurgeManager) validateFilter(filter publicqueue.BrowseFilter) error {
 
 // recoverStuckJobs checks for jobs whose worker is no longer alive and re-queues them.
 func (pm *PurgeManager) recoverStuckJobs(ctx context.Context) {
-	jobIDs, err := redisClient.LoadSetMembers(ctx, keys.System{}.ActivePurgeJobs(), "processing purge jobs")
+	jobIDs, err := redisClient.LoadListMembers(ctx,
+		keys.System{}.ActivePurgeJobs(), "processing purge jobs")
 	if err != nil {
-		pm.log.Debug("failed to load processing purge jobs", "error", err)
+		pm.log.Error("failed to load processing purge jobs", "error", err)
 		return
 	}
+
+	// Defensive dedup: start-job.lua normalises the list to one entry per job,
+	// but a snapshot taken mid-normalisation could still see duplicates.
+	seen := make(map[string]struct{}, len(jobIDs))
+
 	for _, jobID := range jobIDs {
+		if _, dup := seen[jobID]; dup {
+			continue
+		}
+		seen[jobID] = struct{}{}
+
 		if IsWorkerAlive(ctx, jobID) {
 			continue
 		}
