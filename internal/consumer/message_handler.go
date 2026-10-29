@@ -45,6 +45,7 @@ type MessageHandler struct {
 	batchAcker     *BatchAcker
 	batchUnacker   *BatchUnacker
 	errCh          chan error
+	wg             sync.WaitGroup // tracks the dequeue/consume loop goroutine
 
 	scheduledPublisher    *ScheduledPublisher
 	delayedRequeuer       *DelayedRequeuer
@@ -141,7 +142,11 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 	mh.running = true
 
 	if mh.autoDequeue {
-		go mh.loop()
+		mh.wg.Add(1)
+		go func() {
+			defer mh.wg.Done()
+			mh.loop()
+		}()
 	}
 
 	mh.log.Info("message handler started",
@@ -191,53 +196,85 @@ func (mh *MessageHandler) acquireWorkerLock() {
 	mh.log.Debug("all background workers started")
 }
 
+// Shutdown stops the handler from an external caller (the runner).
+//
+// It cancels the handler context, then waits for the dequeue/consume loop to
+// exit before shutting down the batchers.
+//
+// Safe to call multiple times and from any goroutine.
 func (mh *MessageHandler) Shutdown() {
-	mh.mu.Lock()
-	defer mh.mu.Unlock()
-	mh.shutdownLocked()
+	mh.beginShutdown(true)
 }
 
-func (mh *MessageHandler) shutdownLocked() {
+// selfShutdown is called from inside the loop goroutine (on queue state
+// changes). It cannot wait on mh.wg — that would deadlock against the
+// goroutine it is called from.
+func (mh *MessageHandler) selfShutdown() {
+	mh.beginShutdown(false)
+}
+
+// beginShutdown transitions running→false under the lock, then performs the
+// actual shutdown work without holding the lock.
+//
+// waitForLoop must be true when the caller is NOT the loop goroutine (so we
+// can safely wait for it to exit) and false when called from loop (so we
+// don't wait on ourselves).
+func (mh *MessageHandler) beginShutdown(waitForLoop bool) {
+	mh.mu.Lock()
 	if !mh.running {
+		mh.mu.Unlock()
 		mh.log.Debug("shutdown called but not running")
 		return
 	}
 	mh.running = false
 
+	// Capture fields under the lock. Run wrote them before setting
+	// running=true, so they are stable by now; capturing here avoids
+	// data races on fields read outside the critical section.
+	cancel := mh.cancel
+	batchAcker := mh.batchAcker
+	batchUnacker := mh.batchUnacker
+	workerLock := mh.workerLock
+	ephemeralGroup := mh.ephemeralGroup
+	groupID := mh.groupID
+	mh.mu.Unlock()
+
 	mh.log.Info("shutting down message handler")
 
-	if mh.cancel != nil {
-		mh.cancel()
+	if cancel != nil {
+		cancel()
 	}
 
-	if mh.batchAcker != nil {
+	if waitForLoop {
+		// Wait for it to fully exit before shutting them down, so no Ack/Unack
+		// can be buffered after the flush.
+		mh.wg.Wait()
+	}
+
+	if batchAcker != nil {
 		mh.log.Debug("shutting down batch acker")
-		mh.batchAcker.Shutdown()
+		batchAcker.Shutdown()
 	}
-	if mh.batchUnacker != nil {
+	if batchUnacker != nil {
 		mh.log.Debug("shutting down batch unacker")
-		mh.batchUnacker.Shutdown()
+		batchUnacker.Shutdown()
 	}
 
-	if mh.workerLock != nil {
+	if workerLock != nil {
 		mh.log.Debug("releasing worker lock")
-		if err := mh.workerLock.Release(context.Background()); err != nil {
+		if err := workerLock.Release(context.Background()); err != nil {
 			mh.log.Error("failed to release worker lock", "error", err)
 		}
 	}
 
 	mh.log.Debug("unsubscribing consumer")
-	if err := UnsubscribeConsumer(
-		context.Background(), mh.consumerID, mh.queue, mh.groupID,
-	); err != nil {
+	if err := UnsubscribeConsumer(context.Background(), mh.consumerID, mh.queue, groupID); err != nil {
 		mh.log.Error("failed to unsubscribe consumer", "error", err)
 	}
 
-	if mh.ephemeralGroup {
-		mh.log.Debug("deleting ephemeral consumer group", "group", mh.groupID)
-		if err := DeleteEphemeralConsumerGroup(
-			context.Background(), mh.consumerID, mh.queue, mh.groupID,
-		); err != nil {
+	if ephemeralGroup {
+		mh.log.Debug("deleting ephemeral consumer group", "group", groupID)
+		if err := DeleteEphemeralConsumerGroup(context.Background(), mh.consumerID, mh.queue, groupID); err != nil {
 			mh.log.Error("failed to delete ephemeral consumer group", "error", err)
 		}
 	}
@@ -259,10 +296,14 @@ func (mh *MessageHandler) loop() {
 
 		envelope, err := mh.dequeuer.Dequeue(mh.ctx)
 		if err != nil {
-			if errors.Is(err, consumer.ErrQueueStopped) || errors.Is(err, consumer.ErrQueueLocked) || errors.Is(err, consumer.ErrQueueInvalidState) {
+			if errors.Is(err, consumer.ErrQueueStopped) ||
+				errors.Is(err, consumer.ErrQueueLocked) ||
+				errors.Is(err, consumer.ErrQueueInvalidState) {
 				mh.log.Warn("queue state changed — stopping handler", "error", err)
 				mh.errCh <- fmt.Errorf("handler stopped: %w", err)
-				mh.Shutdown()
+				// selfShutdown (not Shutdown): we are inside the loop goroutine,
+				// so beginShutdown must not wait on mh.wg — that would deadlock.
+				mh.selfShutdown()
 				return
 			}
 			mh.log.Error("dequeue error", "error", err)

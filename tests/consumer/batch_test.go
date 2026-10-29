@@ -18,6 +18,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
@@ -193,4 +195,81 @@ func TestBatchUnack_FlushOnShutdown(t *testing.T) {
 		t.Fatal("message should have been processed at least once")
 	}
 	t.Logf("attempts: %d", attempts.Load())
+}
+
+// Scenario: Shutdown waits for the in-flight handler before shutting down the
+// batch acker, so the handler's Ack is flushed and the message leaves the
+// consumer's processing queue.
+func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-c7-shutdown-waits")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	prod := testutil.StartProducer(t, ctx)
+	if _, err := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params)); err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+
+	var handlerStarted, handlerFinished atomic.Bool
+
+	// BatchSize=100, BatchTimeout=30s: nothing flushes on its own. The only
+	// flush is the one triggered by Shutdown — so if it doesn't happen, the
+	// message is observably stuck.
+	cons := redissmq.NewConsumer(
+		consumer.WithBatchAcks(consumer.BatchConfig{
+			Enabled:      true,
+			BatchSize:    100,
+			BatchTimeout: 30 * time.Second,
+		}),
+	)
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		handlerStarted.Store(true)
+		time.Sleep(500 * time.Millisecond) // simulate slow work; pushes Shutdown into the Consume window
+		handlerFinished.Store(true)
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+
+	// Wait until the handler is running.
+	deadline := time.After(5 * time.Second)
+	for !handlerStarted.Load() {
+		select {
+		case <-deadline:
+			cons.Shutdown()
+			t.Fatal("handler never started")
+		case <-time.After(20 * time.Millisecond):
+		}
+	}
+
+	// Shutdown fires while the handler is still running.
+	cons.Shutdown()
+
+	if !handlerFinished.Load() {
+		t.Fatal("Shutdown returned before the in-flight handler completed — " +
+			"shutdownLocked is not waiting for loop to exit")
+	}
+
+	// Invariant: no messages remain in ConsumerProcessing after Shutdown.
+	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+	processingLen, err := redis.Client().LLen(ctx, qKey.ConsumerProcessing(cons.ID())).Result()
+	if err != nil {
+		t.Fatalf("LLen ConsumerProcessing: %v", err)
+	}
+	if processingLen != 0 {
+		t.Fatalf("ConsumerProcessing retains %d messages after Shutdown — "+
+			"the in-flight Ack was buffered after BatchAcker.Shutdown and never "+
+			"flushed (C7)", processingLen)
+	}
+
+	// Consumer ID key should be gone (UnsubscribeConsumer succeeded).
+	exists, err := redis.Client().Exists(ctx, qKey.ConsumerProcessing(cons.ID())).Result()
+	if err != nil {
+		t.Fatalf("exists ConsumerProcessing: %v", err)
+	}
+	if exists != 0 {
+		t.Errorf("ConsumerProcessing key still exists after Shutdown — unsubscribe likely failed")
+	}
 }
