@@ -109,41 +109,55 @@ func (r *MessageHandlerRunner) HasHandlers() bool {
 func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 	r.mu.Lock()
 	r.ctx, r.cancel = context.WithCancel(ctx)
+	runnerCtx := r.ctx
 	configs := make([]*handlerConfig, len(r.handlers))
 	copy(configs, r.handlers)
 	r.mu.Unlock()
 
 	r.log.Info("starting message handler runner", "handlers", len(configs))
 
-	r.stateTracker = NewQueueStateTracker(
+	tracker := NewQueueStateTracker(
 		r.onQueueStopped,
 		r.onQueuePaused,
 		r.onQueueLocked,
 		r.onQueueActive,
 	)
+	r.mu.Lock()
+	r.stateTracker = tracker
+	r.mu.Unlock()
 
 	// Note: r.mu is NOT held for the duration of this loop. A concurrent
-	// Shutdown can cancel r.ctx and set r.instances = nil mid-iteration,
-	// after which mh.Run(r.ctx) will start an inert handler that is not
-	// tracked for shutdown. Tracked separately as the mid-setup shutdown
-	// race; C5's lock-discipline fix only makes the failure paths below
-	// race-free with respect to r.instances.
+	// Shutdown can cancel runnerCtx and set r.instances = nil mid-iteration.
+	// The runnerCtx.Err() checks below ensure Run aborts cleanly in that case
+	// rather than orphaning a MessageHandler started on a cancelled context.
 	started := 0
 	for _, cfg := range configs {
-		if !r.isQueueActive(ctx, cfg.queue) {
+		if err := runnerCtx.Err(); err != nil {
+			r.Shutdown()
+			return fmt.Errorf("consumer: shutdown during startup: %w", err)
+		}
+
+		if !r.isQueueActive(runnerCtx, cfg.queue) {
 			r.log.Warn("skipping inactive queue", "queue", cfg.queue.String())
 			continue
 		}
 
 		r.log.Debug("starting message handler", "queue", cfg.queue.String(), "group", cfg.groupID)
 		mh := NewMessageHandler(r.consumerID, cfg.queue, cfg.groupID, cfg.handler, r.options)
-		if err := mh.Run(r.ctx); err != nil {
+		if err := mh.Run(runnerCtx); err != nil {
+			// Distinguish cancellation (shutdown raced us) from real failure
+			// — avoids noisy "failed to start" logs during graceful shutdown.
+			if cerr := runnerCtx.Err(); cerr != nil {
+				r.log.Debug("message handler start aborted by shutdown",
+					"queue", cfg.queue.String(), "group", cfg.groupID)
+				r.Shutdown()
+				return fmt.Errorf("consumer: shutdown during startup: %w", cerr)
+			}
 			r.log.Error("failed to start message handler",
 				"queue", cfg.queue.String(),
 				"group", cfg.groupID,
 				"error", err,
 			)
-			// Shutdown (not shutdownLocked): r.mu is not held here.
 			r.Shutdown()
 			return err
 		}
@@ -155,27 +169,25 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 
 	if started == 0 && len(configs) > 0 {
 		r.log.Error("all queues are non-operational")
-		// Shutdown (not shutdownLocked): r.mu is not held here.
 		r.Shutdown()
 		return fmt.Errorf("consumer: all queues are non-operational")
 	}
 
 	r.log.Info("message handler runner started", "active", started, "total", len(configs))
 
-	go r.reconcileLoop()
+	go r.reconcileLoop(runnerCtx)
 	return nil
 }
 
-// Shutdown stops the runner. Acquires r.mu; the caller must not hold it.
-// Safe to call multiple times and from any goroutine.
+// Shutdown stops the runner. Acquires r.mu; safe to call multiple times and
+// from any goroutine.
 func (r *MessageHandlerRunner) Shutdown() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shutdownLocked()
 }
 
-// shutdownLocked performs shutdown. The caller MUST hold r.mu. Prefer
-// Shutdown unless you are already inside a locked section.
+// shutdownLocked performs shutdown. The caller MUST hold r.mu.
 func (r *MessageHandlerRunner) shutdownLocked() {
 	if r.cancel != nil {
 		r.cancel()
@@ -380,23 +392,27 @@ func (r *MessageHandlerRunner) onQueueActive(queue *publicqueue.Params) {
 
 // ── Supervisor reconciliation ──
 
-func (r *MessageHandlerRunner) reconcileLoop() {
+func (r *MessageHandlerRunner) reconcileLoop(ctx context.Context) {
 	r.log.Debug("starting reconciliation loop")
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-r.ctx.Done():
+		case <-ctx.Done():
 			r.log.Debug("reconciliation loop stopped")
 			return
 		case <-ticker.C:
-			r.reconcile()
+			r.reconcile(ctx)
 		}
 	}
 }
 
-func (r *MessageHandlerRunner) reconcile() {
+// reconcile restarts any handler that should be running but isn't (e.g. the
+// queue was paused and resumed, and the state-change callback missed the
+// window). It takes ctx explicitly so cancellation is observable without
+// reading r.ctx.
+func (r *MessageHandlerRunner) reconcile(ctx context.Context) {
 	r.mu.RLock()
 	var toStart []*handlerConfig
 	for _, cfg := range r.handlers {
@@ -424,9 +440,19 @@ func (r *MessageHandlerRunner) reconcile() {
 	r.log.Info("reconciling — restarting handlers", "count", len(toStart))
 
 	for _, cfg := range toStart {
+		if err := ctx.Err(); err != nil {
+			r.log.Debug("reconcile: shutting down — aborting before next handler")
+			return
+		}
+
 		r.log.Debug("restarting handler", "queue", cfg.queue.String(), "group", cfg.groupID)
 		mh := NewMessageHandler(r.consumerID, cfg.queue, cfg.groupID, cfg.handler, r.options)
-		if err := mh.Run(r.ctx); err != nil {
+		if err := mh.Run(ctx); err != nil {
+			if cerr := ctx.Err(); cerr != nil {
+				r.log.Debug("reconcile: handler start aborted by shutdown",
+					"queue", cfg.queue.String(), "group", cfg.groupID)
+				return
+			}
 			r.log.Error("failed to restart handler",
 				"queue", cfg.queue.String(),
 				"group", cfg.groupID,
@@ -434,7 +460,20 @@ func (r *MessageHandlerRunner) reconcile() {
 			)
 			continue
 		}
+
+		// check cancellation under r.mu immediately before appending.
+		// If Shutdown cleared r.instances in the window between mh.Run
+		// succeeding and this lock, we must not append — the new handler
+		// would be untracked and never shut down. Shut it down explicitly
+		// (without holding r.mu — mh.Shutdown may block on mh.wg.Wait()).
 		r.mu.Lock()
+		if cerr := ctx.Err(); cerr != nil {
+			r.mu.Unlock()
+			mh.Shutdown()
+			r.log.Debug("reconcile: handler started after shutdown — shut down explicitly",
+				"queue", cfg.queue.String(), "group", cfg.groupID)
+			return
+		}
 		r.instances = append(r.instances, mh)
 		r.mu.Unlock()
 	}

@@ -19,6 +19,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -339,5 +341,61 @@ func TestEdge_HandlerPanicDoesNotCrashConsumer(t *testing.T) {
 	}
 	if !cons.IsRunning() {
 		t.Error("consumer should still be running after handler panic")
+	}
+}
+
+// Scenario: Concurrent Shutdown during a state-change-driven handler restart
+// must not orphan a MessageHandler.
+func TestEdge_RunShutdownRace_NoOrphanedHandlers(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 60*time.Second)
+	defer cancel()
+
+	params := publicqueue.MustQueueParams("test-c8-orphaned-handlers")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	sm := redissmq.NewStateManager()
+
+	const iterations = 10
+	for i := range iterations {
+		cons := redissmq.NewConsumer()
+		cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error { return nil })
+		if err := cons.Run(ctx); err != nil {
+			t.Fatalf("iteration %d: run: %v", i, err)
+		}
+
+		// Pause → StopHandler removes the handler from r.instances.
+		// Resume → onQueueActive fires StartHandler (async, from event bus).
+		// Shutdown immediately → races with StartHandler and/or with
+		// reconcile's auto-restart tick.
+		if _, err := sm.Pause(ctx, params, nil); err != nil {
+			t.Fatalf("iteration %d: pause: %v", i, err)
+		}
+		if _, err := sm.Resume(ctx, params, nil); err != nil {
+			t.Fatalf("iteration %d: resume: %v", i, err)
+		}
+		cons.Shutdown()
+
+		// Invariant 1: no orphaned heartbeat key for this consumer.
+		exists, err := redis.Client().Exists(ctx, keys.System{}.ConsumerHeartbeat(cons.ID())).Result()
+		if err != nil {
+			t.Fatalf("iteration %d: exists heartbeat: %v", i, err)
+		}
+		if exists > 0 {
+			t.Errorf("iteration %d: orphaned heartbeat key for consumer %s", i, cons.ID())
+		}
+
+		// Invariant 2: no orphaned consumer registration in the queue's
+		// Consumers hash.
+		qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+		registered, err := redis.Client().HExists(ctx, qKey.Consumers(), cons.ID()).Result()
+		if err != nil {
+			t.Fatalf("iteration %d: hexists consumers: %v", i, err)
+		}
+		if registered {
+			t.Errorf("iteration %d: orphaned consumer registration in queue %s", i, params.Name())
+		}
+
+		// Leave the queue active for the next iteration.
+		sm.Resume(ctx, params, nil)
 	}
 }
