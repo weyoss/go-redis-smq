@@ -10,6 +10,8 @@
 
 package eventbus
 
+import "sync"
+
 // Subscription represents a subscription to an event.
 // It allows the caller to stop receiving events.
 type Subscription interface {
@@ -23,18 +25,33 @@ type EventBus interface {
 	Subscribe(handler func(eventName string, args []interface{}), eventName string) (Subscription, error)
 }
 
-// userBus holds the currently configured public user event bus.
-var userBus EventBus
+// userBusMu guards userBus. SetUserBus is called rarely — once from
+// redissmq.InitUserEventBus, once from redissmq.ShutdownUserEventBus. UserBus
+// is called from every SubscribeXxx in the domain packages. An uncontended
+// RLock is a few nanoseconds, dwarfed by the Redis round-trip that follows in
+// every real call site.
+var (
+	userBusMu sync.RWMutex
+	userBus   EventBus
+)
 
 // SetUserBus sets the public user event bus used by public subscription
 // functions. It is intended to be called by the root redissmq package during
-// initialization.
+// initialization. Passing nil clears the bus.
+//
+// Safe for concurrent use with UserBus and with itself.
 func SetUserBus(bus EventBus) {
+	userBusMu.Lock()
+	defer userBusMu.Unlock()
 	userBus = bus
 }
 
 // UserBus returns the current public user event bus, or nil if not
 // configured.
+//
+// Safe for concurrent use with SetUserBus and with itself.
 func UserBus() EventBus {
+	userBusMu.RLock()
+	defer userBusMu.RUnlock()
 	return userBus
 }
