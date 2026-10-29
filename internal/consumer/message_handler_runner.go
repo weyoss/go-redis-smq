@@ -122,6 +122,12 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 		r.onQueueActive,
 	)
 
+	// Note: r.mu is NOT held for the duration of this loop. A concurrent
+	// Shutdown can cancel r.ctx and set r.instances = nil mid-iteration,
+	// after which mh.Run(r.ctx) will start an inert handler that is not
+	// tracked for shutdown. Tracked separately as the mid-setup shutdown
+	// race; C5's lock-discipline fix only makes the failure paths below
+	// race-free with respect to r.instances.
 	started := 0
 	for _, cfg := range configs {
 		if !r.isQueueActive(ctx, cfg.queue) {
@@ -137,7 +143,8 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 				"group", cfg.groupID,
 				"error", err,
 			)
-			r.shutdownLocked()
+			// Shutdown (not shutdownLocked): r.mu is not held here.
+			r.Shutdown()
 			return err
 		}
 		r.mu.Lock()
@@ -148,7 +155,8 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 
 	if started == 0 && len(configs) > 0 {
 		r.log.Error("all queues are non-operational")
-		r.shutdownLocked()
+		// Shutdown (not shutdownLocked): r.mu is not held here.
+		r.Shutdown()
 		return fmt.Errorf("consumer: all queues are non-operational")
 	}
 
@@ -158,12 +166,16 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 	return nil
 }
 
+// Shutdown stops the runner. Acquires r.mu; the caller must not hold it.
+// Safe to call multiple times and from any goroutine.
 func (r *MessageHandlerRunner) Shutdown() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shutdownLocked()
 }
 
+// shutdownLocked performs shutdown. The caller MUST hold r.mu. Prefer
+// Shutdown unless you are already inside a locked section.
 func (r *MessageHandlerRunner) shutdownLocked() {
 	if r.cancel != nil {
 		r.cancel()
