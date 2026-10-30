@@ -126,21 +126,29 @@ func TestConsumeTimeout_ForcedTimeout(t *testing.T) {
 	)
 
 	var handlerInvoked atomic.Bool
-	blockCh := make(chan struct{}) // never closed, handler blocks forever
+	blockCh := make(chan struct{}) // closed by cleanup so the handler can return
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		handlerInvoked.Store(true)
-		<-blockCh // ignore context and block forever
+		<-blockCh // ignore ctx during the test; unblocked by cleanup
 		return nil
 	})
 	cons.Run(ctx)
-	// The handler is stuck, so the consumer's dequeue loop cannot fetch new messages.
-	// We intentionally do NOT shut down this consumer.
+
+	// Cleanup order matters: close blockCh FIRST (letting the handler return),
+	// then Shutdown (which after C7 waits for the dequeue loop, so it would
+	// hang if the handler were still blocked). Without this, the stuck handler
+	// outlives the test and TestMain's redissmq.Shutdown() hangs forever
+	// because MessageHandler.beginShutdown's wg.Wait() has nothing to wait
+	// against — the loop can never exit while the handler ignores ctx.
+	t.Cleanup(func() {
+		close(blockCh)
+		cons.Shutdown()
+	})
 
 	// Wait for handler to be invoked.
 	time.Sleep(2 * time.Second)
 	if !handlerInvoked.Load() {
-		cons.Shutdown()
 		t.Fatal("handler was not invoked")
 	}
 
@@ -174,9 +182,11 @@ func TestConsumeTimeout_ForcedTimeout(t *testing.T) {
 		t.Fatal("did not capture the retried message")
 	}
 	if receivedMsg.MessageState.Attempts == 0 {
-		t.Errorf("expected attempts > 0 after forced timeout retry, got %d", receivedMsg.MessageState.Attempts)
+		t.Errorf("expected attempts > 0 after forced timeout retry, got %d",
+			receivedMsg.MessageState.Attempts)
 	}
-	t.Logf("Forced timeout: message retried successfully, attempts=%d", receivedMsg.MessageState.Attempts)
+	t.Logf("Forced timeout: message retried successfully, attempts=%d",
+		receivedMsg.MessageState.Attempts)
 }
 
 // Scenario: The ack/unack CAS race must never allow both paths to proceed for
