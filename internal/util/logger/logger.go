@@ -47,16 +47,36 @@ func currentConfig() Config {
 	}
 
 	c := appconfig.Get()
-	level := slog.Level(c.Logger.Options.LogLevel)
-	if level < slog.LevelDebug || level > slog.LevelError {
-		level = slog.LevelInfo
-	}
-
 	return Config{
 		Enabled:          c.Logger.Enabled,
-		Level:            level,
+		Level:            slogLevelFromInt(c.Logger.Options.LogLevel),
 		Colorize:         c.Logger.Options.Colorize,
 		IncludeTimestamp: c.Logger.Options.IncludeTimestamp,
+	}
+}
+
+// slogLevelFromInt maps the public config value (0=DEBUG, 1=INFO, 2=WARN,
+// 3=ERROR, per pkg/config) to slog.Level.
+//
+// The mapping is explicit because slog.Level's underlying values are
+// non-sequential (Debug=-4, Info=0, Warn=4, Error=8). A naive cast — the
+// previous behaviour — produced a completely different level than the
+// caller intended: LogLevel=0 became INFO (not DEBUG), and LogLevel=1/2/3
+// all resolved to "WARN and above."
+//
+// Values outside [0,3] are clamped to INFO (the documented default).
+func slogLevelFromInt(level int) slog.Level {
+	switch level {
+	case 0:
+		return slog.LevelDebug
+	case 1:
+		return slog.LevelInfo
+	case 2:
+		return slog.LevelWarn
+	case 3:
+		return slog.LevelError
+	default:
+		return slog.LevelInfo
 	}
 }
 
