@@ -29,6 +29,15 @@ const (
 	workerHeartbeatTTL = 30 * time.Second
 	// popTimeout is the blocking pop timeout used by the purge worker.
 	popTimeout = 1 * time.Second
+	// defaultRecoveryInterval is how often the purge worker scans
+	// ActivePurgeJobs for jobs whose worker is no longer alive.
+	//
+	// Tied to workerHeartbeatTTL: a live worker's heartbeat is refreshed every
+	// workerHeartbeatInterval (10s) and expires workerHeartbeatTTL (30s) after
+	// death. Scanning at the TTL cadence gives a worst-case recovery lag of
+	// 2 × TTL (60s) while costing nothing on the common case (LRange on an
+	// empty list).
+	defaultRecoveryInterval = workerHeartbeatTTL
 )
 
 // fetchBatch retrieves up to count message IDs from the given Redis key.

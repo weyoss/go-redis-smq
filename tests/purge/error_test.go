@@ -157,13 +157,14 @@ func TestError_CancelAlreadyCompleted(t *testing.T) {
 // Each job Lua script uses -1/-2/-3 with script-specific meanings. This test
 // seeds a job in each terminal state and confirms the error message from the
 // operation matches the actual state, not a fixed per-code string.
+//
+// Regression test for the pre-fix bug where runJobScript mapped
+// -1 → "already completed", -2 → "already failed", -3 → "already cancelled"
+// for every script, regardless of what the script actually meant.
 func TestPurgeErrors_ReturnCodeSemantics(t *testing.T) {
 	ctx := testutil.Setup(t)
 	js := internalqueue.NewPurgeJobStore()
 
-	// seedJob places a job in Redis with the given terminal status, bypassing
-	// the purge worker entirely. The job is never enqueued on PendingPurgeJobs,
-	// so the Init worker cannot pick it up or race the assertion.
 	seedJob := func(t *testing.T, name string, status publicqueue.PurgeJobStatus) string {
 		t.Helper()
 		params := publicqueue.MustQueueParams(name)
@@ -192,8 +193,6 @@ func TestPurgeErrors_ReturnCodeSemantics(t *testing.T) {
 		return jobID
 	}
 
-	// assertReports asserts that err's message mentions want and does not
-	// mention any of the other (wrong) terminal states.
 	assertReports := func(t *testing.T, err error, want string, wrongs ...string) {
 		t.Helper()
 		if err == nil {
@@ -211,39 +210,30 @@ func TestPurgeErrors_ReturnCodeSemantics(t *testing.T) {
 	}
 
 	t.Run("Complete after Failed reports 'failed'", func(t *testing.T) {
-		// complete-job.lua: -1 = already failed (not "already completed").
 		jobID := seedJob(t, "test-c3-complete-after-failed", publicqueue.PurgeJobFailed)
 		err := js.Complete(ctx, jobID, &publicqueue.PurgeJob{ID: jobID})
 		assertReports(t, err, "failed", "completed")
 	})
 
 	t.Run("Complete after Cancelled reports 'cancelled'", func(t *testing.T) {
-		// complete-job.lua: -2 = already cancelled (not "already failed").
 		jobID := seedJob(t, "test-c3-complete-after-cancelled", publicqueue.PurgeJobCanceled)
 		err := js.Complete(ctx, jobID, &publicqueue.PurgeJob{ID: jobID})
 		assertReports(t, err, "cancel", "failed")
 	})
 
 	t.Run("Fail after Cancelled reports 'cancelled'", func(t *testing.T) {
-		// fail-job.lua: -2 = already cancelled (not "already failed").
 		jobID := seedJob(t, "test-c3-fail-after-cancelled", publicqueue.PurgeJobCanceled)
 		err := js.Fail(ctx, jobID, &publicqueue.PurgeJob{ID: jobID})
 		assertReports(t, err, "cancel", "failed")
 	})
 
-	// The following two cases were already correct before the fix. Keeping them
-	// here documents the intended behaviour and catches regressions in the new
-	// per-script mapping.
-
 	t.Run("Cancel after Completed reports 'completed' (control)", func(t *testing.T) {
-		// cancel-job.lua: -1 = already completed (correct in old mapping too).
 		jobID := seedJob(t, "test-c3-cancel-after-completed", publicqueue.PurgeJobCompleted)
 		err := js.Cancel(ctx, jobID, &publicqueue.PurgeJob{ID: jobID})
 		assertReports(t, err, "completed", "failed")
 	})
 
 	t.Run("Start after Cancelled reports 'cancelled' (control)", func(t *testing.T) {
-		// start-job.lua: -3 = already cancelled (correct in old mapping too).
 		jobID := seedJob(t, "test-c3-start-after-cancelled", publicqueue.PurgeJobCanceled)
 		err := js.Start(ctx, jobID, "test-worker", &publicqueue.PurgeJob{ID: jobID})
 		assertReports(t, err, "cancel", "completed")

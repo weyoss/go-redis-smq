@@ -23,32 +23,6 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// Scenario: Handler receives message body
-func TestHandler_ReceivesMessage(t *testing.T) {
-	ctx := testutil.Setup(t)
-
-	params := queue.MustQueueParams("test-handler-receive")
-	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
-
-	prod := testutil.StartProducer(t, ctx)
-	prod.Produce(ctx, msg.New().SetBody("hello world").SetQueue(params))
-
-	var receivedBody string
-	cons := redissmq.NewConsumer()
-	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		receivedBody = m.Body.(string)
-		return nil
-	})
-	cons.Run(ctx)
-	defer cons.Shutdown()
-
-	time.Sleep(2 * time.Second)
-
-	if receivedBody != "hello world" {
-		t.Fatalf("body = %q, want %q", receivedBody, "hello world")
-	}
-}
-
 // Scenario: Handler returning error triggers retry
 func TestHandler_ErrorTriggersRetry(t *testing.T) {
 	ctx := testutil.Setup(t)
@@ -151,6 +125,35 @@ func TestHandler_ContextCancellation(t *testing.T) {
 	t.Logf("processed %d messages before cancellation", count)
 }
 
+// Scenario: Handler receives message body
+func TestHandler_ReceivesMessage(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-handler-receive")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	prod := testutil.StartProducer(t, ctx)
+	prod.Produce(ctx, msg.New().SetBody("hello world").SetQueue(params))
+
+	receivedBodyCh := make(chan string, 1)
+	cons := redissmq.NewConsumer()
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		receivedBodyCh <- m.Body.(string)
+		return nil
+	})
+	cons.Run(ctx)
+	defer cons.Shutdown()
+
+	select {
+	case body := <-receivedBodyCh:
+		if body != "hello world" {
+			t.Fatalf("body = %q, want %q", body, "hello world")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for handler")
+	}
+}
+
 // Scenario: Handler receives message metadata
 func TestHandler_MessageMetadata(t *testing.T) {
 	ctx := testutil.Setup(t)
@@ -165,26 +168,22 @@ func TestHandler_MessageMetadata(t *testing.T) {
 		SetTTL(5*time.Minute),
 	)
 
-	var receivedMsg *msg.Transferable
+	receivedMsgCh := make(chan *msg.Transferable, 1)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		receivedMsg = m
+		receivedMsgCh <- m
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	// Wait for consumer to start and process
-	for i := 0; i < 10; i++ {
-		if receivedMsg != nil {
-			break
-		}
-		time.Sleep(200 * time.Millisecond)
+	var receivedMsg *msg.Transferable
+	select {
+	case receivedMsg = <-receivedMsgCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for handler")
 	}
 
-	if receivedMsg == nil {
-		t.Fatal("no message received")
-	}
 	if receivedMsg.ID != ids[0] {
 		t.Errorf("id = %s, want %s", receivedMsg.ID, ids[0])
 	}

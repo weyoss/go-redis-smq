@@ -146,10 +146,16 @@ func (l *Lock) Acquire(ctx context.Context) error {
 		if ok {
 			l.acquired = true
 
-			// Start auto-refresh if configured
+			// Start auto-refresh if configured. The stop channel is passed
+			// as a parameter so refreshLoop never reads l.stopCh; only
+			// Acquire and Release (both under l.mu) touch that field.
+			// Each Acquire spawns a fresh channel; even if a later Acquire
+			// overwrites l.stopCh, the previous goroutine still holds its
+			// own reference and will exit when Release closes that channel.
 			if l.refresh > 0 {
-				l.stopCh = make(chan struct{})
-				go l.refreshLoop()
+				stopCh := make(chan struct{})
+				l.stopCh = stopCh
+				go l.refreshLoop(stopCh)
 			}
 
 			return nil
@@ -184,7 +190,9 @@ func (l *Lock) Release(ctx context.Context) error {
 		return nil
 	}
 
-	// Stop auto-refresh
+	// Stop auto-refresh. Closing the channel signals the goroutine to exit;
+	// it holds its own reference via the parameter, so nilling l.stopCh here
+	// is safe and does not race with the goroutine.
 	if l.stopCh != nil {
 		close(l.stopCh)
 		l.stopCh = nil
@@ -219,13 +227,19 @@ func (l *Lock) tryAcquire(ctx context.Context) (bool, error) {
 
 // refreshLoop periodically extends the lock TTL using the
 // extend-lock.lua script: PEXPIRE if owner matches.
-func (l *Lock) refreshLoop() {
+//
+// stopCh is the channel created by the Acquire call that spawned this
+// goroutine. Passing it as a parameter (instead of reading l.stopCh) means
+// the goroutine never touches a field that Release writes without holding
+// the mutex. The goroutine only reads l.acquired and l.ttl — the former
+// under l.mu, the latter immutable after construction.
+func (l *Lock) refreshLoop(stopCh <-chan struct{}) {
 	ticker := time.NewTicker(l.refresh)
 	defer ticker.Stop()
 
 	for {
 		select {
-		case <-l.stopCh:
+		case <-stopCh:
 			return
 		case <-ticker.C:
 			l.mu.Lock()

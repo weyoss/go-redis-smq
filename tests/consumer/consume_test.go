@@ -33,20 +33,20 @@ func TestConsume_SingleMessage(t *testing.T) {
 	prod := testutil.StartProducer(t, ctx)
 	ids, _ := prod.Produce(ctx, msg.New().SetBody("hello").SetQueue(params))
 
-	var receivedID string
+	receivedIDCh := make(chan string, 1)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		receivedID = m.ID
+		receivedIDCh <- m.ID
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	for i := 0; i < 20; i++ {
-		if receivedID != "" {
-			break
-		}
-		time.Sleep(100 * time.Millisecond)
+	var receivedID string
+	select {
+	case receivedID = <-receivedIDCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for handler")
 	}
 
 	if receivedID != ids[0] {

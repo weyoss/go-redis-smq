@@ -85,7 +85,7 @@ func (bu *BatchUnacker) Unack(msg *internalMessage.Envelope, cause consumer.Unac
 	bu.buffer = append(bu.buffer, unackEntry{msg: msg, cause: cause})
 
 	if bu.timer == nil {
-		bu.timer = time.AfterFunc(bu.cfg.BatchTimeout, bu.flush)
+		bu.timer = time.AfterFunc(bu.cfg.BatchTimeout, bu.flushFromTimer)
 	}
 
 	if len(bu.buffer) >= bu.cfg.BatchSize {
@@ -124,6 +124,15 @@ func (bu *BatchUnacker) Shutdown() {
 
 	bu.flush()
 	bu.wg.Wait()
+}
+
+// flushFromTimer is the time.AfterFunc callback. It must acquire bu.mu
+// because flush assumes the caller holds it — every other caller (Unack,
+// Shutdown, Flush) does.
+func (bu *BatchUnacker) flushFromTimer() {
+	bu.mu.Lock()
+	defer bu.mu.Unlock()
+	bu.flush()
 }
 
 // flush sends the current buffer to the unacknowledger in a separate

@@ -37,21 +37,29 @@ func TestComplex_DifferentDelays(t *testing.T) {
 	prod.Produce(ctx, msg.New().SetBody("6s").SetQueue(params).SetScheduledDelay(6*time.Second))
 	prod.Produce(ctx, msg.New().SetBody("9s").SetQueue(params).SetScheduledDelay(9*time.Second))
 
-	var received []string
+	receivedCh := make(chan string, 3)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		received = append(received, m.Body.(string))
+		receivedCh <- m.Body.(string)
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	time.Sleep(15 * time.Second)
+	// Wait for all 3 messages. Replaces time.Sleep(15s) — completes as soon as
+	// the slowest (9s) message arrives, typically in ~9s not 15s. Race-free.
+	received := make([]string, 0, 3)
+	deadline := time.After(15 * time.Second)
+	for len(received) < 3 {
+		select {
+		case body := <-receivedCh:
+			received = append(received, body)
+		case <-deadline:
+			t.Fatalf("timeout: received %d/3 messages: %v", len(received), received)
+		}
+	}
 
 	t.Logf("received: %v", received)
-	if len(received) != 3 {
-		t.Fatalf("received %d messages, want 3", len(received))
-	}
 
 	// Verify order: 3s before 6s before 9s
 	order := make(map[string]int)
@@ -159,21 +167,34 @@ func TestComplex_MixedImmediateAndScheduled(t *testing.T) {
 	// Immediate again
 	prod.Produce(ctx, msg.New().SetBody("immediate-3").SetQueue(params))
 
-	var received []string
+	receivedCh := make(chan string, 4)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		received = append(received, m.Body.(string))
+		receivedCh <- m.Body.(string)
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	time.Sleep(10 * time.Second)
+	// 4 messages produced: 3 immediate + 1 delayed by 3s. Wait for all 4.
+	// Replaces time.Sleep(10s) — completes in ~3s. Race-free.
+	received := make([]string, 0, 4)
+	deadline := time.After(10 * time.Second)
+	for len(received) < 4 {
+		select {
+		case body := <-receivedCh:
+			received = append(received, body)
+		case <-deadline:
+			// Slow path: allow fewer messages (mirrors the original lenient assertion)
+			if len(received) >= 3 {
+				t.Logf("received %d/4 (>= 3 required): %v", len(received), received)
+				return
+			}
+			t.Fatalf("received only %d/4 messages: %v", len(received), received)
+		}
+	}
 
 	t.Logf("received: %v", received)
-	if len(received) < 3 {
-		t.Errorf("received %d messages, want >= 3", len(received))
-	}
 }
 
 // Scenario: Browse scheduled messages with pagination

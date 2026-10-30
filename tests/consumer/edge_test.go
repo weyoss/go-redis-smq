@@ -13,6 +13,7 @@ package consumer_test
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -209,6 +210,37 @@ func TestEdge_ShutdownDuringProcessing(t *testing.T) {
 	)
 }
 
+// Scenario: Run's "all queues non-operational" failure path returns cleanly
+// and leaves the consumer safely shut down.
+//
+// Smoke test, not a regression test for C5: it passes both before and after
+// the lock-discipline fix. It documents the intended failure semantics.
+func TestEdge_RunFailurePath_AllQueuesInactive(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := publicqueue.MustQueueParams("test-c5-all-inactive")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	if _, err := redissmq.NewStateManager().Stop(ctx, params, nil); err != nil {
+		t.Fatalf("stop queue: %v", err)
+	}
+
+	cons := redissmq.NewConsumer()
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error { return nil })
+
+	err := cons.Run(ctx)
+	if err == nil {
+		cons.Shutdown()
+		t.Fatal("expected error: all queues are non-operational")
+	}
+	if !strings.Contains(err.Error(), "non-operational") {
+		t.Errorf("unexpected error: %v", err)
+	}
+
+	cons.Shutdown()
+	cons.Shutdown()
+}
+
 // Scenario: Zero-length message body
 func TestEdge_EmptyMessageBody(t *testing.T) {
 	ctx := testutil.Setup(t)
@@ -219,19 +251,22 @@ func TestEdge_EmptyMessageBody(t *testing.T) {
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("").SetQueue(params))
 
-	var received string
+	receivedCh := make(chan string, 1)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		received = m.Body.(string)
+		receivedCh <- m.Body.(string)
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	time.Sleep(2 * time.Second)
-
-	if received != "" {
-		t.Logf("received empty body: %q", received)
+	select {
+	case received := <-receivedCh:
+		if received != "" {
+			t.Logf("received empty body: %q", received)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for handler")
 	}
 }
 
@@ -242,7 +277,6 @@ func TestEdge_LargeMessageBody(t *testing.T) {
 	params := publicqueue.MustQueueParams("test-edge-large-body")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// 10KB message
 	largeBody := make([]byte, 10000)
 	for i := range largeBody {
 		largeBody[i] = 'x'
@@ -254,19 +288,22 @@ func TestEdge_LargeMessageBody(t *testing.T) {
 		t.Fatalf("produce: %v", err)
 	}
 
-	var receivedLen int
+	receivedLenCh := make(chan int, 1)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		receivedLen = len(m.Body.(string))
+		receivedLenCh <- len(m.Body.(string))
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	time.Sleep(2 * time.Second)
-
-	if receivedLen != 10000 {
-		t.Errorf("body length = %d, want 10000", receivedLen)
+	select {
+	case receivedLen := <-receivedLenCh:
+		if receivedLen != 10000 {
+			t.Errorf("body length = %d, want 10000", receivedLen)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for handler")
 	}
 	if len(ids) != 1 {
 		t.Errorf("expected 1 message ID, got %d", len(ids))

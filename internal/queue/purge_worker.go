@@ -23,6 +23,20 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
 )
 
+// PurgeWorkerOption configures a PurgeWorker.
+type PurgeWorkerOption func(*PurgeWorker)
+
+// WithRecoveryInterval overrides the interval at which the worker scans
+// ActivePurgeJobs for jobs whose worker is no longer alive. Set to a
+// non-positive value to disable periodic recovery (useful in tests that
+// isolate startup recovery). Primarily for tests; production should use the
+// default.
+func WithRecoveryInterval(d time.Duration) PurgeWorkerOption {
+	return func(w *PurgeWorker) {
+		w.recoveryInterval = d
+	}
+}
+
 // PurgeWorker is a background worker that processes purge jobs.
 //
 // It uses its own dedicated Redis client to avoid blocking the shared pool
@@ -41,14 +55,21 @@ type PurgeWorker struct {
 	started bool
 	mu      sync.Mutex
 	log     *slog.Logger
+
+	recoveryInterval time.Duration
 }
 
 // NewPurgeWorker creates a new purge worker for the given manager.
-func NewPurgeWorker(manager *PurgeManager) *PurgeWorker {
-	return &PurgeWorker{
-		manager: manager,
-		log:     logger.New("purge", "worker", manager.workerID),
+func NewPurgeWorker(manager *PurgeManager, opts ...PurgeWorkerOption) *PurgeWorker {
+	w := &PurgeWorker{
+		manager:          manager,
+		log:              logger.New("purge", "worker", manager.workerID),
+		recoveryInterval: defaultRecoveryInterval,
 	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w
 }
 
 // Start launches the purge worker and returns a stop function.
@@ -109,16 +130,23 @@ func (w *PurgeWorker) stop() {
 	w.started = false
 }
 
-// work is the main loop. It recovers stuck jobs, starts the heartbeat, and
-// then continuously acquires and executes pending purge jobs.
+// work is the main loop. It recovers stuck jobs at startup, starts the
+// heartbeat and periodic-recovery goroutines, then continuously acquires and
+// executes pending purge jobs.
 func (w *PurgeWorker) work(ctx context.Context) {
-	// Recover jobs left in processing state by a previous worker that died.
+	// Recover jobs left in processing state by a previous worker that died
+	// before this worker started.
 	w.manager.recoverStuckJobs(ctx)
 
 	// Heartbeat keeps the worker alive in Redis.
 	go w.heartbeatLoop(ctx)
 
-	w.log.Info("purge worker started")
+	// Periodic recovery catches jobs whose worker died AFTER startup. Without
+	// this, a crash mid-purge would leave the queue LOCKED indefinitely on
+	// single-node deployments until the process restarts.
+	go w.recoveryLoop(ctx)
+
+	w.log.Info("purge worker started", "recoveryInterval", w.recoveryInterval)
 
 	for {
 		select {
@@ -161,6 +189,27 @@ func (w *PurgeWorker) heartbeatLoop(ctx context.Context) {
 			if err := redisClient.Client().Set(ctx, key, "1", workerHeartbeatTTL).Err(); err != nil {
 				w.log.Error("heartbeat failed", "error", err)
 			}
+		}
+	}
+}
+
+// recoveryLoop periodically scans ActivePurgeJobs for jobs whose worker is no
+// longer alive and re-queues them. See defaultRecoveryInterval for the cadence
+// rationale.
+func (w *PurgeWorker) recoveryLoop(ctx context.Context) {
+	if w.recoveryInterval <= 0 {
+		return
+	}
+
+	ticker := time.NewTicker(w.recoveryInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.manager.recoverStuckJobs(ctx)
 		}
 	}
 }

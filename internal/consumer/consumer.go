@@ -112,8 +112,14 @@ func (cons *Consumer) Run(ctx context.Context) error {
 	consumerEvents.PublishGoingUp(ctx, cons.id)
 
 	cons.ctx, cons.cancel = context.WithCancel(ctx)
+	// Capture cons.ctx into a local variable: the shutdown goroutine below
+	// must observe the ctx created by THIS Run, not whatever cons.ctx points
+	// to at the moment the goroutine executes. A subsequent Run (after
+	// Shutdown) overwrites cons.ctx under cons.mu; without the local capture
+	// the old goroutine could read the new ctx — a benign but flagged race.
+	shutdownCtx := cons.ctx
 
-	if err := cons.runner.Run(cons.ctx); err != nil {
+	if err := cons.runner.Run(shutdownCtx); err != nil {
 		cons.log.Error("failed to run handlers", "error", err)
 		cons.cancel()
 		cons.cancel = nil
@@ -126,12 +132,12 @@ func (cons *Consumer) Run(ctx context.Context) error {
 		ID:  cons.id,
 		TTL: cons.options.HeartbeatTTL,
 	})
-	cons.hb.Start(cons.ctx)
+	cons.hb.Start(shutdownCtx)
 
 	cons.running = true
 
 	go func() {
-		<-cons.ctx.Done()
+		<-shutdownCtx.Done()
 		cons.Shutdown()
 	}()
 
@@ -140,7 +146,7 @@ func (cons *Consumer) Run(ctx context.Context) error {
 		"queues", len(cons.runner.Queues()),
 	)
 
-	consumerEvents.PublishUp(cons.ctx, cons.id)
+	consumerEvents.PublishUp(shutdownCtx, cons.id)
 
 	return nil
 }

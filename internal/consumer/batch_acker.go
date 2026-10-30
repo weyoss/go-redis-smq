@@ -81,7 +81,7 @@ func (ba *BatchAcker) Ack(messageID string) {
 	ba.buffer = append(ba.buffer, messageID)
 
 	if ba.timer == nil {
-		ba.timer = time.AfterFunc(ba.cfg.BatchTimeout, ba.flush)
+		ba.timer = time.AfterFunc(ba.cfg.BatchTimeout, ba.flushFromTimer)
 	}
 
 	if len(ba.buffer) >= ba.cfg.BatchSize {
@@ -102,7 +102,7 @@ func (ba *BatchAcker) Flush() {
 }
 
 // Shutdown stops the batch acker and flushes any pending acknowledgments.
-// It waits for all in‑flight acknowledgments to complete.
+// It waits for all in-flight acknowledgments to complete.
 func (ba *BatchAcker) Shutdown() {
 	ba.mu.Lock()
 	defer ba.mu.Unlock()
@@ -120,6 +120,15 @@ func (ba *BatchAcker) Shutdown() {
 
 	ba.flush()
 	ba.wg.Wait()
+}
+
+// flushFromTimer is the time.AfterFunc callback. It must acquire ba.mu
+// because flush assumes the caller holds it — every other caller (Ack,
+// Shutdown, Flush) does.
+func (ba *BatchAcker) flushFromTimer() {
+	ba.mu.Lock()
+	defer ba.mu.Unlock()
+	ba.flush()
 }
 
 func (ba *BatchAcker) flush() {

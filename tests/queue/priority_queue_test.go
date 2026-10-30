@@ -76,22 +76,28 @@ func TestPriorityQueue_PriorityOrder(t *testing.T) {
 	prod.Produce(ctx, msg.New().SetBody("highest").SetQueue(params).SetPriority(msg.PriorityHighest)) // 0
 
 	// Consume and record order
-	var order []string
+	orderCh := make(chan string, 4)
 	cons := redissmq.NewConsumer()
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
-		order = append(order, m.Body.(string))
+		orderCh <- m.Body.(string)
 		return nil
 	})
 	cons.Run(ctx)
 	defer cons.Shutdown()
 
-	time.Sleep(2 * time.Second)
-
-	if len(order) != 4 {
-		t.Fatalf("consumed %d messages, want 4", len(order))
+	// Wait for all 4 messages to be consumed, preserving FIFO order via channel.
+	// Replaces time.Sleep(2s) — faster, deterministic, and race-free.
+	order := make([]string, 0, 4)
+	deadline := time.After(5 * time.Second)
+	for len(order) < 4 {
+		select {
+		case body := <-orderCh:
+			order = append(order, body)
+		case <-deadline:
+			t.Fatalf("timeout: received %d/4 messages: %v", len(order), order)
+		}
 	}
 
-	// Highest priority (0) should be first, lowest (5) last
 	expectedOrder := []string{"highest", "high", "normal", "low"}
 	for i, expected := range expectedOrder {
 		if order[i] != expected {

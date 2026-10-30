@@ -13,11 +13,10 @@ package purge_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
-	goredis "github.com/redis/go-redis/v9"
+	"github.com/google/uuid"
 	redissmq "github.com/weyoss/go-redis-smq"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
@@ -27,43 +26,188 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-// Scenario: Stuck job in PROCESSING is recovered to PENDING
-func TestRecovery_StuckJobRecovered(t *testing.T) {
-	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
+// Scenario: Stuck job in PROCESSING is recovered to PENDING at worker startup.
+//
+// The job is seeded directly into Redis (PurgeJobs hash, ActivePurgeJobs list,
+// JobWorker key) — NOT via qm.PurgeQueue. PurgeQueue LPUSHes onto
+// PendingPurgeJobs, where the Init worker (started by testutil.RunTestsWithRedis)
+// is blocked on BRPOPLPUSH; it races the test to acquire the job, and its
+// Complete call can overwrite the test's seeded PROCESSING status with COMPLETED
+// before the test can verify it. Seeding directly bypasses that entirely.
+//
+// Regression test for the pre-fix bug where recoverStuckJobs used
+// LoadSetMembers (SMEMBERS) on ActivePurgeJobs — a Redis list — which returned
+// WRONGTYPE and silently disabled startup recovery.
+func TestRecovery_SeededStuckJobIsRecovered(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
 	defer cancel()
 
-	params := publicqueue.MustQueueParams("test-recovery-stuck")
+	params := publicqueue.MustQueueParams("test-recovery-seeded-stuck")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	prod := testutil.StartProducer(t, ctx)
-	for i := 0; i < 10; i++ {
-		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+	qm := redissmq.NewQueueManager()
+	jobID := uuid.New().String()
+
+	if _, err := redissmq.NewStateManager().Lock(ctx, params,
+		publicqueue.LockOwnerPurgeJob, jobID, nil); err != nil {
+		t.Fatalf("lock queue: %v", err)
 	}
 
-	qm := redissmq.NewQueueManager()
+	job := &publicqueue.PurgeJob{
+		ID: jobID,
+		Payload: publicqueue.PurgeJobPayload{
+			Queue:       params,
+			MessageType: publicqueue.BrowsePending,
+		},
+		Status:    publicqueue.PurgeJobProcessing,
+		BatchSize: 1000,
+		DelayMs:   100,
+		CreatedAt: time.Now().UnixMilli(),
+		StartedAt: time.Now().UnixMilli(),
+	}
+	data, err := json.Marshal(job)
+	if err != nil {
+		t.Fatalf("marshal job: %v", err)
+	}
 
-	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	client := internalredis.Client()
+	if err := client.HSet(ctx, keys.System{}.PurgeJobs(), jobID, string(data)).Err(); err != nil {
+		t.Fatalf("seed PurgeJobs hash: %v", err)
+	}
+	if err := client.LPush(ctx, keys.System{}.ActivePurgeJobs(), jobID).Err(); err != nil {
+		t.Fatalf("seed ActivePurgeJobs list: %v", err)
+	}
+	if err := client.Set(ctx, keys.System{}.JobWorker(jobID), "dead-worker", 0).Err(); err != nil {
+		t.Fatalf("seed JobWorker key: %v", err)
+	}
+
+	seeded, err := qm.GetPurgeJob(ctx, jobID)
+	if err != nil {
+		t.Fatalf("get seeded job: %v", err)
+	}
+	if seeded.Status != publicqueue.PurgeJobProcessing {
+		t.Fatalf("seed failed: job status = %s, want PROCESSING", seeded.Status.String())
+	}
+
+	worker := internalqueue.NewPurgeWorker(internalqueue.NewManager().Purge())
+	stop := worker.Start(ctx)
+	defer stop()
 
 	deadline := time.After(15 * time.Second)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-deadline:
-			t.Fatal("timeout waiting for job completion")
-		default:
-			job, err := qm.GetPurgeJob(ctx, jobID)
+			final, _ := qm.GetPurgeJob(ctx, jobID)
+			status := "unknown"
+			if final != nil {
+				status = final.Status.String()
+			}
+			t.Fatalf("timeout: job status = %s (recovery never ran)", status)
+		case <-ticker.C:
+			j, err := qm.GetPurgeJob(ctx, jobID)
 			if err != nil {
-				t.Fatalf("get job: %v", err)
+				continue
 			}
-			if job.Status == publicqueue.PurgeJobCompleted {
-				t.Logf("job completed: purged=%d", job.Meta.Purged)
+			switch j.Status {
+			case publicqueue.PurgeJobCompleted:
 				return
+			case publicqueue.PurgeJobFailed:
+				t.Fatalf("job failed after recovery: %s", j.Error)
 			}
-			if job.Status == publicqueue.PurgeJobFailed {
-				t.Fatalf("job failed: %s", job.Error)
-			}
-			time.Sleep(500 * time.Millisecond)
 		}
 	}
+}
+
+// Scenario: A job whose worker crashes AFTER startup is recovered by the
+// periodic recovery loop, without requiring a worker restart.
+//
+// Regression test for H12: recoverStuckJobs ran only at worker startup, so a
+// worker that crashed mid-purge left its job in ActivePurgeJobs — and the
+// queue LOCKED — until the process restarted. The periodic scan closes that
+// window.
+//
+// The test starts a worker with a short recovery interval, waits for startup
+// recovery to finish, THEN seeds a stuck job. Seeding after startup recovery
+// is what isolates the periodic path — startup recovery can't see the job
+// because it already ran.
+func TestRecovery_PeriodicScanCatchesStuckJob(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 25*time.Second)
+	defer cancel()
+
+	params := publicqueue.MustQueueParams("test-recovery-periodic")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	manager := internalqueue.NewManager().Purge()
+	worker := internalqueue.NewPurgeWorker(manager,
+		internalqueue.WithRecoveryInterval(300*time.Millisecond))
+	stop := worker.Start(ctx)
+	defer stop()
+
+	// Startup recovery is synchronous at the top of work(); with an empty
+	// ActivePurgeJobs it completes in microseconds. 500ms is generous.
+	time.Sleep(500 * time.Millisecond)
+
+	qm := redissmq.NewQueueManager()
+	jobID := uuid.New().String()
+
+	if _, err := redissmq.NewStateManager().Lock(ctx, params,
+		publicqueue.LockOwnerPurgeJob, jobID, nil); err != nil {
+		t.Fatalf("lock queue: %v", err)
+	}
+
+	job := &publicqueue.PurgeJob{
+		ID: jobID,
+		Payload: publicqueue.PurgeJobPayload{
+			Queue:       params,
+			MessageType: publicqueue.BrowsePending,
+		},
+		Status:    publicqueue.PurgeJobProcessing,
+		BatchSize: 1000,
+		DelayMs:   100,
+		CreatedAt: time.Now().UnixMilli(),
+		StartedAt: time.Now().UnixMilli(),
+	}
+	data, err := json.Marshal(job)
+	if err != nil {
+		t.Fatalf("marshal job: %v", err)
+	}
+
+	client := internalredis.Client()
+	if err := client.HSet(ctx, keys.System{}.PurgeJobs(), jobID, string(data)).Err(); err != nil {
+		t.Fatalf("seed PurgeJobs hash: %v", err)
+	}
+	if err := client.LPush(ctx, keys.System{}.ActivePurgeJobs(), jobID).Err(); err != nil {
+		t.Fatalf("seed ActivePurgeJobs list: %v", err)
+	}
+	if err := client.Set(ctx, keys.System{}.JobWorker(jobID), "dead-worker", 0).Err(); err != nil {
+		t.Fatalf("seed JobWorker key: %v", err)
+	}
+
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		j, err := qm.GetPurgeJob(ctx, jobID)
+		if err != nil {
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		switch j.Status {
+		case publicqueue.PurgeJobCompleted:
+			return
+		case publicqueue.PurgeJobFailed:
+			t.Fatalf("recovered job failed: %s", j.Error)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+
+	final, _ := qm.GetPurgeJob(ctx, jobID)
+	status := "unknown"
+	if final != nil {
+		status = final.Status.String()
+	}
+	t.Fatalf("timeout: job status = %s (periodic recovery never ran)", status)
 }
 
 // Scenario: Worker heartbeat keeps job alive during processing
@@ -94,44 +238,6 @@ func TestRecovery_HeartbeatKeepsAlive(t *testing.T) {
 	}
 
 	t.Logf("job status after 3s: %s, purged: %d", job.Status.String(), job.Meta.Purged)
-}
-
-// Scenario: Recovery happens on Work() startup
-func TestRecovery_OnStartup(t *testing.T) {
-	ctx, cancel := context.WithTimeout(testutil.Setup(t), 20*time.Second)
-	defer cancel()
-
-	params := publicqueue.MustQueueParams("test-recovery-startup")
-	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
-
-	prod := testutil.StartProducer(t, ctx)
-	for i := 0; i < 10; i++ {
-		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
-	}
-
-	qm := redissmq.NewQueueManager()
-	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
-
-	deadline := time.After(15 * time.Second)
-	for {
-		select {
-		case <-deadline:
-			t.Fatal("timeout waiting for job completion")
-		default:
-			job, err := qm.GetPurgeJob(ctx, jobID)
-			if err != nil {
-				t.Fatalf("get job: %v", err)
-			}
-			if job.Status == publicqueue.PurgeJobCompleted {
-				t.Logf("job completed after recovery: purged=%d", job.Meta.Purged)
-				return
-			}
-			if job.Status == publicqueue.PurgeJobFailed {
-				t.Fatalf("job failed: %s", job.Error)
-			}
-			time.Sleep(500 * time.Millisecond)
-		}
-	}
 }
 
 // Scenario: Completed jobs are not recovered
@@ -241,96 +347,6 @@ func TestRecovery_QueueUnlockedAfterCompletion(t *testing.T) {
 				t.Fatalf("job failed: %s", job.Error)
 			}
 			time.Sleep(500 * time.Millisecond)
-		}
-	}
-}
-
-// Scenario: A job left in PROCESSING (worker crashed) is recovered by a fresh
-// worker's startup scan, even though the job was never acquired via BRPOPLPUSH.
-func TestRecovery_SeededStuckJobIsRecovered(t *testing.T) {
-	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
-	defer cancel()
-
-	params := publicqueue.MustQueueParams("test-recovery-seeded-stuck")
-	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
-
-	// 1. Enqueue a real purge job (locks the queue, job status = PENDING).
-	qm := redissmq.NewQueueManager()
-	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
-	if err != nil {
-		t.Fatalf("enqueue purge job: %v", err)
-	}
-
-	// 2. Simulate a worker that acquired the job and then crashed:
-	//    - Move the job from Pending → Active (as BRPOPLPUSH would).
-	//    - Mark it PROCESSING in the job hash (as start-job.lua would).
-	//    - Do NOT write the JobWorker key or WorkerHeartbeat — the worker is dead.
-	client := internalredis.Client()
-	if err := client.RPopLPush(
-		ctx,
-		keys.System{}.PendingPurgeJobs(),
-		keys.System{}.ActivePurgeJobs(),
-	).Err(); err != nil && !errors.Is(err, goredis.Nil) {
-		t.Fatalf("seed rpoplpush: %v", err)
-	}
-
-	job, err := qm.GetPurgeJob(ctx, jobID)
-	if err != nil {
-		t.Fatalf("get seeded job: %v", err)
-	}
-	job.Status = publicqueue.PurgeJobProcessing
-	data, err := json.Marshal(job)
-	if err != nil {
-		t.Fatalf("marshal seeded job: %v", err)
-	}
-	if err := client.HSet(ctx, keys.System{}.PurgeJobs(), jobID, string(data)).Err(); err != nil {
-		t.Fatalf("seed hset: %v", err)
-	}
-
-	// 3. Verify the seed landed correctly.
-	activeLen, err := client.LLen(ctx, keys.System{}.ActivePurgeJobs()).Result()
-	if err != nil {
-		t.Fatalf("llen active: %v", err)
-	}
-	if activeLen != 1 {
-		t.Fatalf("seed failed: active list length = %d, want 1", activeLen)
-	}
-	seeded, _ := qm.GetPurgeJob(ctx, jobID)
-	if seeded.Status != publicqueue.PurgeJobProcessing {
-		t.Fatalf("seed failed: job status = %s, want PROCESSING", seeded.Status.String())
-	}
-
-	// 4. Start a fresh worker. Its startup recoverStuckJobs runs BEFORE its
-	//    acquire loop, so the seeded job must be recovered to PENDING, then
-	//    picked up and completed by the worker's normal acquire/execute path.
-	//
-	//    If C1 is present, recoverStuckJobs logs WRONGTYPE at DEBUG (hidden),
-	//    the job stays PROCESSING forever, and the loop below times out.
-	worker := internalqueue.NewPurgeWorker(internalqueue.NewManager().Purge())
-	stop := worker.Start(ctx)
-	defer stop()
-
-	// 5. Wait for the job to reach a terminal state.
-	deadline := time.After(20 * time.Second)
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-deadline:
-			final, _ := qm.GetPurgeJob(ctx, jobID)
-			t.Fatalf("timeout: job status = %s (recovery never ran)", final.Status.String())
-		case <-ticker.C:
-			j, err := qm.GetPurgeJob(ctx, jobID)
-			if err != nil {
-				continue
-			}
-			switch j.Status {
-			case publicqueue.PurgeJobCompleted:
-				return // recovery + processing both ran
-			case publicqueue.PurgeJobFailed:
-				t.Fatalf("job failed after recovery: %s", j.Error)
-			}
 		}
 	}
 }

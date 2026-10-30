@@ -12,11 +12,15 @@ package purge_test
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
-	"github.com/weyoss/go-redis-smq"
+	"github.com/google/uuid"
+	redissmq "github.com/weyoss/go-redis-smq"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
+	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -54,7 +58,6 @@ func TestCancel_ProcessingJob(t *testing.T) {
 	params := publicqueue.MustQueueParams("test-cancel-processing")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Produce many messages so processing takes time
 	prod := testutil.StartProducer(t, ctx)
 	for i := 0; i < 5000; i++ {
 		prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
@@ -63,10 +66,8 @@ func TestCancel_ProcessingJob(t *testing.T) {
 	qm := redissmq.NewQueueManager()
 	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
-	// Wait for job to start processing
 	time.Sleep(2 * time.Second)
 
-	// Cancel while processing
 	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Fatalf("cancel: %v", err)
@@ -105,10 +106,8 @@ func TestCancel_UnlocksQueue(t *testing.T) {
 	qm := redissmq.NewQueueManager()
 	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
-	// Cancel
 	qm.CancelPurgeJob(ctx, params, jobID)
 
-	// Queue should be unlocked
 	sm := redissmq.NewStateManager()
 	transition, err := sm.Current(ctx, params)
 	if err != nil {
@@ -132,7 +131,6 @@ func TestCancel_Idempotent(t *testing.T) {
 	qm := redissmq.NewQueueManager()
 	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 
-	// Cancel multiple times
 	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err != nil {
 		t.Fatalf("first cancel: %v", err)
@@ -151,7 +149,6 @@ func TestCancel_AlreadyCompleted(t *testing.T) {
 	params := publicqueue.MustQueueParams("test-cancel-completed")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	// Enqueue and cancel a job (no worker to process it, so it's pending)
 	prod := testutil.StartProducer(t, ctx)
 	prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
 
@@ -159,7 +156,6 @@ func TestCancel_AlreadyCompleted(t *testing.T) {
 	jobID, _ := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
 	qm.CancelPurgeJob(ctx, params, jobID)
 
-	// Try to cancel again
 	err := qm.CancelPurgeJob(ctx, params, jobID)
 	if err == nil {
 		t.Log("cancel of already-canceled job succeeded (idempotent)")
@@ -170,33 +166,51 @@ func TestCancel_AlreadyCompleted(t *testing.T) {
 
 // Scenario: A stale SaveProgress (in-memory job struct still says Processing)
 // must not clobber a Cancel that landed in the meantime.
+//
+// Regression test for the pre-fix bug where PurgeJobStore.Save did an
+// unconditional HSET of the whole job blob, resurrecting the job as Processing
+// after Cancel had already marked it Canceled.
+//
+// The job is seeded directly into Redis with PROCESSING status — NOT via
+// qm.PurgeQueue. PurgeQueue LPUSHes onto PendingPurgeJobs, where the Init
+// worker is blocked on BRPOPLPUSH; it can race the test and Complete the job
+// before the test can drive its own state transitions.
 func TestCancel_StaleSaveDoesNotClobberStatus(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	params := publicqueue.MustQueueParams("test-cancel-stale-save")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
-	qm := redissmq.NewQueueManager()
-
-	// 1. Enqueue a job — status is PENDING.
-	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
-	if err != nil {
-		t.Fatalf("enqueue: %v", err)
+	jobID := uuid.New().String()
+	if _, err := redissmq.NewStateManager().Lock(ctx, params,
+		publicqueue.LockOwnerPurgeJob, jobID, nil); err != nil {
+		t.Fatalf("lock queue: %v", err)
 	}
 
-	// 2. Transition to PROCESSING (real Lua script via the store).
+	job := &publicqueue.PurgeJob{
+		ID: jobID,
+		Payload: publicqueue.PurgeJobPayload{
+			Queue:       params,
+			MessageType: publicqueue.BrowsePending,
+		},
+		Status:    publicqueue.PurgeJobProcessing,
+		BatchSize: 1000,
+		DelayMs:   1000,
+		CreatedAt: time.Now().UnixMilli(),
+		StartedAt: time.Now().UnixMilli(),
+	}
+	data, err := json.Marshal(job)
+	if err != nil {
+		t.Fatalf("marshal job: %v", err)
+	}
+	if err := internalredis.Client().
+		HSet(ctx, keys.System{}.PurgeJobs(), jobID, string(data)).Err(); err != nil {
+		t.Fatalf("seed job: %v", err)
+	}
+
 	js := internalqueue.NewPurgeJobStore()
-	job, err := js.Get(ctx, jobID)
-	if err != nil {
-		t.Fatalf("get job: %v", err)
-	}
-	job.Status = publicqueue.PurgeJobProcessing
-	job.StartedAt = time.Now().UnixMilli()
-	if err := js.Start(ctx, jobID, "test-worker", job); err != nil {
-		t.Fatalf("start job: %v", err)
-	}
 
-	// 3. Simulate one batch: save progress, then verify it landed.
+	// 1. Save progress while status is PROCESSING — accepted.
 	job.Meta = &publicqueue.PurgeJobMeta{Purged: 100}
 	updated, err := js.SaveProgress(ctx, job)
 	if err != nil {
@@ -206,14 +220,12 @@ func TestCancel_StaleSaveDoesNotClobberStatus(t *testing.T) {
 		t.Fatalf("save progress (batch 1) unexpectedly rejected")
 	}
 
-	// 4. Cancel the job via the public API (real Cancel path, unlocks queue).
-	if err := qm.CancelPurgeJob(ctx, params, jobID); err != nil {
+	// 2. Cancel via the public API.
+	if err := redissmq.NewQueueManager().CancelPurgeJob(ctx, params, jobID); err != nil {
 		t.Fatalf("cancel: %v", err)
 	}
 
-	// 5. Now simulate a stale in-memory job (Status still PROCESSING, purged=200)
-	//    trying to save progress. This is exactly what purgeMessages would do
-	//    with a job captured before Cancel landed.
+	// 3. Stale save must be rejected.
 	job.Meta.Purged = 200
 	updated, err = js.SaveProgress(ctx, job)
 	if err != nil {
@@ -224,7 +236,7 @@ func TestCancel_StaleSaveDoesNotClobberStatus(t *testing.T) {
 			"accepted and would have clobbered the Canceled status")
 	}
 
-	// 6. Verify Redis still has the Canceled status and the pre-Cancel progress.
+	// 4. Verify status and progress are preserved.
 	final, err := js.Get(ctx, jobID)
 	if err != nil {
 		t.Fatalf("get final: %v", err)

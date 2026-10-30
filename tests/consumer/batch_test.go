@@ -213,9 +213,6 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 
 	var handlerStarted, handlerFinished atomic.Bool
 
-	// BatchSize=100, BatchTimeout=30s: nothing flushes on its own. The only
-	// flush is the one triggered by Shutdown — so if it doesn't happen, the
-	// message is observably stuck.
 	cons := redissmq.NewConsumer(
 		consumer.WithBatchAcks(consumer.BatchConfig{
 			Enabled:      true,
@@ -225,7 +222,7 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 	)
 	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
 		handlerStarted.Store(true)
-		time.Sleep(500 * time.Millisecond) // simulate slow work; pushes Shutdown into the Consume window
+		time.Sleep(500 * time.Millisecond)
 		handlerFinished.Store(true)
 		return nil
 	})
@@ -233,7 +230,6 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 		t.Fatalf("run consumer: %v", err)
 	}
 
-	// Wait until the handler is running.
 	deadline := time.After(5 * time.Second)
 	for !handlerStarted.Load() {
 		select {
@@ -244,7 +240,6 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 		}
 	}
 
-	// Shutdown fires while the handler is still running.
 	cons.Shutdown()
 
 	if !handlerFinished.Load() {
@@ -252,7 +247,6 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 			"shutdownLocked is not waiting for loop to exit")
 	}
 
-	// Invariant: no messages remain in ConsumerProcessing after Shutdown.
 	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
 	processingLen, err := redis.Client().LLen(ctx, qKey.ConsumerProcessing(cons.ID())).Result()
 	if err != nil {
@@ -264,12 +258,11 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 			"flushed (C7)", processingLen)
 	}
 
-	// Consumer ID key should be gone (UnsubscribeConsumer succeeded).
 	exists, err := redis.Client().Exists(ctx, qKey.ConsumerProcessing(cons.ID())).Result()
 	if err != nil {
 		t.Fatalf("exists ConsumerProcessing: %v", err)
 	}
 	if exists != 0 {
-		t.Errorf("ConsumerProcessing key still exists after Shutdown — unsubscribe likely failed")
+		t.Errorf("ConsumerProcessing key still exists after Shutdown")
 	}
 }
