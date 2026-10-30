@@ -127,9 +127,11 @@ func (p *Params) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	p.name = aux.Name
-	p.ns = aux.NS
-	p.typ = aux.Type
+	created, err := NewExchangeParamsWithNS(aux.Name, aux.NS, aux.Type)
+	if err != nil {
+		return err
+	}
+	*p = *created
 	return nil
 }
 

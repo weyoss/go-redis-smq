@@ -74,7 +74,8 @@ func (p Params) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON implements custom JSON unmarshaling for TypeScript compatibility.
+// UnmarshalJSON implements custom JSON unmarshaling for TypeScript
+// compatibility.
 func (p *Params) UnmarshalJSON(data []byte) error {
 	var aux struct {
 		Name string `json:"name"`
@@ -83,8 +84,11 @@ func (p *Params) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &aux); err != nil {
 		return err
 	}
-	p.name = aux.Name
-	p.ns = aux.NS
+	created, err := NewQueueParamsWithNS(aux.Name, aux.NS)
+	if err != nil {
+		return err
+	}
+	*p = *created
 	return nil
 }
 
