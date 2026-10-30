@@ -52,4 +52,13 @@ var (
 	// ErrInvalidQueueState indicates that the target queue is in an invalid
 	// operational state for publishing.
 	ErrInvalidQueueState = errors.New("queue is in invalid state")
+
+	// ErrNoConsumerGroups indicates that a message was published directly to a
+	// Pub/Sub queue that has no consumer groups registered. Publishing without a
+	// group would place the message on the queue-level Pending list, which no
+	// consumer ever reads from — consumers of Pub/Sub queues read per-group
+	// pending lists. Create a group with ConsumerGroupManager.Save (or
+	// Consumer.ConsumeWithGroup / Consumer.Consume which creates an ephemeral
+	// one) before publishing.
+	ErrNoConsumerGroups = errors.New("pub/sub queue has no consumer groups")
 )

@@ -190,10 +190,18 @@ func (r *PubSubTargetResolver) Clear() {
 	r.log.Debug("pub/sub targets cleared")
 }
 
-func (r *PubSubTargetResolver) Resolve(queueParams *queue.Params) []string {
+// Resolve returns the consumer groups to publish to for the given queue, and
+// whether that queue is a Pub/Sub queue (regardless of how many groups it has).
+//
+// The two-value return distinguishes "queue is not Pub/Sub" (isPubSub=false,
+// publish to queue-level Pending) from "queue is Pub/Sub but has zero groups"
+// (isPubSub=true, groups empty — caller must reject: publishing to
+// queue-level Pending would orphan the message).
+func (r *PubSubTargetResolver) Resolve(queueParams *queue.Params) (groups []string, isPubSub bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	return r.targets[queueParams.String()]
+	groups, ok := r.targets[queueParams.String()]
+	return groups, ok
 }
 
 func (r *PubSubTargetResolver) Add(queueParams *queue.Params, groupID string) {

@@ -156,19 +156,68 @@ func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMe
 	return prod.produceToExchange(ctx, m, exchangeParams, resolver)
 }
 
-// produceToQueue publishes a message to a specific queue, handling Pub/Sub groups if needed.
+// resolvePubSubTargets returns the consumer groups to publish to for the
+// given queue, plus whether it's a Pub/Sub queue. If the resolver's cached
+// state says "Pub/Sub with zero groups," a fresh Redis read confirms before
+// returning — the resolver is populated by consumerGroupCreated events and
+// may be briefly stale after a group is created but before the event has
+// been processed.
+//
+// Returns ErrNoConsumerGroups if the queue is a Pub/Sub queue and genuinely
+// has zero groups.
+func (prod *Producer) resolvePubSubTargets(
+	ctx context.Context,
+	queueParams *queue.Params,
+	resolver *PubSubTargetResolver,
+) (targets []string, isPubSub bool, err error) {
+	if resolver == nil {
+		return nil, false, nil
+	}
+
+	groups, isPubSub := resolver.Resolve(queueParams)
+	if !isPubSub || len(groups) > 0 {
+		return groups, isPubSub, nil
+	}
+
+	// Resolver says "Pub/Sub, zero groups" — but its cache may be stale.
+	// Confirm against Redis before rejecting.
+	qKey := keys.Queue{Namespace: queueParams.NS(), Name: queueParams.Name()}
+	client := redisClient.Client()
+
+	exists, err := client.Exists(ctx, qKey.Properties()).Result()
+	if err != nil {
+		return nil, isPubSub, fmt.Errorf("check queue exists: %w", err)
+	}
+	if exists == 0 {
+		return nil, isPubSub, queue.ErrNotFound
+	}
+
+	freshGroups, err := redisClient.LoadSetMembers(ctx, qKey.ConsumerGroups(), "consumer groups")
+	if err != nil {
+		return nil, isPubSub, fmt.Errorf("load consumer groups: %w", err)
+	}
+	if len(freshGroups) == 0 {
+		return nil, isPubSub, publicproducer.ErrNoConsumerGroups
+	}
+	return freshGroups, isPubSub, nil
+}
+
+// produceToQueue publishes a message to a specific queue, handling Pub/Sub
+// groups if needed.
 func (prod *Producer) produceToQueue(
 	ctx context.Context,
 	m *publicmessage.ProducibleMessage,
 	queueParams *queue.Params,
 	resolver *PubSubTargetResolver,
 ) ([]string, error) {
-	var targets []string
-	if resolver != nil {
-		targets = resolver.Resolve(queueParams)
+	targets, isPubSub, err := prod.resolvePubSubTargets(ctx, queueParams, resolver)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(targets) > 0 {
+	if isPubSub {
+		// resolvePubSubTargets guarantees targets is non-empty when isPubSub
+		// is true (ErrNoConsumerGroups is returned otherwise).
 		prod.log.Debug("resolved pub/sub targets",
 			"queue", queueParams.String(),
 			"groups", len(targets),
@@ -237,21 +286,36 @@ func (prod *Producer) produceToExchange(
 		return nil, publicproducer.ErrNoMatchingQueues
 	}
 
+	// Pre-flight: validate every matched queue before dispatching any. If a
+	// queue is Pub/Sub with no consumer groups, reject the whole produce
+	// rather than partially succeeding (some queues got the message, one
+	// queue caused the error mid-loop). Partial success is worse than an
+	// up-front error — the caller would see an error but also some queues
+	// would have the message, and a retry would produce duplicates.
+	for i := range queues {
+		if _, _, err := prod.resolvePubSubTargets(ctx, &queues[i], resolver); err != nil {
+			return nil, fmt.Errorf("produce to queue %s: %w", queues[i].Name(), err)
+		}
+	}
+
 	prod.log.Debug("matched exchange queues",
 		"exchange", exchangeParams.String(),
 		"queues", len(queues),
 	)
 
 	var ids []string
-	for _, qp := range queues {
-		queueIDs, err := prod.produceToQueue(ctx, m, &qp, resolver)
+	for i := range queues {
+		queueIDs, err := prod.produceToQueue(ctx, m, &queues[i], resolver)
 		if err != nil {
+			// Should not happen — pre-flight already validated every queue.
+			// Log and abort defensively in case of a state change between
+			// pre-flight and dispatch (e.g., group deleted by another actor).
 			prod.log.Error("failed to produce to matched queue",
 				"exchange", exchangeParams.String(),
-				"queue", qp.String(),
+				"queue", queues[i].String(),
 				"error", err,
 			)
-			return nil, fmt.Errorf("produce to queue %s: %w", qp.Name(), err)
+			return nil, fmt.Errorf("produce to queue %s: %w", queues[i].Name(), err)
 		}
 		ids = append(ids, queueIDs...)
 	}
