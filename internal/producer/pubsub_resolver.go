@@ -77,6 +77,23 @@ func (r *PubSubTargetResolver) onConsumerGroupDeleted(p internalQueueEvents.Cons
 }
 
 func (r *PubSubTargetResolver) Load(ctx context.Context) error {
+	// Subscribe FIRST. Any events that fire during the subsequent read of
+	// Redis are queued by the pub/sub client and dispatched by the bus's
+	// listener goroutine. This closes the previous race where a queue or
+	// group created between LoadSetMembers(AllQueues) and subscribe() was
+	// lost forever — the event fired before the subscription started, and
+	// the initial read didn't see it either. Result: the queue/group was
+	// invisible to the resolver until some later event refreshed it, and
+	// produces targeting it were treated as P2P (orphaning the message on
+	// queue-level Pending for a Pub/Sub queue).
+	if !r.subscribed {
+		if err := r.subscribe(); err != nil {
+			return err
+		}
+		r.subscribed = true
+		r.log.Debug("subscribed to queue events")
+	}
+
 	queues, err := redis.LoadSetMembers(ctx, keys.System{}.AllQueues(), "all queues")
 	if err != nil {
 		r.log.Error("failed to load queues", "error", err)
@@ -95,47 +112,53 @@ func (r *PubSubTargetResolver) Load(ctx context.Context) error {
 			continue
 		}
 
+		// Hold r.mu across the per-queue Redis reads and the map write so
+		// event handlers cannot interleave between our read (T_read) and
+		// our write (T_write). Without this, a handler firing in
+		// (T_read, T_write) applies its update to r.targets, then our
+		// unconditional write clobbers it — losing a group or resurrecting
+		// a deleted queue.
+		//
+		// The critical section holds the lock across two Redis round-trips
+		// (~1ms per queue). Handlers for OTHER queues block during this
+		// window; the pub/sub client buffers their events. Acceptable for
+		// one-time startup load.
+		r.mu.Lock()
+
 		propsKey := keys.Queue{Namespace: qp.NS(), Name: qp.Name()}.Properties()
 		hash, err := redis.LoadHash(ctx, propsKey, "queue properties")
 		if err != nil {
+			r.mu.Unlock()
 			r.log.Debug("failed to load queue properties", "queue", qp.String(), "error", err)
 			continue
 		}
 
 		deliveryModelStr, ok := hash["3"]
 		if !ok {
+			r.mu.Unlock()
 			continue
 		}
 
 		deliveryModel, _ := strconv.Atoi(deliveryModelStr)
 		if queue.DeliveryModel(deliveryModel) != queue.DeliveryPubSub {
+			r.mu.Unlock()
 			continue
 		}
 
 		cgKey := keys.Queue{Namespace: qp.NS(), Name: qp.Name()}.ConsumerGroups()
 		groups, err := redis.LoadSetMembers(ctx, cgKey, "consumer groups")
 		if err != nil {
+			r.mu.Unlock()
 			r.log.Debug("failed to load consumer groups", "queue", qp.String(), "error", err)
 			continue
 		}
 
-		r.mu.Lock()
 		r.targets[qp.String()] = groups
 		r.mu.Unlock()
 		pubSubCount++
 	}
 
-	r.log.Info("pub/sub targets loaded",
-		"pubSubQueues", pubSubCount,
-	)
-
-	if !r.subscribed {
-		if err := r.subscribe(); err != nil {
-			return err
-		}
-		r.subscribed = true
-		r.log.Debug("subscribed to queue events")
-	}
+	r.log.Info("pub/sub targets loaded", "pubSubQueues", pubSubCount)
 
 	return nil
 }

@@ -11,6 +11,7 @@
 package producer_test
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -317,4 +318,67 @@ func TestProducerResolver_Resolve_UnknownQueueNotPubSub(t *testing.T) {
 	if isPubSub {
 		t.Errorf("unknown queue Resolve returned isPubSub=true, want false")
 	}
+}
+
+// Scenario: A Pub/Sub queue created during Load must be visible in the
+// resolver once Load returns, even if the queue was created after Load's
+// initial AllQueues read.
+//
+// Regression test for the resolver startup race: pre-fix, Load read
+// AllQueues first and subscribed last. A queueCreated event that fired in
+// the window between the read and the subscribe was never delivered, so
+// the queue stayed invisible until some later event refreshed it. On a
+// system with many queues, Load's per-queue loop takes hundreds of
+// milliseconds — plenty of time for a concurrent create to land in the
+// lost-event window.
+//
+// Post-fix, subscribe runs first, so the event is caught regardless of
+// when during Load the queue was created.
+//
+// The test is statistical — the pre-fix window is wide here (because of
+// the seeded queue count) but not guaranteed to be hit on every run. It
+// always passes post-fix.
+func TestProducerResolver_LoadRaceWithQueueCreation(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	// Seed enough Pub/Sub queues that Load's loop takes measurable time
+	// (2 Redis round-trips per queue × ~1ms = ~600ms for 300 queues),
+	// making the pre-fix lost-event window large enough to reliably catch
+	// a concurrent create.
+	const seedCount = 300
+	for i := 0; i < seedCount; i++ {
+		qp := queue.MustQueueParams(fmt.Sprintf("test-race-seed-%d", i))
+		if err := redissmq.NewQueueManager().Create(ctx, qp, queue.TypeFIFO, queue.DeliveryPubSub); err != nil {
+			t.Fatalf("seed %d: %v", i, err)
+		}
+	}
+
+	targetQueue := queue.MustQueueParams("test-race-target")
+	resolver := internalproducer.NewPubSubTargetResolver("test-race")
+	defer resolver.Clear()
+
+	loadDone := make(chan error, 1)
+	go func() { loadDone <- resolver.Load(ctx) }()
+
+	// Give Load time to complete subscribe (~1ms) and the initial
+	// AllQueues read (~1ms), then create the target. Under the pre-fix
+	// code, subscribe is at the END of Load — so this create fires long
+	// before subscribe, and the queueCreated event is lost.
+	time.Sleep(5 * time.Millisecond)
+
+	if err := redissmq.NewQueueManager().Create(ctx, targetQueue, queue.TypeFIFO, queue.DeliveryPubSub); err != nil {
+		t.Fatalf("create target: %v", err)
+	}
+
+	if err := <-loadDone; err != nil {
+		t.Fatalf("load: %v", err)
+	}
+
+	// The target queue must be visible. Post-fix, the queueCreated event
+	// was received (subscription was already active) and the handler added
+	// the queue. Pre-fix, the event was lost — waitForCondition times out.
+	waitForCondition(t, 5*time.Second, func() bool {
+		_, isPubSub := resolver.Resolve(targetQueue)
+		return isPubSub
+	})
 }
