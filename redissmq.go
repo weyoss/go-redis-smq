@@ -57,6 +57,13 @@ var (
 
 	lifecycleMu sync.Mutex
 	initialized bool
+	// generation is incremented on each successful Init. It identifies the
+	// runtime instance. Watchers spawned by Init capture the generation
+	// they were created for and pass it to shutdownIfCurrent, so a stale
+	// watcher can detect that the runtime it was watching has been
+	// superseded by a later Init and bail out instead of tearing down the
+	// new runtime.
+	generation uint64
 )
 
 var log = logger.New("redissmq")
@@ -132,14 +139,29 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 
 	systemCtx, systemStop = context.WithCancel(ctx)
 
+	// Bump the generation and capture it for the watcher below. The watcher
+	// calls shutdownIfCurrent(gen) — not Shutdown() — so that a stale
+	// watcher (whose Init has already been torn down and superseded by a
+	// later Init) can detect the mismatch and bail out instead of tearing
+	// down the later Init's runtime.
+	//
+	// Without this check: if the outer ctx of Init #1 is cancelled after
+	// Init #1 was already Shutdown() and a NEW Init #2 has run, Init #1's
+	// leaked watcher acquires lifecycleMu (possibly after Init #2 finished),
+	// sees initialized==true, and calls Shutdown() — killing Init #2's
+	// runtime. That was the correctness bug this generation token closes.
+	generation++
+	watchedGen := generation
+	watchedCtx := systemCtx
+
 	// Start the purge worker.
 	purgeManager := internalqueue.NewManager().Purge()
 	purgeWorker = internalqueue.NewPurgeWorker(purgeManager)
 	purgeWorkerStop = purgeWorker.Start(systemCtx)
 
 	go func() {
-		<-ctx.Done()
-		Shutdown()
+		<-watchedCtx.Done()
+		shutdownIfCurrent(watchedGen)
 	}()
 
 	initialized = true
@@ -177,11 +199,43 @@ func ShutdownUserEventBus() {
 func Shutdown() {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
-
 	if !initialized {
 		return
 	}
+	shutdownLocked()
+}
 
+// shutdownIfCurrent is called by the watcher goroutine spawned in Init.
+//
+// It shuts down the runtime only if the current generation matches gen —
+// i.e., only if the runtime it was watching is still the active one.
+// Otherwise a later Init has superseded it, and the runtime that watcher
+// would have torn down no longer exists. Touching the new runtime would
+// corrupt live state.
+//
+// Invariants:
+//   - caller does NOT hold lifecycleMu
+//   - initialized may be true (normal watcher fire) or false (watcher
+//     fires after explicit Shutdown already ran)
+//   - generation is only read/written under lifecycleMu, so reading it
+//     here is safe
+func shutdownIfCurrent(gen uint64) {
+	lifecycleMu.Lock()
+	defer lifecycleMu.Unlock()
+	if !initialized {
+		return
+	}
+	if generation != gen {
+		// A subsequent Init has run since this watcher was created.
+		// Its own watcher will handle shutdown. Do nothing.
+		return
+	}
+	shutdownLocked()
+}
+
+// shutdownLocked performs the shutdown sequence. Caller must hold
+// lifecycleMu and initialized must be true.
+func shutdownLocked() {
 	log.Info("RedisSMQ shutting down...")
 
 	if purgeWorkerStop != nil {
