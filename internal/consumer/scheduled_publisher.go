@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -35,6 +36,7 @@ type ScheduledPublisher struct {
 	groupID    string
 	consumerID string
 	interval   time.Duration
+	wg         sync.WaitGroup // tracks the publish ticker goroutine
 	log        *slog.Logger
 }
 
@@ -50,7 +52,9 @@ func NewScheduledPublisher(queue *queue.Params, groupID, consumerID string) *Sch
 
 func (sp *ScheduledPublisher) Run(ctx context.Context) {
 	sp.log.Debug("starting scheduled publisher", "interval", sp.interval)
+	sp.wg.Add(1)
 	go func() {
+		defer sp.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				sp.log.Error("scheduled publisher panicked", "panic", r)
@@ -69,6 +73,19 @@ func (sp *ScheduledPublisher) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Wait blocks until the background goroutine exits. Called by
+// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
+// Redis operation remains when the process tears down the client via
+// internalredis.Close.
+//
+// The goroutine exits as soon as its select observes ctx.Done() — but if
+// it's mid-publishDue (a Redis ZRANGEBYSCORE plus per-message HGET plus
+// the Lua EVAL), Wait blocks until that whole batch completes. That's the
+// point: shutdown cannot proceed until the last Redis op is done.
+func (sp *ScheduledPublisher) Wait() {
+	sp.wg.Wait()
 }
 
 func (sp *ScheduledPublisher) publishDue(ctx context.Context) {

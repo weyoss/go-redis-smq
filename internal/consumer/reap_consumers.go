@@ -1,8 +1,19 @@
+/*
+ * Copyright (c) 2026
+ * Weyoss <weyoss@outlook.com>
+ * https://github.com/weyoss
+ *
+ * This source code is licensed under the MIT license found in the LICENSE file
+ * in the root directory of this source tree.
+ *
+ */
+
 package consumer
 
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -18,6 +29,7 @@ type ReapConsumers struct {
 	consumerID string
 	interval   time.Duration
 	checker    *HeartbeatChecker
+	wg         sync.WaitGroup // tracks the reaper ticker goroutine
 	log        *slog.Logger
 }
 
@@ -34,7 +46,9 @@ func NewReapConsumers(queue *queue.Params, groupID, consumerID string) *ReapCons
 
 func (rc *ReapConsumers) Run(ctx context.Context) {
 	rc.log.Debug("starting consumer reaper", "interval", rc.interval)
+	rc.wg.Add(1)
 	go func() {
+		defer rc.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				rc.log.Error("consumer reaper panicked", "panic", r)
@@ -53,6 +67,21 @@ func (rc *ReapConsumers) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Wait blocks until the background goroutine exits. Called by
+// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
+// Redis operation remains when the process tears down the client via
+// internalredis.Close.
+//
+// The goroutine exits as soon as its select observes ctx.Done() — but if
+// it's mid-reap (a Redis HKEYS plus MGET heartbeats plus the per-dead-
+// consumer recovery work — UnacknowledgeProcessingQueue, UnsubscribeConsumer,
+// DeleteEphemeralConsumerGroup), Wait blocks until that entire cycle
+// completes. That's the point: shutdown cannot proceed until the last
+// Redis op is done.
+func (rc *ReapConsumers) Wait() {
+	rc.wg.Wait()
 }
 
 func (rc *ReapConsumers) reap(ctx context.Context) {

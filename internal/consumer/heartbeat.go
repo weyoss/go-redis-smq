@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"sync"
 	"time"
 
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
@@ -30,13 +31,14 @@ type HeartbeatPayload struct {
 
 // Heartbeat manages periodic Heartbeat updates using Redis key expiry.
 // Uses SET with PX (millisecond expiry) so dead consumers are auto-detected
-// by key absence
+// by key absence.
 type Heartbeat struct {
 	id       string
 	ttl      time.Duration
 	interval time.Duration
 	ticker   *time.Ticker
 	done     chan struct{}
+	wg       sync.WaitGroup // tracks the beat ticker goroutine
 	log      *slog.Logger
 }
 
@@ -47,7 +49,7 @@ type HeartbeatConfig struct {
 }
 
 // NewHeartbeat creates a new Heartbeat manager.
-// TTL is the key expiry time. Interval is auto-calculated as TTL/3
+// TTL is the key expiry time. Interval is auto-calculated as TTL/3.
 func NewHeartbeat(cfg HeartbeatConfig) *Heartbeat {
 	ttl := cfg.TTL
 	if ttl < 3*time.Second {
@@ -67,7 +69,9 @@ func NewHeartbeat(cfg HeartbeatConfig) *Heartbeat {
 func (h *Heartbeat) Start(ctx context.Context) {
 	h.log.Info("starting heartbeat", "ttl", h.ttl, "interval", h.interval)
 	h.ticker = time.NewTicker(h.interval)
+	h.wg.Add(1)
 	go func() {
+		defer h.wg.Done()
 		for {
 			select {
 			case <-ctx.Done():
@@ -84,6 +88,29 @@ func (h *Heartbeat) Start(ctx context.Context) {
 }
 
 // Stop stops the Heartbeat and deletes the key from Redis.
+//
+// Order matters. The sequence must be:
+//
+//  1. close(h.done)   — signal the beat loop to exit
+//  2. h.wg.Wait()     — wait for it to actually exit, including any
+//     in-flight beat() that's currently doing a Redis SET
+//  3. DEL the key     — safe now; no concurrent SET can follow
+//
+// Pre-fix, DEL happened immediately after closing done. If a beat was
+// mid-SET, the ordering was:
+//
+//   - SET lands after DEL → key survives with a stale timestamp →
+//     consumer appears alive forever → its messages are never recovered
+//     by any peer's ReapConsumers cycle
+//
+// The wait closes that window. It also guarantees that if the beat loop's
+// in-flight Redis op panics (nil client from a concurrent internalredis.Close),
+// the panic resolves inside the tracked goroutine before Stop returns —
+// rather than racing Stop's own DEL.
+//
+// Idempotent: safe to call multiple times. Safe to call without a prior
+// Start (wg counter is 0, wait returns immediately; the close pattern is
+// guarded; the DEL is a no-op).
 func (h *Heartbeat) Stop() {
 	h.log.Info("stopping heartbeat")
 
@@ -91,13 +118,22 @@ func (h *Heartbeat) Stop() {
 		h.ticker.Stop()
 	}
 
-	// Safe close — prevents panic on double Stop
+	// Safe close — prevents panic on double Stop.
 	select {
 	case <-h.done:
 		// Already closed
 	default:
 		close(h.done)
 	}
+
+	// Wait for the beat loop to exit — including any in-flight beat(ctx)
+	// that's currently inside redisClient.Client().Set. After this returns,
+	// no goroutine spawned by Start can call internalredis.Client() again.
+	//
+	// Bounded wait would reintroduce the race (if a slow Redis call exceeds
+	// the bound, DEL runs while SET is still in-flight). Unconditional —
+	// matching the C7 discipline.
+	h.wg.Wait()
 
 	key := keys.System{}.ConsumerHeartbeat(h.id)
 	if err := redisClient.Client().Del(context.Background(), key).Err(); err != nil {
@@ -108,8 +144,6 @@ func (h *Heartbeat) Stop() {
 }
 
 // beat sends a single Heartbeat: SET key payload PX ttl.
-//
-//	redisClient.set(this.heartbeatKey, payloadStr, { expire: { mode: 'PX', value: this.heartbeatTTL } })
 func (h *Heartbeat) beat(ctx context.Context) {
 	payload := HeartbeatPayload{
 		Timestamp:     time.Now().UnixMilli(),

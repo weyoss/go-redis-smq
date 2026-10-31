@@ -52,6 +52,19 @@ type PurgeWorker struct {
 	cancel context.CancelFunc
 	done   chan struct{}
 
+	// wg tracks heartbeatLoop and recoveryLoop — both spawned by work() and
+	// both lacking recover(). A panic in either (nil client after
+	// internalredis.Close) would crash the process. stop() waits on this
+	// waitgroup before returning, so by the time redissmq.Shutdown reaches
+	// internalredis.Close, no sub-loop goroutine is still calling Redis.
+	//
+	// Unconditional wait, not bounded: a bounded wait would reintroduce the
+	// race it exists to prevent (if the wait times out while a sub-loop is
+	// mid-Redis, stop proceeds, client gets nilled, sub-loop panics — crash).
+	// Sub-loops exit within one tick after ctx cancellation, bounded by
+	// Redis client dial/read/write timeouts — no risk of hanging shutdown.
+	wg sync.WaitGroup
+
 	started bool
 	mu      sync.Mutex
 	log     *slog.Logger
@@ -114,6 +127,13 @@ func (w *PurgeWorker) stop() {
 		w.cancel = nil
 	}
 
+	// Wait for the main work goroutine. Pre-existing bounded wait: work()
+	// can be mid-purge-batch on a large job, and execute() returns within
+	// BatchDelay + one Redis call after ctx cancellation (~8s worst case at
+	// defaults). The 5s timeout is tight but pre-existing; PR 1 doesn't
+	// change this wait. Note: if the timeout fires while work() is still
+	// in-flight, the eventual Redis call panics in an unrecovered goroutine
+	// — flagged as a follow-up (see commit message).
 	if w.done != nil {
 		select {
 		case <-w.done:
@@ -121,6 +141,13 @@ func (w *PurgeWorker) stop() {
 		}
 		w.done = nil
 	}
+
+	// Wait for heartbeatLoop and recoveryLoop to exit. Unconditional — see
+	// the wg field comment. Both sub-loops check ctx.Done() at every tick
+	// and between every Redis call; they exit within one tick + one
+	// in-flight Redis op. No recovery for either, so proceeding past this
+	// wait while they're still running would reintroduce the C9 panic.
+	w.wg.Wait()
 
 	if w.client != nil {
 		_ = w.client.Close()
@@ -138,13 +165,24 @@ func (w *PurgeWorker) work(ctx context.Context) {
 	// before this worker started.
 	w.manager.recoverStuckJobs(ctx)
 
-	// Heartbeat keeps the worker alive in Redis.
-	go w.heartbeatLoop(ctx)
+	// Heartbeat keeps the worker alive in Redis. Tracked by w.wg — stop()
+	// waits for it before closing the dedicated client and before
+	// redissmq.Shutdown nils the shared client.
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		w.heartbeatLoop(ctx)
+	}()
 
 	// Periodic recovery catches jobs whose worker died AFTER startup. Without
 	// this, a crash mid-purge would leave the queue LOCKED indefinitely on
-	// single-node deployments until the process restarts.
-	go w.recoveryLoop(ctx)
+	// single-node deployments until the process restarts. Tracked by w.wg
+	// for the same reason as heartbeatLoop.
+	w.wg.Add(1)
+	go func() {
+		defer w.wg.Done()
+		w.recoveryLoop(ctx)
+	}()
 
 	w.log.Info("purge worker started", "recoveryInterval", w.recoveryInterval)
 

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	redissmq "github.com/weyoss/go-redis-smq"
+	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -226,4 +227,32 @@ func TestWorker_HeartbeatKeepsAlive(t *testing.T) {
 	}
 
 	t.Logf("job status after 3s: %s, purged: %d", job.Status.String(), job.Meta.Purged)
+}
+
+// Scenario: PurgeWorker.stop waits for heartbeatLoop and recoveryLoop to
+// exit before returning.
+//
+// Regression test for C9. Pre-fix, stop cancelled ctx and waited for
+// w.work to return (via w.done), but heartbeatLoop and recoveryLoop were
+// spawned by work and not tracked — they could still be mid-Redis when
+// internalredis.Close fired.
+func TestWorker_StopWaitsForSubGoroutines(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
+	defer cancel()
+
+	params := publicqueue.MustQueueParams("test-c9-worker-stop")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	worker := internalqueue.NewPurgeWorker(internalqueue.NewManager().Purge())
+	stop := worker.Start(ctx)
+
+	// Let heartbeatLoop and recoveryLoop start.
+	time.Sleep(300 * time.Millisecond)
+
+	// Call stop; it must wait for both sub-goroutines.
+	stop()
+
+	// If we reach here without a panic after redissmq.Shutdown's eventual
+	// internalredis.Close, the sub-goroutines exited before the client was
+	// nilled.
 }

@@ -32,7 +32,24 @@ type MessageHandlerRunner struct {
 	stateTracker *QueueStateTracker
 	ctx          context.Context
 	cancel       context.CancelFunc
-	log          *slog.Logger
+
+	// closed is set under r.mu at the start of Shutdown, and cleared under
+	// r.mu at the start of a fresh Run. It gates the spawn of reconcileLoop
+	// in Run against the reconcileWg.Wait in Shutdown — without it, a
+	// concurrent Shutdown between Run's r.mu release and the spawn would
+	// observe reconcileWg == 0 (wait returns immediately), and the
+	// reconcileLoop would run unsupervised after Shutdown returns,
+	// potentially calling Redis after internalredis.Close nils the client.
+	closed bool
+
+	// reconcileWg tracks the reconcileLoop goroutine. reconcile can be in
+	// the middle of mh_new.Run or mh_new.Shutdown (both Redis-touching) when
+	// Shutdown fires; Shutdown waits on reconcileWg (outside r.mu) before
+	// returning, so no goroutine spawned by the runner is still calling
+	// internalredis.Client() when redissmq.Shutdown reaches internalredis.Close.
+	reconcileWg sync.WaitGroup
+
+	log *slog.Logger
 }
 
 type handlerConfig struct {
@@ -108,7 +125,12 @@ func (r *MessageHandlerRunner) HasHandlers() bool {
 
 func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 	r.mu.Lock()
+	if r.ctx != nil {
+		r.mu.Unlock()
+		return nil
+	}
 	r.ctx, r.cancel = context.WithCancel(ctx)
+	r.closed = false
 	runnerCtx := r.ctx
 	configs := make([]*handlerConfig, len(r.handlers))
 	copy(configs, r.handlers)
@@ -162,6 +184,12 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 			return err
 		}
 		r.mu.Lock()
+		if cerr := runnerCtx.Err(); cerr != nil {
+			r.mu.Unlock()
+			mh.Shutdown()
+			r.Shutdown()
+			return fmt.Errorf("consumer: shutdown during startup: %w", cerr)
+		}
 		r.instances = append(r.instances, mh)
 		r.mu.Unlock()
 		started++
@@ -175,36 +203,69 @@ func (r *MessageHandlerRunner) Run(ctx context.Context) error {
 
 	r.log.Info("message handler runner started", "active", started, "total", len(configs))
 
-	go r.reconcileLoop(runnerCtx)
+	// Spawn reconcileLoop under r.mu with a closed guard. Without the guard:
+	// a concurrent Shutdown between our r.mu release and this spawn would
+	// observe reconcileWg counter 0 (its Wait returns immediately), and our
+	// Add(1) would run after — the goroutine would proceed unsupervised after
+	// Shutdown returned and could call Redis after internalredis.Close.
+	r.mu.Lock()
+	if r.closed {
+		r.mu.Unlock()
+		return nil
+	}
+	r.reconcileWg.Add(1)
+	go func() {
+		defer r.reconcileWg.Done()
+		r.reconcileLoop(runnerCtx)
+	}()
+	r.mu.Unlock()
+
 	return nil
 }
 
-// Shutdown stops the runner. Acquires r.mu; safe to call multiple times and
-// from any goroutine.
+// Shutdown stops the runner. Safe to call multiple times.
+//
+// Restructured from the previous shutdownLocked form: it must NOT hold r.mu
+// across reconcileWg.Wait — reconcile acquires r.mu in its C8 under-lock
+// ctx.Err check, so holding r.mu while waiting on reconcileWg would
+// deadlock. The lock is held only briefly for state capture and clearing.
+//
+// Also must NOT hold r.mu across the mh.Shutdown() calls: each can block on
+// mh.wg.Wait() for up to the handler's runtime (see C7), and holding the
+// runner lock there would stall StopHandler / StartHandler / other
+// reconcile operations.
 func (r *MessageHandlerRunner) Shutdown() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.shutdownLocked()
-}
-
-// shutdownLocked performs shutdown. The caller MUST hold r.mu.
-func (r *MessageHandlerRunner) shutdownLocked() {
+	if r.closed {
+		r.mu.Unlock()
+		return
+	}
+	r.closed = true
 	if r.cancel != nil {
 		r.cancel()
 	}
+	r.mu.Unlock()
 
-	r.log.Info("shutting down message handler runner", "instances", len(r.instances))
+	// Wait for reconcileLoop to exit (including any in-flight mh_new.Run
+	// or mh_new.Shutdown it may have started). After this returns, no
+	// goroutine spawned by the runner can call internalredis.Client().
+	r.reconcileWg.Wait()
 
-	for _, mh := range r.instances {
+	r.mu.Lock()
+	instances := r.instances
+	r.instances = nil
+	tracker := r.stateTracker
+	r.stateTracker = nil
+	r.cancel = nil
+	r.ctx = nil
+	r.mu.Unlock()
+
+	for _, mh := range instances {
 		mh.Shutdown()
 	}
-	r.instances = nil
-
-	if r.stateTracker != nil {
-		r.stateTracker.Shutdown()
+	if tracker != nil {
+		tracker.Shutdown()
 	}
-
-	r.log.Debug("message handler runner shut down complete")
 }
 
 func (r *MessageHandlerRunner) StopHandler(queue *publicqueue.Params, groupID string) bool {
@@ -412,6 +473,15 @@ func (r *MessageHandlerRunner) reconcileLoop(ctx context.Context) {
 // queue was paused and resumed, and the state-change callback missed the
 // window). It takes ctx explicitly so cancellation is observable without
 // reading r.ctx.
+//
+// reconcile releases r.mu between reading the handler list and appending a
+// freshly-started handler. Shutdown acquires r.mu in that window, cancels
+// ctx, and clears r.instances — after which appending would orphan the new
+// MessageHandler (subscribed, heartbeat, worker lock, no tracker). The
+// ctx.Err() checks below, especially the one under r.mu before the append,
+// close that window: the check+append is atomic with respect to Shutdown's
+// clear, so either Shutdown runs first (we see cancellation and abort) or we
+// run first (Shutdown will shut our handler down via r.instances).
 func (r *MessageHandlerRunner) reconcile(ctx context.Context) {
 	r.mu.RLock()
 	var toStart []*handlerConfig
@@ -461,8 +531,8 @@ func (r *MessageHandlerRunner) reconcile(ctx context.Context) {
 			continue
 		}
 
-		// check cancellation under r.mu immediately before appending.
-		// If Shutdown cleared r.instances in the window between mh.Run
+		// Check cancellation under r.mu immediately before appending. If
+		// Shutdown cleared r.instances in the window between mh.Run
 		// succeeding and this lock, we must not append — the new handler
 		// would be untracked and never shut down. Shut it down explicitly
 		// (without holding r.mu — mh.Shutdown may block on mh.wg.Wait()).

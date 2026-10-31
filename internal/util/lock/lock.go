@@ -68,19 +68,34 @@ func FixedBackoff(delay time.Duration, maxAttempts int) BackoffStrategy {
 //   - extend-lock.lua: PEXPIRE if owner matches
 //   - release-lock.lua: DEL if owner matches
 type Lock struct {
-	client  *redis.Client // singleton Redis client
+	client  *redis.Client
 	key     string
 	owner   string
 	ttl     time.Duration
 	refresh time.Duration
 
-	// Retry configuration
 	retry   bool
 	backoff BackoffStrategy
 
 	mu       sync.Mutex
 	acquired bool
-	stopCh   chan struct{}
+
+	// stopCh and refreshDone are set together in Acquire (when auto-refresh
+	// is enabled) and consumed together in Release. Both are guarded by mu.
+	//
+	// refreshDone is closed by refreshLoop on exit. Release waits on it
+	// before doing its own Redis EVAL, guaranteeing the loop's in-flight
+	// operations (which use the shared Redis client) have completed before
+	// Release can race them, and before shutdown can nil the client.
+	//
+	// Using a per-Acquire channel pair, not a shared sync.WaitGroup, is
+	// deliberate: a shared WaitGroup would let a concurrent Acquire's
+	// Add(1) extend Release's Wait, causing Release to wait for a refresh
+	// loop that hasn't even started yet (it will, once the SETNX after
+	// Release's EVAL succeeds). Per-instance channels let Release wait
+	// only on the loop it owns.
+	stopCh      chan struct{}
+	refreshDone chan struct{}
 
 	log *slog.Logger
 }
@@ -146,22 +161,21 @@ func (l *Lock) Acquire(ctx context.Context) error {
 		if ok {
 			l.acquired = true
 
-			// Start auto-refresh if configured. The stop channel is passed
-			// as a parameter so refreshLoop never reads l.stopCh; only
-			// Acquire and Release (both under l.mu) touch that field.
-			// Each Acquire spawns a fresh channel; even if a later Acquire
-			// overwrites l.stopCh, the previous goroutine still holds its
-			// own reference and will exit when Release closes that channel.
+			// Start auto-refresh if configured. Each Acquire creates a
+			// fresh stopCh/refreshDone pair; a subsequent Acquire after a
+			// Release creates different channels. Release captures both
+			// under l.mu and waits only on the instance it owns.
 			if l.refresh > 0 {
 				stopCh := make(chan struct{})
+				done := make(chan struct{})
 				l.stopCh = stopCh
-				go l.refreshLoop(stopCh)
+				l.refreshDone = done
+				go l.refreshLoop(stopCh, done)
 			}
 
 			return nil
 		}
 
-		// Lock not acquired — retry if configured
 		if !l.retry || l.backoff == nil {
 			return fmt.Errorf("lock: failed to acquire %s", l.key)
 		}
@@ -182,29 +196,59 @@ func (l *Lock) Acquire(ctx context.Context) error {
 
 // Release releases the lock using the release-lock.lua script.
 // Only deletes the key if we own it.
+//
+// Order matters. The sequence is:
+//
+//  1. Capture stopCh/refreshDone under l.mu, nil out the fields, set
+//     acquired = false. Release l.mu.
+//  2. Close stopCh — signals the refresh loop to exit.
+//  3. Wait on <-refreshDone — guarantees the loop has finished, including
+//     any in-flight extend EVAL currently touching Redis.
+//  4. Do our own release EVAL.
+//
+// Skipping step 3 would race the release EVAL with the refresh loop's
+// extend EVAL — and, at shutdown, would leave the refresh loop calling
+// Redis after internalredis.Close() nils the client (panic in an
+// unrecovered goroutine — process crash).
+//
+// Holding l.mu across step 3 would deadlock: the refresh loop acquires
+// l.mu inside its tick handler, so holding it while waiting would prevent
+// the loop from ever completing. That's why the field capture (step 1)
+// and the wait (step 3) are in separate lock acquisitions, with the lock
+// released in between.
+//
+// The wait is unbounded, matching the C7 discipline (see
+// MessageHandler.Shutdown's doc). It is bounded in practice by the Redis
+// client's own dial/read/write timeouts — an extend EVAL that hangs on an
+// unreachable Redis will error at the transport layer and the loop will
+// exit shortly after. A timeout on this wait would reintroduce the race
+// it's here to prevent.
 func (l *Lock) Release(ctx context.Context) error {
 	l.mu.Lock()
-	defer l.mu.Unlock()
-
 	if !l.acquired {
+		l.mu.Unlock()
 		return nil
 	}
 
-	// Stop auto-refresh. Closing the channel signals the goroutine to exit;
-	// it holds its own reference via the parameter, so nilling l.stopCh here
-	// is safe and does not race with the goroutine.
-	if l.stopCh != nil {
-		close(l.stopCh)
-		l.stopCh = nil
+	l.acquired = false
+	stopCh := l.stopCh
+	done := l.refreshDone
+	l.stopCh = nil
+	l.refreshDone = nil
+	l.mu.Unlock()
+
+	if stopCh != nil {
+		close(stopCh)
+	}
+	if done != nil {
+		<-done
 	}
 
-	// Use release-lock.lua: DEL if owner matches
 	_, err := redisClient.Eval(ctx, scripts.ReleaseLock, []string{l.key}, l.owner)
 	if err != nil {
 		return fmt.Errorf("lock: release: %w", err)
 	}
 
-	l.acquired = false
 	return nil
 }
 
@@ -217,7 +261,6 @@ func (l *Lock) IsAcquired() bool {
 
 // tryAcquire attempts a single SET NX acquisition.
 func (l *Lock) tryAcquire(ctx context.Context) (bool, error) {
-	// SET key owner NX PX ttl
 	ok, err := l.client.SetNX(ctx, l.key, l.owner, l.ttl).Result()
 	if err != nil {
 		return false, err
@@ -228,12 +271,16 @@ func (l *Lock) tryAcquire(ctx context.Context) (bool, error) {
 // refreshLoop periodically extends the lock TTL using the
 // extend-lock.lua script: PEXPIRE if owner matches.
 //
-// stopCh is the channel created by the Acquire call that spawned this
-// goroutine. Passing it as a parameter (instead of reading l.stopCh) means
-// the goroutine never touches a field that Release writes without holding
-// the mutex. The goroutine only reads l.acquired and l.ttl — the former
-// under l.mu, the latter immutable after construction.
-func (l *Lock) refreshLoop(stopCh <-chan struct{}) {
+// stopCh and done are per-instance channels created by the Acquire call
+// that spawned this goroutine. Passing them as parameters (instead of
+// reading l.stopCh/l.refreshDone) means the goroutine never touches a
+// field that Release writes without holding the mutex, and never observes
+// channels belonging to a different Acquire.
+//
+// done is closed on exit; Release waits on it to guarantee no in-flight
+// Redis EVAL survives past Release's own Redis operations.
+func (l *Lock) refreshLoop(stopCh <-chan struct{}, done chan<- struct{}) {
+	defer close(done)
 	ticker := time.NewTicker(l.refresh)
 	defer ticker.Stop()
 

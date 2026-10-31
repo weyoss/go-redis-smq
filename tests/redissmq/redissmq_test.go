@@ -13,6 +13,7 @@ package redissmq_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"runtime"
 	"strings"
 	"testing"
@@ -26,6 +27,9 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
+	"github.com/weyoss/go-redis-smq/pkg/message"
+	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 // initRedisSMQ initialises RedisSMQ with a single-node Redis client.
@@ -423,4 +427,67 @@ func TestSystem_InitRetryReopensLogger(t *testing.T) {
 			"Init likely failed to call logger.Init() after a prior failure. "+
 			"output was %q", buf.String())
 	}
+}
+
+// Scenario: Full stack — producers, consumers, purge worker all active —
+// shuts down cleanly under -race without leaking goroutines.
+func TestSystem_FullLifecycleNoGoroutineLeak(t *testing.T) {
+	redissmq.Shutdown()
+
+	client := goredis.NewClient(&goredis.Options{Addr: redisAddr})
+	t.Cleanup(func() { _ = client.Close() })
+
+	ctx := context.Background()
+	if err := client.FlushAll(ctx).Err(); err != nil {
+		t.Fatalf("flushall: %v", err)
+	}
+
+	// Warm-up cycle.
+	if err := redissmq.Init(ctx, client); err != nil {
+		t.Fatalf("warm-up init: %v", err)
+	}
+	redissmq.Shutdown()
+	time.Sleep(300 * time.Millisecond)
+
+	baseline := runtime.NumGoroutine()
+
+	// Full-stack lifecycle.
+	for i := 0; i < 3; i++ {
+		if err := redissmq.Init(ctx, client); err != nil {
+			t.Fatalf("cycle %d init: %v", i, err)
+		}
+
+		params := queue.MustQueueParams(fmt.Sprintf("test-c9-full-%d", i))
+		if err := redissmq.NewQueueManager().Create(ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
+			t.Fatalf("create queue: %v", err)
+		}
+
+		cons := redissmq.NewConsumer(consumer.WithHeartbeatTTL(1 * time.Second))
+		cons.Consume(params, func(ctx context.Context, m *message.Transferable) error { return nil })
+		if err := cons.Run(ctx); err != nil {
+			t.Fatalf("run consumer: %v", err)
+		}
+
+		prod := redissmq.NewProducer()
+		if err := prod.Run(ctx); err != nil {
+			t.Fatalf("run producer: %v", err)
+		}
+		prod.Produce(ctx, message.New().SetBody("msg").SetQueue(params))
+
+		time.Sleep(200 * time.Millisecond)
+
+		redissmq.Shutdown()
+	}
+
+	time.Sleep(500 * time.Millisecond)
+
+	after := runtime.NumGoroutine()
+	delta := after - baseline
+
+	if delta > 5 {
+		t.Fatalf("goroutine leak after full lifecycle cycles: "+
+			"baseline=%d after=%d delta=+%d (expected ≤ +5)",
+			baseline, after, delta)
+	}
+	t.Logf("goroutine delta after full lifecycle: %+d (baseline %d)", delta, baseline)
 }

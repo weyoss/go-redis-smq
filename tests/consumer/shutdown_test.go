@@ -17,7 +17,10 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
+	"github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
+	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -164,5 +167,43 @@ func TestShutdown_RunShutdownRunShutdown(t *testing.T) {
 
 	if cons.IsRunning() {
 		t.Fatal("consumer should not be running after second shutdown")
+	}
+}
+
+// Scenario: Consumer.Shutdown returns only after the heartbeat beat loop has
+// exited — no in-flight Redis op remains after Shutdown returns.
+//
+// Regression test for C9. Pre-fix, Heartbeat.Stop closed the done channel
+// but did not wait for the beat goroutine; if a beat was mid-SET when
+// Shutdown returned, redissmq.Shutdown's subsequent internalredis.Close
+// would race it and panic on a nil client.
+func TestShutdown_HeartbeatBeatLoopExited(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := publicqueue.MustQueueParams("test-c9-heartbeat-exit")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	cons := redissmq.NewConsumer(consumer.WithHeartbeatTTL(1 * time.Second))
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error { return nil })
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+
+	// Let the heartbeat loop start.
+	time.Sleep(200 * time.Millisecond)
+
+	cons.Shutdown()
+
+	// After Shutdown, the heartbeat key is gone (DEL ran) and the beat
+	// loop has exited. We can't directly observe the goroutine, but the
+	// DEL is the last thing Stop does after waiting for the loop — if the
+	// loop were still running, the DEL might race a beat SET, leaving the
+	// key in place.
+	exists, err := redis.Client().Exists(ctx, keys.System{}.ConsumerHeartbeat(cons.ID())).Result()
+	if err != nil {
+		t.Fatalf("check heartbeat: %v", err)
+	}
+	if exists != 0 {
+		t.Fatalf("heartbeat key still present after Shutdown — beat loop may still be running")
 	}
 }

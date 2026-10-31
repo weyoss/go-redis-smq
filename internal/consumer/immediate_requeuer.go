@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
@@ -32,6 +33,7 @@ type ImmediateRequeuer struct {
 	groupID    string
 	consumerID string
 	interval   time.Duration
+	wg         sync.WaitGroup // tracks the requeue ticker goroutine
 	log        *slog.Logger
 }
 
@@ -47,7 +49,9 @@ func NewImmediateRequeuer(queue *queue.Params, groupID, consumerID string) *Imme
 
 func (ir *ImmediateRequeuer) Run(ctx context.Context) {
 	ir.log.Debug("starting immediate requeuer", "interval", ir.interval)
+	ir.wg.Add(1)
 	go func() {
+		defer ir.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				ir.log.Error("immediate requeuer panicked", "panic", r)
@@ -66,6 +70,19 @@ func (ir *ImmediateRequeuer) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Wait blocks until the background goroutine exits. Called by
+// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
+// Redis operation remains when the process tears down the client via
+// internalredis.Close.
+//
+// The goroutine exits as soon as its select observes ctx.Done() — but if
+// it's mid-requeue (a Redis LRange plus per-message HGET plus the Lua
+// EVAL), Wait blocks until that whole batch completes. That's the point:
+// shutdown cannot proceed until the last Redis op is done.
+func (ir *ImmediateRequeuer) Wait() {
+	ir.wg.Wait()
 }
 
 func (ir *ImmediateRequeuer) requeue(ctx context.Context) {

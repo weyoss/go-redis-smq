@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -33,6 +34,7 @@ type DelayedRequeuer struct {
 	groupID    string
 	consumerID string
 	interval   time.Duration
+	wg         sync.WaitGroup // tracks the requeue ticker goroutine
 	log        *slog.Logger
 }
 
@@ -48,7 +50,9 @@ func NewDelayedRequeuer(queue *queue.Params, groupID, consumerID string) *Delaye
 
 func (dr *DelayedRequeuer) Run(ctx context.Context) {
 	dr.log.Debug("starting delayed requeuer", "interval", dr.interval)
+	dr.wg.Add(1)
 	go func() {
+		defer dr.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				dr.log.Error("delayed requeuer panicked", "panic", r)
@@ -67,6 +71,19 @@ func (dr *DelayedRequeuer) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Wait blocks until the background goroutine exits. Called by
+// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
+// Redis operation remains when the process tears down the client via
+// internalredis.Close.
+//
+// The goroutine exits as soon as its select observes ctx.Done() — but if
+// it's mid-requeueDue (a Redis ZRANGEBYSCORE plus per-message HGET plus
+// the Lua EVAL), Wait blocks until that whole batch completes. That's the
+// point: shutdown cannot proceed until the last Redis op is done.
+func (dr *DelayedRequeuer) Wait() {
+	dr.wg.Wait()
 }
 
 func (dr *DelayedRequeuer) requeueDue(ctx context.Context) {

@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
@@ -30,6 +31,7 @@ type OrphanedLockRecoverer struct {
 	queue      *queue.Params
 	consumerID string
 	interval   time.Duration
+	wg         sync.WaitGroup // tracks the recoverer ticker goroutine
 	log        *slog.Logger
 }
 
@@ -65,7 +67,9 @@ func NewOrphanedLockRecoverer(
 
 func (olr *OrphanedLockRecoverer) Run(ctx context.Context) {
 	olr.log.Debug("starting orphaned lock recoverer", "interval", olr.interval)
+	olr.wg.Add(1)
 	go func() {
+		defer olr.wg.Done()
 		defer func() {
 			if r := recover(); r != nil {
 				olr.log.Error("orphaned lock recoverer panicked", "panic", r)
@@ -84,6 +88,21 @@ func (olr *OrphanedLockRecoverer) Run(ctx context.Context) {
 			}
 		}
 	}()
+}
+
+// Wait blocks until the background goroutine exits. Called by
+// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
+// Redis operation remains when the process tears down the client via
+// internalredis.Close.
+//
+// The goroutine exits as soon as its select observes ctx.Done() — but if
+// it's mid-recover (a State.FetchCurrent call — several Redis reads — plus
+// the conditional IsWorkerAlive check — two more reads — plus the
+// SetQueueState Lua EVAL), Wait blocks until that whole cycle completes.
+// That's the point: shutdown cannot proceed until the last Redis op is
+// done.
+func (olr *OrphanedLockRecoverer) Wait() {
+	olr.wg.Wait()
 }
 
 func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
