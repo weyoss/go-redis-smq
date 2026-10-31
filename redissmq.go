@@ -58,11 +58,10 @@ var (
 	lifecycleMu sync.Mutex
 	initialized bool
 	// generation is incremented on each successful Init. It identifies the
-	// runtime instance. Watchers spawned by Init capture the generation
-	// they were created for and pass it to shutdownIfCurrent, so a stale
-	// watcher can detect that the runtime it was watching has been
-	// superseded by a later Init and bail out instead of tearing down the
-	// new runtime.
+	// runtime instance. Watchers spawned by Init capture the generation they
+	// were created for and pass it to shutdownIfCurrent, so a stale watcher
+	// can detect that the runtime it was watching has been superseded by a
+	// later Init and bail out instead of tearing down the new runtime.
 	generation uint64
 )
 
@@ -115,7 +114,15 @@ func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interfa
 //
 // Init is idempotent and can be called multiple times; subsequent calls
 // are no-ops.
+//
+// On failure, Init unwinds any partial initialization via shutdownLocked
+// before returning. The runtime is left in exactly the same state it was in
+// before the call — safe to retry with a fresh client (or a corrected
+// config). A precondition failure (wrong client type) returns before any
+// state is touched.
 func Init(ctx context.Context, client goredis.UniversalClient) error {
+	// Precondition failure — nothing has been initialized, so there is
+	// nothing to unwind. Return the error without touching runtime state.
 	if _, ok := client.(*goredis.Client); !ok {
 		return fmt.Errorf("redissmq: only *redis.Client is supported; cluster and ring clients are not allowed")
 	}
@@ -127,13 +134,21 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 		return nil
 	}
 
+	// Re-enable logging in case a previous Init failed and its rollback
+	// closed the logger via shutdownLocked's logger.Shutdown() call.
+	// Without this, a retry would run silently even if the user's config
+	// has Logger.Enabled = true. Idempotent when already open.
+	logger.Init()
+
 	if err := internalredis.Init(ctx, client); err != nil {
+		shutdownLocked()
 		return fmt.Errorf("redissmq: redis init failed: %w", err)
 	}
 
 	internaleventbus.InitSystem(ctx)
 
 	if err := internalconfig.Init(ctx); err != nil {
+		shutdownLocked()
 		return fmt.Errorf("redissmq: config init failed: %w", err)
 	}
 
@@ -147,9 +162,9 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 	//
 	// Without this check: if the outer ctx of Init #1 is cancelled after
 	// Init #1 was already Shutdown() and a NEW Init #2 has run, Init #1's
-	// leaked watcher acquires lifecycleMu (possibly after Init #2 finished),
-	// sees initialized==true, and calls Shutdown() — killing Init #2's
-	// runtime. That was the correctness bug this generation token closes.
+	// leaked watcher would acquire lifecycleMu (possibly after Init #2
+	// finished), see initialized==true, and call Shutdown() — killing
+	// Init #2's runtime.
 	generation++
 	watchedGen := generation
 	watchedCtx := systemCtx
@@ -194,14 +209,14 @@ func ShutdownUserEventBus() {
 // internal Redis references. The Redis client itself is not closed; the
 // caller remains responsible for closing it.
 //
-// Shutdown is safe to call multiple times and may be followed by another
-// Init to restart the runtime.
+// Shutdown is idempotent: it may be called any number of times, before Init
+// (as a no-op cleanup), after a failed Init (redundant — Init already
+// unwound via shutdownLocked — but safe), or after a successful Init (the
+// normal path). After Shutdown, the runtime may be re-initialized with
+// another call to Init.
 func Shutdown() {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
-	if !initialized {
-		return
-	}
 	shutdownLocked()
 }
 
@@ -209,16 +224,13 @@ func Shutdown() {
 //
 // It shuts down the runtime only if the current generation matches gen —
 // i.e., only if the runtime it was watching is still the active one.
-// Otherwise a later Init has superseded it, and the runtime that watcher
-// would have torn down no longer exists. Touching the new runtime would
-// corrupt live state.
+// Otherwise a later Init has superseded it, and touching the new runtime
+// would corrupt live state.
 //
-// Invariants:
-//   - caller does NOT hold lifecycleMu
-//   - initialized may be true (normal watcher fire) or false (watcher
-//     fires after explicit Shutdown already ran)
-//   - generation is only read/written under lifecycleMu, so reading it
-//     here is safe
+// The initialized check is redundant given the generation check would fail
+// on the same interleavings, but keeping it makes the intent explicit: the
+// watcher has no business calling into shutdownLocked if there is no live
+// runtime at all.
 func shutdownIfCurrent(gen uint64) {
 	lifecycleMu.Lock()
 	defer lifecycleMu.Unlock()
@@ -226,17 +238,29 @@ func shutdownIfCurrent(gen uint64) {
 		return
 	}
 	if generation != gen {
-		// A subsequent Init has run since this watcher was created.
-		// Its own watcher will handle shutdown. Do nothing.
 		return
 	}
 	shutdownLocked()
 }
 
 // shutdownLocked performs the shutdown sequence. Caller must hold
-// lifecycleMu and initialized must be true.
+// lifecycleMu.
+//
+// Idempotent: every cleanup step is nil-safe or an atomic swap. Calling it
+// on a partially-initialized runtime (after an Init failure) unwinds exactly
+// what was done and no more. Calling it twice in a row is harmless.
+//
+// The wasInit flag only affects log verbosity — a rollback after a failed
+// Init logs at Debug rather than Info, so a failed-then-retried Init doesn't
+// produce "RedisSMQ shutting down..." messages on the user's console.
 func shutdownLocked() {
-	log.Info("RedisSMQ shutting down...")
+	wasInit := initialized
+
+	if wasInit {
+		log.Info("RedisSMQ shutting down...")
+	} else {
+		log.Debug("RedisSMQ rolling back partial initialization...")
+	}
 
 	if purgeWorkerStop != nil {
 		purgeWorkerStop()
@@ -262,18 +286,18 @@ func shutdownLocked() {
 	for _, c := range consumers {
 		c.Shutdown()
 	}
-	log.Info("consumers shut down", "count", len(consumers))
-
-	bgCtx := context.Background()
 	for _, p := range producers {
-		p.Shutdown(bgCtx)
+		p.Shutdown(context.Background())
 	}
-	log.Info("producers shut down", "count", len(producers))
 
 	ShutdownUserEventBus()
 	internaleventbus.ShutdownSystem()
 
-	log.Info("RedisSMQ shut down complete")
+	if wasInit {
+		log.Info("RedisSMQ shut down complete")
+	} else {
+		log.Debug("RedisSMQ rollback complete")
+	}
 
 	logger.Shutdown()
 	internalconfig.Close()

@@ -39,6 +39,19 @@ func Shutdown() {
 	closed.Store(true)
 }
 
+// Init re-enables logging after a prior Shutdown.
+//
+// Called at the top of redissmq.Init so that a retry after a failed Init
+// (which calls shutdownLocked and closes the logger) runs with logging
+// enabled. Safe to call unconditionally — no-op if already open.
+//
+// Without this, a failed Init would leave the logger closed forever, and a
+// successful retry would run silently — the user's Logger.Enabled=true
+// config would have no effect.
+func Init() {
+	closed.Store(false)
+}
+
 // currentConfig returns the logger settings from the public configuration
 // snapshot. If logging is shut down, it returns a disabled config.
 func currentConfig() Config {
