@@ -40,6 +40,29 @@ type Producer struct {
 	topicExchange  *internalexchange.TopicStore
 	pubSubResolver *PubSubTargetResolver
 	log            *slog.Logger
+
+	// ctx/cancel derive from the caller's ctx in Run. Shutdown cancels ctx
+	// to signal the watcher goroutine; the watcher also exits if the
+	// caller's outer ctx is cancelled. Watching a derived context (rather
+	// than the outer ctx directly) is what lets Shutdown detach the
+	// watcher from the caller's lifecycle — pre-fix, the watcher watched
+	// the outer ctx directly and leaked if Shutdown was called without
+	// cancelling that ctx (every test using defer-producer.Shutdown
+	// leaked one watcher per producer).
+	ctx    context.Context
+	cancel context.CancelFunc
+
+	// done is closed by the watcher goroutine when its cleanup completes.
+	// Shutdown captures done under the lock and waits on it before
+	// returning, so by the time Shutdown returns, the watcher has finished
+	// its publish calls (PublishGoingDown / PublishDown — Redis ops). This
+	// closes a C9-class crash vector: pre-fix, Shutdown returned without
+	// waiting, and a subsequent internalredis.Close could race the
+	// watcher's in-flight publish and panic in an unrecovered goroutine.
+	//
+	// Set to a fresh channel per successful Run; closed by the watcher.
+	// Subsequent Run calls overwrite it.
+	done chan struct{}
 }
 
 // New creates a new producer that satisfies the public producer interface.
@@ -56,6 +79,13 @@ func New() publicproducer.Producer {
 }
 
 // Run starts the producer and prepares it for publishing.
+//
+// Run is transactional: on any failure, it publishes the matching
+// PublishGoingDown event to close the PublishGoingUp pair opened at
+// entry, then returns. No watcher goroutine is spawned on failure, so
+// there's no done channel to close and no cleanup to wait for — Run has
+// nothing to roll back because the only resource it acquires on the
+// failure path is the pubSubResolver, which is nulled before return.
 func (prod *Producer) Run(ctx context.Context) error {
 	prod.mu.Lock()
 	defer prod.mu.Unlock()
@@ -72,15 +102,36 @@ func (prod *Producer) Run(ctx context.Context) error {
 	prod.pubSubResolver = NewPubSubTargetResolver(prod.id)
 	if err := prod.pubSubResolver.Load(ctx); err != nil {
 		prod.pubSubResolver = nil
+		// Close the lifecycle event pair. Pre-fix, subscribers saw
+		// "producer.goingUp" with no matching "producer.goingDown" for
+		// this failure — dangling event.
+		PublishGoingDown(ctx, prod.id)
 		prod.log.Error("failed to load pub/sub targets", "error", err)
 		return fmt.Errorf("producer: load pub/sub targets: %w", err)
 	}
 
+	prod.ctx, prod.cancel = context.WithCancel(ctx)
 	prod.running = true
+	done := make(chan struct{})
+	prod.done = done
 
 	go func() {
-		<-ctx.Done()
-		prod.Shutdown(context.Background())
+		defer close(done)
+		<-prod.ctx.Done()
+		// Watcher cleanup. Runs if prod.ctx is cancelled — either by
+		// Shutdown (primary path) or by the outer ctx's cancellation
+		// propagating through. Cleanup is idempotent — it guards on
+		// prod.running under prod.mu.
+		//
+		// No recover() here. PublishGoingDown / PublishDown are
+		// Redis-touching (publish through eventmultiplexer → eventbus →
+		// Redis PUBLISH). Pre-PR-3, this was a crash vector: Shutdown
+		// returned without waiting, and internalredis.Close could nil
+		// the client mid-publish. Post-PR-3, Shutdown waits on done, so
+		// by the time redissmq.Shutdown reaches internalredis.Close,
+		// this goroutine has exited. The wait is the fix — a recover()
+		// here would mask a failure of the wait discipline.
+		prod.cleanup(context.Background())
 	}()
 
 	prod.log.Info("producer started")
@@ -91,28 +142,77 @@ func (prod *Producer) Run(ctx context.Context) error {
 }
 
 // Shutdown gracefully stops the producer.
+//
+// Two-phase shutdown:
+//
+//  1. Under prod.mu: capture done (for the wait), release the lock.
+//  2. Outside prod.mu: run cleanup (which cancels prod.ctx, publishes
+//     the down events, clears the resolver), then wait on done for the
+//     watcher goroutine to exit.
+//
+// Holding prod.mu across <-done would deadlock: the watcher's cleanup
+// acquires prod.mu (to clear pubSubResolver). The lock is therefore
+// released between phase 1 and the wait.
+//
+// The ctx parameter is used as the caller-supplied context for the
+// publish calls made from the Shutdown goroutine. The watcher's copy of
+// the cleanup uses context.Background() (it doesn't have access to the
+// caller's ctx — it was spawned at Run time). Either goroutine may win
+// the cleanup race; whichever does, its publish calls use its own ctx.
+// Both are visible to subscribers by the time Shutdown returns.
+//
+// Idempotent: safe to call multiple times, and safe to call after the
+// outer ctx has already cancelled the producer (in which case the
+// watcher has likely already run cleanup; the second call sees
+// running == false and waits on the closed done — returns immediately).
 func (prod *Producer) Shutdown(ctx context.Context) {
 	prod.mu.Lock()
-	defer prod.mu.Unlock()
-
 	if !prod.running {
-		prod.log.Debug("shutdown called but not running")
+		done := prod.done
+		prod.mu.Unlock()
+		if done != nil {
+			<-done
+		}
 		return
 	}
+	done := prod.done
+	prod.mu.Unlock()
 
-	prod.log.Info("shutting down producer")
+	prod.cleanup(ctx)
+
+	if done != nil {
+		<-done
+	}
+}
+
+// cleanup performs the one-shot teardown: cancel the derived ctx, publish
+// the down events, clear the resolver. Guarded by prod.running so exactly
+// one caller (Shutdown goroutine OR watcher goroutine) runs the work.
+func (prod *Producer) cleanup(ctx context.Context) {
+	prod.mu.Lock()
+	if !prod.running {
+		prod.mu.Unlock()
+		return
+	}
+	prod.running = false
+	if prod.cancel != nil {
+		prod.cancel() // wakes the watcher; it'll see running == false and no-op
+		prod.cancel = nil
+	}
+	prod.mu.Unlock()
 
 	PublishGoingDown(ctx, prod.id)
 
-	prod.running = false
+	prod.mu.Lock()
 	if prod.pubSubResolver != nil {
 		prod.pubSubResolver.Clear()
 		prod.pubSubResolver = nil
 	}
-
-	prod.log.Info("producer shut down complete")
+	prod.mu.Unlock()
 
 	PublishDown(ctx, prod.id)
+
+	prod.log.Info("producer shut down complete")
 }
 
 // IsRunning reports whether the producer is currently running.

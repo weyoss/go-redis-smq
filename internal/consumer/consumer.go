@@ -93,6 +93,14 @@ func (cons *Consumer) CancelWithGroup(queue *queue.Params, groupID string) publi
 	return cons
 }
 
+// Run starts the consumer and all registered handlers.
+//
+// Run is transactional on the runner startup failure path: if
+// runner.Run returns an error, cons.shutdownLocked's !running branch
+// unwinds the partial state (ctx, heartbeat if any, runner instances)
+// before Run returns. The failure path also publishes the matching
+// consumer.down event to close the consumer.goingUp pair opened at
+// the top of Run.
 func (cons *Consumer) Run(ctx context.Context) error {
 	cons.mu.Lock()
 	defer cons.mu.Unlock()
@@ -116,13 +124,22 @@ func (cons *Consumer) Run(ctx context.Context) error {
 	// must observe the ctx created by THIS Run, not whatever cons.ctx points
 	// to at the moment the goroutine executes. A subsequent Run (after
 	// Shutdown) overwrites cons.ctx under cons.mu; without the local capture
-	// the old goroutine could read the new ctx — a benign but flagged race.
+	// the old goroutine could read the new ctx.
 	shutdownCtx := cons.ctx
 
 	if err := cons.runner.Run(shutdownCtx); err != nil {
 		cons.log.Error("failed to run handlers", "error", err)
-		cons.cancel()
-		cons.cancel = nil
+		// Delegate cleanup to shutdownLocked's !running branch: cancels
+		// cons.ctx, stops heartbeat (no-op — never started), calls
+		// unregister (DEL on never-written keys, no-op), calls
+		// runner.Shutdown (idempotent — runner.Run already rolled back
+		// its own partial state on its failure paths).
+		//
+		// The runner's own failure paths (in runner.Run) call r.Shutdown,
+		// which nils out r.instances. Here, the extra runner.Shutdown
+		// is a defence against future changes to runner.Run that might
+		// miss a path.
+		cons.shutdownLocked()
 		consumerEvents.PublishDown(ctx, cons.id)
 		return fmt.Errorf("consumer: run handlers: %w", err)
 	}
@@ -157,6 +174,19 @@ func (cons *Consumer) Shutdown() {
 	cons.shutdownLocked()
 }
 
+// shutdownLocked performs the shutdown sequence. Caller must hold cons.mu.
+//
+// Two branches:
+//
+//   - !running: the consumer was never fully started (either Run hasn't
+//     completed, or Run failed before setting running = true). Performs
+//     the partial cleanup: cancel ctx, stop heartbeat, unregister, shut
+//     down the runner. Publishes consumer.down so the matching
+//     consumer.goingUp event from Run has a paired close.
+//
+//   - running: full cleanup with the goingDown/down event pair.
+//
+// Idempotent in both branches: all cleanup steps are nil-safe.
 func (cons *Consumer) shutdownLocked() {
 	if !cons.running {
 		cons.log.Debug("shutdown called but not running — cleaning up partial state")
@@ -170,6 +200,11 @@ func (cons *Consumer) shutdownLocked() {
 		}
 		cons.unregister()
 		cons.runner.Shutdown()
+		// Close the lifecycle event pair. PublishGoingUp was fired at the
+		// top of Run; without a matching PublishDown here, subscribers see
+		// a dangling "goingUp" event when Run fails before running = true
+		// is set. The full-running path publishes its own down event below.
+		consumerEvents.PublishDown(context.Background(), cons.id)
 		return
 	}
 

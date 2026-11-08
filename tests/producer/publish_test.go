@@ -11,12 +11,15 @@
 package producer_test
 
 import (
+	"runtime"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
+	publicproducer "github.com/weyoss/go-redis-smq/pkg/producer"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
@@ -258,4 +261,129 @@ func TestProduce_ShutdownIdempotent(t *testing.T) {
 	prod.Shutdown(ctx)
 	prod.Shutdown(ctx)
 	prod.Shutdown(ctx)
+}
+
+// Scenario: A clean Run → Shutdown cycle fires the full four-event
+// lifecycle sequence in order: goingUp, up, goingDown, down.
+//
+// Verifies the "PublishGoingDown on Load failure" fix didn't disturb the
+// success path — both goingUp/goingDown and up/down are still published
+// exactly once each, in the correct order, and both are visible by the
+// time Shutdown returns.
+//
+// Pre-fix, the goingDown/down events were published from Shutdown's
+// synchronous cleanup (under prod.mu) — same observable behaviour for
+// this test. Post-PR-3, they're published from whichever goroutine wins
+// the cleanup race (usually Shutdown's, since it runs inline), and
+// Shutdown waits on the watcher's `done` channel before returning — so
+// the events are still guaranteed to be delivered by assertion time.
+func TestProduce_RunPublishesGoingUpAndGoingDown(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	var mu sync.Mutex
+	var events []string
+
+	subGoingUp, err := publicproducer.SubscribeGoingUp(func(p publicproducer.LifecyclePayload) {
+		mu.Lock()
+		events = append(events, "goingUp")
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe goingUp: %v", err)
+	}
+	defer subGoingUp.Unsubscribe()
+
+	subUp, err := publicproducer.SubscribeUp(func(p publicproducer.LifecyclePayload) {
+		mu.Lock()
+		events = append(events, "up")
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe up: %v", err)
+	}
+	defer subUp.Unsubscribe()
+
+	subGoingDown, err := publicproducer.SubscribeGoingDown(func(p publicproducer.LifecyclePayload) {
+		mu.Lock()
+		events = append(events, "goingDown")
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe goingDown: %v", err)
+	}
+	defer subGoingDown.Unsubscribe()
+
+	subDown, err := publicproducer.SubscribeDown(func(p publicproducer.LifecyclePayload) {
+		mu.Lock()
+		events = append(events, "down")
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe down: %v", err)
+	}
+	defer subDown.Unsubscribe()
+
+	prod := redissmq.NewProducer()
+	if err := prod.Run(ctx); err != nil {
+		t.Fatalf("run producer: %v", err)
+	}
+
+	time.Sleep(200 * time.Millisecond)
+	prod.Shutdown(ctx)
+	time.Sleep(200 * time.Millisecond)
+
+	mu.Lock()
+	got := append([]string(nil), events...)
+	mu.Unlock()
+
+	want := []string{"goingUp", "up", "goingDown", "down"}
+	if len(got) != len(want) {
+		t.Fatalf("events = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("events[%d] = %q, want %q (full sequence: %v)", i, got[i], want[i], got)
+		}
+	}
+}
+
+// Scenario: No goroutine leak across repeated producer Run → Shutdown
+// cycles when the outer ctx is never cancelled.
+func TestProduce_ShutdownNoWatcherLeak(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	// Warm-up cycle.
+	prod0 := redissmq.NewProducer()
+	if err := prod0.Run(ctx); err != nil {
+		t.Fatalf("warm-up run: %v", err)
+	}
+	prod0.Shutdown(ctx)
+	time.Sleep(100 * time.Millisecond)
+
+	baseline := runtime.NumGoroutine()
+
+	const cycles = 10
+	for i := 0; i < cycles; i++ {
+		prod := redissmq.NewProducer()
+		if err := prod.Run(ctx); err != nil {
+			t.Fatalf("cycle %d run: %v", i, err)
+		}
+		prod.Shutdown(ctx)
+	}
+
+	// Give the runtime a moment to reap any exiting goroutines.
+	time.Sleep(300 * time.Millisecond)
+
+	after := runtime.NumGoroutine()
+	delta := after - baseline
+
+	// Slack of 3 for scheduler noise, testutil housekeeping, and one-off
+	// background goroutines unrelated to producers. Pre-fix, each cycle
+	// leaks one watcher — delta would be ~+10, well above the threshold.
+	if delta > 3 {
+		t.Fatalf("goroutine leak across %d producer Run/Shutdown cycles: "+
+			"baseline=%d after=%d delta=+%d — watcher goroutines are leaking",
+			cycles, baseline, after, delta)
+	}
+	t.Logf("goroutine delta after %d cycles: %+d (baseline %d)", cycles, delta, baseline)
 }
