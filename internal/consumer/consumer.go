@@ -148,8 +148,8 @@ func (cons *Consumer) Run(ctx context.Context) error {
 	if err := cons.runner.Run(shutdownCtx); err != nil {
 		cons.log.Error("failed to run handlers", "error", err)
 		// Partial cleanup. shutdownLocked's !running branch performs the
-		// actual work (cancel ctx, stop hb, unregister, runner.Shutdown);
-		// it does NOT publish a down event.
+		// actual work (cancel ctx, stop hb, runner.Shutdown); it does NOT
+		// publish a down event.
 		cons.shutdownLocked()
 		// Close the lifecycle pair opened by PublishGoingUp above. The
 		// running branch of shutdownLocked owns this event when a consumer
@@ -192,39 +192,6 @@ func (cons *Consumer) Shutdown() {
 }
 
 // shutdownLocked performs the shutdown sequence. Caller must hold cons.mu.
-//
-// Two branches:
-//
-//   - !running: the consumer was never fully started (either Run hasn't
-//     completed, or Run failed before setting running = true). Performs
-//     partial cleanup (cancel ctx, stop heartbeat, unregister, shut down
-//     the runner). Does NOT publish any lifecycle event — see below.
-//
-//   - running: full cleanup with the goingDown/down event pair.
-//
-// Event ownership rule: PublishDown fires exactly once per PublishGoingUp.
-// The owner depends on the lifecycle path:
-//
-//   - Run succeeded, then Shutdown (or the watcher's Shutdown) fires:
-//     the running branch owns goingDown + down.
-//   - Run failed: Run owns down (its caller publishes it after
-//     shutdownLocked's !running branch finishes the partial cleanup).
-//   - Run succeeded, clean shutdown completed, then the watcher fires
-//     another Shutdown: no event — the running branch already published
-//     down. The !running branch must stay silent to avoid the
-//     double-publish.
-//
-// That last case is why the !running branch does NOT publish down.
-// TestConsumerEvents_Lifecycle verifies this — the watcher always fires
-// after the running branch's cancel(), and an unconditional down in the
-// !running branch produces two down events per consumer.
-//
-// Lock discipline note: cons.mu is held across the Redis operations in
-// both branches (event publishes, hb.Stop's DEL, runner.Shutdown's
-// coordinator, unregister's DEL). This is intentional — concurrent
-// Consume/Cancel/IsRunning calls must block until shutdown completes —
-// but means shutdown latency is felt by those callers. The C7 discipline
-// (waits are unconditional) is preserved; see MessageHandler.shutdownLocked.
 func (cons *Consumer) shutdownLocked() {
 	if !cons.running {
 		cons.log.Debug("shutdown called but not running — cleaning up partial state")
@@ -236,7 +203,17 @@ func (cons *Consumer) shutdownLocked() {
 			cons.hb.Stop()
 			cons.hb = nil
 		}
-		cons.unregister()
+		// Do NOT call cons.unregister() here — that was C10. unregister()
+		// touches Redis, and this branch is reachable from the watcher
+		// goroutine after internalredis.Close() has nilled the client.
+		// See the doc comment above for the full invariant.
+		//
+		// unregister() is not needed in this branch under any path:
+		//   - Clean shutdown: running branch already called unregister(),
+		//     which deleted the keys. The watcher's second pass has nothing
+		//     to do.
+		//   - Run failure: register() is called only after runner.Run
+		//     succeeds, so it never ran. No keys were created.
 		cons.runner.Shutdown()
 		// No event publish here. See the event ownership rule above.
 		return
@@ -262,7 +239,8 @@ func (cons *Consumer) shutdownLocked() {
 
 	// Cancel the ctx last. This wakes the watcher goroutine spawned in Run
 	// (which calls cons.Shutdown() again) — that re-entry is safe because
-	// running is already false, so it takes the !running branch and no-ops.
+	// running is already false, so it takes the !running branch and no-ops
+	//
 	// Ordering reads backwards (cancel normally comes before cleanup), but
 	// cleanup here is done by the components we explicitly tore down above
 	// (hb.Stop, runner.Shutdown), not by ctx cancellation propagation.
