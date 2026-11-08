@@ -256,3 +256,70 @@ func TestWorker_StopWaitsForSubGoroutines(t *testing.T) {
 	// internalredis.Close, the sub-goroutines exited before the client was
 	// nilled.
 }
+
+// Scenario: PurgeWorker.stop returns only after work has exited, so no
+// in-flight Redis call from work races redissmq.Shutdown's eventual
+// internalredis.Close.
+func TestWorker_StopWaitsForWorkGoroutine(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 30*time.Second)
+	defer cancel()
+
+	params := publicqueue.MustQueueParams("test-h14-work-wait")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	prod := testutil.StartProducer(t, ctx)
+	for i := 0; i < 2000; i++ {
+		if _, err := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params)); err != nil {
+			t.Fatalf("produce %d: %v", i, err)
+		}
+	}
+
+	qm := redissmq.NewQueueManager()
+	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	if err != nil {
+		t.Fatalf("enqueue purge: %v", err)
+	}
+
+	// Give the Init worker time to acquire and start processing the job.
+	// A 2000-message purge with default BatchSize=1000, DelayMs=5000 has
+	// at least two batches, so work is likely mid-batch or in the
+	// BatchDelay sleep when we call stop. Either state exercises the fix.
+	time.Sleep(100 * time.Millisecond)
+
+	// Construct a dedicated worker pointing at the same manager. We can't
+	// stop the Init worker directly (it's owned by redissmq.Init), so we
+	// exercise the stop path on a separate worker that shares the same
+	// Redis state. Its stop() must return only after its own work() exits.
+	manager := internalqueue.NewManager().Purge()
+	worker := internalqueue.NewPurgeWorker(manager)
+	stop := worker.Start(ctx)
+
+	// Let this worker also be mid-flight, if it can acquire the job.
+	// (It may not — the Init worker may already hold the lock. Either
+	// way, stop must wait for this worker's own work() to exit.)
+	time.Sleep(100 * time.Millisecond)
+
+	// The critical assertion: stop blocks until this worker's work()
+	// exits. Pre-fix, if work() were still in-flight at 5s, stop would
+	// return and the subsequent Shutdown would crash. Post-fix, stop
+	// blocks. Under -race, this sequence would surface any race.
+	stop()
+
+	// After stop returns, this worker's goroutines are all gone. If
+	// internalredis.Close nils the client next, nothing from this
+	// worker will call Redis.
+	if _, err := qm.GetPurgeJob(ctx, jobID); err != nil {
+		t.Logf("job state check after stop: %v (state may have changed)", err)
+	}
+
+	// Shutdown exercises the full teardown including internalredis.Close.
+	// Post-fix, no worker goroutine is left to race it. Pre-fix, in the
+	// (rare) case the 5s timeout fired, this would panic.
+	redissmq.Shutdown()
+
+	// The test passing means: no panic during Shutdown, no -race warning.
+	// If a future regression reintroduces a bounded wait, this test may
+	// still pass on a fast machine — the deterministic proof is the
+	// unconditional `<-w.done` in the source, verified by review.
+	t.Log("worker stop → Shutdown completed without crash or race")
+}

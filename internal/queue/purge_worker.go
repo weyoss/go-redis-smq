@@ -127,25 +127,39 @@ func (w *PurgeWorker) stop() {
 		w.cancel = nil
 	}
 
-	// Wait for the main work goroutine. Pre-existing bounded wait: work()
-	// can be mid-purge-batch on a large job, and execute() returns within
-	// BatchDelay + one Redis call after ctx cancellation (~8s worst case at
-	// defaults). The 5s timeout is tight but pre-existing; PR 1 doesn't
-	// change this wait. Note: if the timeout fires while work() is still
-	// in-flight, the eventual Redis call panics in an unrecovered goroutine
-	// — flagged as a follow-up (see commit message).
+	// Wait for the main work goroutine to exit. Unconditional — same
+	// discipline as the consumer workers and the w.wg sub-loop wait below.
+	//
+	// Pre-fix, this used a 5s bounded select. If the timeout fired while
+	// work() was still in-flight (mid-purge-batch on a large job, or
+	// mid-Redis-call on a slow connection), stop() proceeded, redissmq.
+	// Shutdown reached internalredis.Close() and nilled the client, then
+	// work()'s next Redis call panicked in an unrecovered goroutine —
+	// process crash.
+	//
+	// The 5s timeout was a holdover from before purgeMessages checked
+	// ctx.Done() between batches. Now it does: work() returns within
+	// BatchDelay (ctx-aware, cut short by cancellation) plus the current
+	// in-flight Redis op plus the final Complete/Fail calls. In normal
+	// operation that's under a second. Worst case is bounded by the
+	// Redis client's own dial/read/write timeouts (~3-5s per call) across
+	// the ~3 calls that can be in-flight when cancellation hits — so the
+	// wait is bounded by Redis client behavior, not by wall clock, and not
+	// by the size of the pending purge.
+	//
+	// Holding w.mu across the wait blocks concurrent Start/stop calls for
+	// that same bounded window. Acceptable: the window is short in normal
+	// operation, and Start/stop on the same PurgeWorker aren't concurrent
+	// in any realistic deployment.
 	if w.done != nil {
-		select {
-		case <-w.done:
-		case <-time.After(5 * time.Second):
-		}
+		<-w.done
 		w.done = nil
 	}
 
 	// Wait for heartbeatLoop and recoveryLoop to exit. Unconditional — see
 	// the wg field comment. Both sub-loops check ctx.Done() at every tick
 	// and between every Redis call; they exit within one tick + one
-	// in-flight Redis op. No recovery for either, so proceeding past this
+	// in-flight Redis op. No recover for either, so proceeding past this
 	// wait while they're still running would reintroduce the C9 panic.
 	w.wg.Wait()
 
