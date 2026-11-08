@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/redis/go-redis/v9"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/message/schema"
 	internalQueue "github.com/weyoss/go-redis-smq/internal/queue"
@@ -89,6 +90,29 @@ func (d *DequeueMessage) Init(ctx context.Context) error {
 	return nil
 }
 
+// Dequeue attempts to dequeue and check out a single message from the queue.
+//
+// Returns:
+//   - (nil, nil): no message available (queue empty, or rate limit reached).
+//   - (env, nil): message successfully dequeued and checked out.
+//   - (nil, err): any failure — context cancellation, Redis errors,
+//     queue-state errors (from checkout), decode failures, or rate-limit
+//     check failures.
+//
+// The caller (MessageHandler.loop) is responsible for distinguishing
+// error classes:
+//
+//   - consumer.ErrQueueStopped / ErrQueueLocked / ErrQueueInvalidState
+//     → handler shutdown, restart when the queue becomes active.
+//   - context.Canceled / context.DeadlineExceeded → loop exits silently
+//     (shutdown in progress).
+//   - any other error → log at Error, retry after 1s.
+//
+// Dequeue itself does NOT log pop or rate-limit errors — the caller logs
+// at the appropriate level. Pre-fix, popFIFO/popPriority swallowed ALL
+// pop errors as ("", nil), so real Redis failures (connection refused,
+// timeouts, WRONGTYPE) manifested as "queue empty" retries with zero
+// diagnostics. The loop now sees them.
 func (d *DequeueMessage) Dequeue(ctx context.Context) (*internalMessage.Envelope, error) {
 	if d.queueType == nil {
 		return nil, fmt.Errorf("dequeue: not initialized, call Init first")
@@ -97,7 +121,9 @@ func (d *DequeueMessage) Dequeue(ctx context.Context) (*internalMessage.Envelope
 	if d.rateLimit != nil {
 		ok, err := d.checkRateLimit(ctx)
 		if err != nil {
-			d.log.Error("rate limit check failed", "error", err)
+			// Do not log here — the loop classifies the error and logs
+			// at the appropriate level (Warn for queue state, Debug for
+			// cancellation, Error for transient failures).
 			return nil, fmt.Errorf("dequeue: rate limit check: %w", err)
 		}
 		if !ok {
@@ -108,7 +134,6 @@ func (d *DequeueMessage) Dequeue(ctx context.Context) (*internalMessage.Envelope
 
 	messageID, err := d.pop(ctx)
 	if err != nil {
-		d.log.Error("pop failed", "error", err)
 		return nil, fmt.Errorf("dequeue: pop: %w", err)
 	}
 	if messageID == "" {
@@ -119,14 +144,17 @@ func (d *DequeueMessage) Dequeue(ctx context.Context) (*internalMessage.Envelope
 
 	env, err := d.checkout(ctx, messageID)
 	if err != nil {
-		// Checkout failed due to a queue state error. The message was already
-		// moved into the processing queue by pop(). We must unacknowledge it
-		// immediately with the exact cause so it isn't left stranded.
+		// checkout errors carry queue-state causes (QUEUE_STOPPED etc.);
+		// unacknowledgePoppedMessage converts them and unacks the message
+		// so it returns to the pending list instead of being stranded in
+		// ConsumerProcessing. For cancellation errors, causeFromCheckoutError
+		// returns nil and the unacknowledgment is skipped — the message
+		// remains in ConsumerProcessing and will be recovered by a peer's
+		// ReapConsumers cycle.
 		d.unacknowledgePoppedMessage(ctx, messageID, err)
 		return nil, err
 	}
 	if env == nil {
-		// Message was not pending or not found – already removed by checkout script.
 		return nil, nil
 	}
 
@@ -136,11 +164,12 @@ func (d *DequeueMessage) Dequeue(ctx context.Context) (*internalMessage.Envelope
 func (d *DequeueMessage) unacknowledgePoppedMessage(ctx context.Context, messageID string, checkoutErr error) {
 	cause := d.causeFromCheckoutError(checkoutErr)
 	if cause == nil {
-		// No specific cause (e.g., MESSAGE_NOT_FOUND) – message was already handled by the script.
+		// No specific cause (e.g., MESSAGE_NOT_FOUND, context.Canceled) —
+		// message was already handled by the script or will be recovered
+		// by ReapConsumers.
 		return
 	}
 
-	// Build a minimal envelope so the unacknowledger can construct the Lua arguments.
 	msg := publicmessage.New().SetBody("").SetQueue(d.queue)
 	msg.SetConsumeTimeout(0)
 	envelope := internalMessage.NewEnvelope(msg)
@@ -177,7 +206,6 @@ func (d *DequeueMessage) pop(ctx context.Context) (string, error) {
 	qKey := keys.Queue{Namespace: d.queue.NS(), Name: d.queue.Name()}
 	dst := qKey.ConsumerProcessing(d.consumerID)
 
-	// Use group-specific keys when a consumer group is present.
 	if d.groupID != "" {
 		if *d.queueType == queue.TypePriority {
 			return d.popPriority(ctx, qKey.PriorityWithGroup(d.groupID), dst)
@@ -191,27 +219,59 @@ func (d *DequeueMessage) pop(ctx context.Context) (string, error) {
 	return d.popFIFO(ctx, qKey.Pending(), dst)
 }
 
+// popPriority atomically pops the highest-priority message from a sorted
+// set and pushes it onto the consumer's processing queue.
+//
+// The Lua script (zpoplpush.lua) returns nil for an empty queue. All other
+// outcomes propagate:
+//
+//   - nil reply → ("", nil) — no message available
+//   - non-nil reply → (messageID, nil) — message popped
+//   - err from Eval → ("", wrapped err) — real Redis error or ctx cancel
 func (d *DequeueMessage) popPriority(ctx context.Context, src, dst string) (string, error) {
 	reply, err := redisClient.Eval(ctx, scripts.ZPOPLPUSH, []string{src, dst})
-	if err != nil || reply == nil {
+	if err != nil {
+		return "", fmt.Errorf("pop priority: %w", err)
+	}
+	if reply == nil {
 		return "", nil
 	}
 	return fmt.Sprintf("%v", reply), nil
 }
 
+// popFIFO pops a message from the FIFO queue and pushes it onto the
+// consumer's processing queue.
+//
+// Two code paths depending on the blocking flag:
+//
+//   - Blocking (WithBlocking() enabled and no rate limit): BRPopLPush with
+//     an infinite timeout. Returns when a message arrives or ctx is
+//     cancelled. redis.Nil is not returned by this path (timeout=0 blocks
+//     indefinitely), but the check is retained for defensive symmetry.
+//
+//   - Non-blocking (default): RPopLPush. Returns immediately; redis.Nil
+//     means "queue empty."
+//
+// Error classification:
+//
+//   - redis.Nil → ("", nil) — queue empty (non-blocking only)
+//   - err from redis (context.Canceled, DeadlineExceeded, connection
+//     errors, WRONGTYPE) → ("", wrapped err) — propagated to the loop
 func (d *DequeueMessage) popFIFO(ctx context.Context, src, dst string) (string, error) {
+	var val string
+	var err error
 	if d.blocking && d.rateLimit == nil {
-		val, err := redisClient.Client().BRPopLPush(ctx, src, dst, 0).Result()
-		if err != nil {
-			return "", nil
-		}
+		val, err = redisClient.Client().BRPopLPush(ctx, src, dst, 0).Result()
+	} else {
+		val, err = redisClient.Client().RPopLPush(ctx, src, dst).Result()
+	}
+	if err == nil {
 		return val, nil
 	}
-	val, err := redisClient.Client().RPopLPush(ctx, src, dst).Result()
-	if err != nil {
+	if errors.Is(err, redis.Nil) {
 		return "", nil
 	}
-	return val, nil
+	return "", fmt.Errorf("pop: %w", err)
 }
 
 func (d *DequeueMessage) checkRateLimit(ctx context.Context) (bool, error) {

@@ -406,6 +406,10 @@ func (mh *MessageHandler) loop() {
 
 		envelope, err := mh.dequeuer.Dequeue(mh.ctx)
 		if err != nil {
+			// Queue state errors mean the queue is no longer accepting or
+			// delivering messages. Signal the runner (via errCh) and stop
+			// this handler — the runner will restart it when the queue
+			// becomes active again.
 			if errors.Is(err, consumer.ErrQueueStopped) ||
 				errors.Is(err, consumer.ErrQueueLocked) ||
 				errors.Is(err, consumer.ErrQueueInvalidState) {
@@ -414,6 +418,18 @@ func (mh *MessageHandler) loop() {
 				mh.selfShutdown()
 				return
 			}
+
+			// Cancellation means shutdown is in progress. The pop, rate-
+			// limit check, or checkout observed the cancelled ctx; exit
+			// silently.
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				mh.log.Debug("dequeue loop exiting", "reason", err)
+				return
+			}
+
+			// Any other error is a real Redis/network failure. Log at
+			// Error so operators can see it, then retry after a short
+			// delay.
 			mh.log.Error("dequeue error", "error", err)
 			select {
 			case <-mh.ctx.Done():
