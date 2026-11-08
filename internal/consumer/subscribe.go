@@ -17,6 +17,7 @@ import (
 	"os"
 	"time"
 
+	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/redis/scripts"
@@ -31,6 +32,7 @@ type consumerInfo struct {
 	CreatedAt   int64    `json:"createdAt"`
 }
 
+// SubscribeConsumer registers a consumer with a queue.
 func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.Params, groupID string) error {
 	log := logger.New("consumer", "subscribe", consumerID, q.Name())
 
@@ -68,7 +70,7 @@ func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.Params, 
 		consumerID,
 		string(consumerInfoJSON),
 		string(queueJSON),
-		"11",
+		qSchema.OperationalState.Key(),
 		queue.StateActive.Int(),
 	}
 
