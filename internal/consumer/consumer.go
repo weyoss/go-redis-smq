@@ -61,6 +61,14 @@ func (cons *Consumer) IsRunning() bool {
 	return cons.running
 }
 
+// Consume registers a handler for a queue.
+//
+// If the consumer is already running, the handler is started immediately.
+// Otherwise it will be picked up on the next Run. Concurrent Consume + Run
+// has a narrow window where a handler added after Run's HasHandlers check
+// is not started until the next Run or reconcile cycle — this is a
+// documented edge case, not a bug; the recommended usage is to register
+// all handlers before calling Run, or use Consume on a running consumer.
 func (cons *Consumer) Consume(queue *queue.Params, handler publicconsumer.Handler) publicconsumer.Consumer {
 	cons.log.Debug("adding handler", "queue", queue.String())
 	cons.runner.AddHandler(queue, "", Handler(handler))
@@ -71,6 +79,8 @@ func (cons *Consumer) Consume(queue *queue.Params, handler publicconsumer.Handle
 	return cons
 }
 
+// ConsumeWithGroup registers a handler for a Pub/Sub queue and consumer group.
+// See Consume for the concurrent Run + Consume caveat.
 func (cons *Consumer) ConsumeWithGroup(queue *queue.Params, groupID string, handler publicconsumer.Handler) publicconsumer.Consumer {
 	cons.log.Debug("adding handler with group", "queue", queue.String(), "group", groupID)
 	cons.runner.AddHandler(queue, groupID, Handler(handler))
@@ -98,9 +108,17 @@ func (cons *Consumer) CancelWithGroup(queue *queue.Params, groupID string) publi
 // Run is transactional on the runner startup failure path: if
 // runner.Run returns an error, cons.shutdownLocked's !running branch
 // unwinds the partial state (ctx, heartbeat if any, runner instances)
-// before Run returns. The failure path also publishes the matching
-// consumer.down event to close the consumer.goingUp pair opened at
-// the top of Run.
+// before Run returns. The failure path publishes consumer.down itself
+// (not from shutdownLocked) so the event pair opened by PublishGoingUp
+// is closed exactly once — see shutdownLocked's doc for why.
+//
+// All four lifecycle events (goingUp, up, goingDown, down) are published
+// on context.Background() rather than the caller's ctx. Rationale: the
+// caller's ctx may be cancelled mid-lifecycle (a common cause of Run
+// failure, or of Shutdown being triggered); publishing on a cancelled
+// context causes the event to be silently dropped, defeating the
+// event's purpose. Subscribers should always observe a well-formed
+// lifecycle sequence.
 func (cons *Consumer) Run(ctx context.Context) error {
 	cons.mu.Lock()
 	defer cons.mu.Unlock()
@@ -117,7 +135,7 @@ func (cons *Consumer) Run(ctx context.Context) error {
 
 	cons.log.Info("starting consumer")
 
-	consumerEvents.PublishGoingUp(ctx, cons.id)
+	consumerEvents.PublishGoingUp(context.Background(), cons.id)
 
 	cons.ctx, cons.cancel = context.WithCancel(ctx)
 	// Capture cons.ctx into a local variable: the shutdown goroutine below
@@ -129,18 +147,17 @@ func (cons *Consumer) Run(ctx context.Context) error {
 
 	if err := cons.runner.Run(shutdownCtx); err != nil {
 		cons.log.Error("failed to run handlers", "error", err)
-		// Delegate cleanup to shutdownLocked's !running branch: cancels
-		// cons.ctx, stops heartbeat (no-op — never started), calls
-		// unregister (DEL on never-written keys, no-op), calls
-		// runner.Shutdown (idempotent — runner.Run already rolled back
-		// its own partial state on its failure paths).
-		//
-		// The runner's own failure paths (in runner.Run) call r.Shutdown,
-		// which nils out r.instances. Here, the extra runner.Shutdown
-		// is a defence against future changes to runner.Run that might
-		// miss a path.
+		// Partial cleanup. shutdownLocked's !running branch performs the
+		// actual work (cancel ctx, stop hb, unregister, runner.Shutdown);
+		// it does NOT publish a down event.
 		cons.shutdownLocked()
-		consumerEvents.PublishDown(ctx, cons.id)
+		// Close the lifecycle pair opened by PublishGoingUp above. The
+		// running branch of shutdownLocked owns this event when a consumer
+		// actually runs; here, Run failed before running = true was set,
+		// so Run owns it. Publishing from shutdownLocked's !running branch
+		// would double-publish when the watcher fires after a clean
+		// shutdown (see TestConsumerEvents_Lifecycle).
+		consumerEvents.PublishDown(context.Background(), cons.id)
 		return fmt.Errorf("consumer: run handlers: %w", err)
 	}
 
@@ -163,7 +180,7 @@ func (cons *Consumer) Run(ctx context.Context) error {
 		"queues", len(cons.runner.Queues()),
 	)
 
-	consumerEvents.PublishUp(shutdownCtx, cons.id)
+	consumerEvents.PublishUp(context.Background(), cons.id)
 
 	return nil
 }
@@ -180,13 +197,34 @@ func (cons *Consumer) Shutdown() {
 //
 //   - !running: the consumer was never fully started (either Run hasn't
 //     completed, or Run failed before setting running = true). Performs
-//     the partial cleanup: cancel ctx, stop heartbeat, unregister, shut
-//     down the runner. Publishes consumer.down so the matching
-//     consumer.goingUp event from Run has a paired close.
+//     partial cleanup (cancel ctx, stop heartbeat, unregister, shut down
+//     the runner). Does NOT publish any lifecycle event — see below.
 //
 //   - running: full cleanup with the goingDown/down event pair.
 //
-// Idempotent in both branches: all cleanup steps are nil-safe.
+// Event ownership rule: PublishDown fires exactly once per PublishGoingUp.
+// The owner depends on the lifecycle path:
+//
+//   - Run succeeded, then Shutdown (or the watcher's Shutdown) fires:
+//     the running branch owns goingDown + down.
+//   - Run failed: Run owns down (its caller publishes it after
+//     shutdownLocked's !running branch finishes the partial cleanup).
+//   - Run succeeded, clean shutdown completed, then the watcher fires
+//     another Shutdown: no event — the running branch already published
+//     down. The !running branch must stay silent to avoid the
+//     double-publish.
+//
+// That last case is why the !running branch does NOT publish down.
+// TestConsumerEvents_Lifecycle verifies this — the watcher always fires
+// after the running branch's cancel(), and an unconditional down in the
+// !running branch produces two down events per consumer.
+//
+// Lock discipline note: cons.mu is held across the Redis operations in
+// both branches (event publishes, hb.Stop's DEL, runner.Shutdown's
+// coordinator, unregister's DEL). This is intentional — concurrent
+// Consume/Cancel/IsRunning calls must block until shutdown completes —
+// but means shutdown latency is felt by those callers. The C7 discipline
+// (waits are unconditional) is preserved; see MessageHandler.shutdownLocked.
 func (cons *Consumer) shutdownLocked() {
 	if !cons.running {
 		cons.log.Debug("shutdown called but not running — cleaning up partial state")
@@ -200,11 +238,7 @@ func (cons *Consumer) shutdownLocked() {
 		}
 		cons.unregister()
 		cons.runner.Shutdown()
-		// Close the lifecycle event pair. PublishGoingUp was fired at the
-		// top of Run; without a matching PublishDown here, subscribers see
-		// a dangling "goingUp" event when Run fails before running = true
-		// is set. The full-running path publishes its own down event below.
-		consumerEvents.PublishDown(context.Background(), cons.id)
+		// No event publish here. See the event ownership rule above.
 		return
 	}
 
@@ -214,6 +248,10 @@ func (cons *Consumer) shutdownLocked() {
 
 	cons.running = false
 
+	// hb.Stop internally DELs the heartbeat key. unregister below DELs the
+	// same key (plus ConsumerQueues) again — redundant but idempotent,
+	// kept as defence in depth in case hb.Stop's Redis call errored. Not
+	// worth restructuring.
 	if cons.hb != nil {
 		cons.hb.Stop()
 		cons.hb = nil
@@ -222,6 +260,12 @@ func (cons *Consumer) shutdownLocked() {
 	cons.runner.Shutdown()
 	cons.unregister()
 
+	// Cancel the ctx last. This wakes the watcher goroutine spawned in Run
+	// (which calls cons.Shutdown() again) — that re-entry is safe because
+	// running is already false, so it takes the !running branch and no-ops.
+	// Ordering reads backwards (cancel normally comes before cleanup), but
+	// cleanup here is done by the components we explicitly tore down above
+	// (hb.Stop, runner.Shutdown), not by ctx cancellation propagation.
 	if cons.cancel != nil {
 		cons.cancel()
 		cons.cancel = nil
@@ -236,17 +280,32 @@ func (cons *Consumer) Queues() []*queue.Params {
 	return cons.runner.Queues()
 }
 
+// register writes the initial consumer heartbeat key and logs any error.
+//
+// Failure here is not fatal — the heartbeat beat loop will retry on its
+// next tick (interval = HeartbeatTTL/3). But logging the error is
+// important for observability: a transient Redis unavailability during
+// startup would otherwise go unnoticed.
 func (cons *Consumer) register() {
 	ctx := context.Background()
 	consumerKey := redisKeys.System{}.ConsumerHeartbeat(cons.id)
-	redisClient.Client().Set(ctx, consumerKey, "{}", cons.options.HeartbeatTTL)
+	if err := redisClient.Client().Set(ctx, consumerKey, "{}", cons.options.HeartbeatTTL).Err(); err != nil {
+		cons.log.Error("failed to register heartbeat key", "key", consumerKey, "error", err)
+		return
+	}
 	cons.log.Debug("registered heartbeat key", "key", consumerKey)
 }
 
+// unregister removes the consumer's heartbeat and queue-membership keys.
+// Errors are logged but not returned — this is called during shutdown
+// where the caller cannot meaningfully respond to a failure.
 func (cons *Consumer) unregister() {
 	ctx := context.Background()
 	heartbeatKey := redisKeys.System{}.ConsumerHeartbeat(cons.id)
 	queuesKey := redisKeys.System{}.ConsumerQueues(cons.id)
-	redisClient.Client().Del(ctx, heartbeatKey, queuesKey)
+	if err := redisClient.Client().Del(ctx, heartbeatKey, queuesKey).Err(); err != nil {
+		cons.log.Error("failed to unregister consumer keys", "error", err)
+		return
+	}
 	cons.log.Debug("unregistered consumer keys")
 }
