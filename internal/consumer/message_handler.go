@@ -47,18 +47,9 @@ type MessageHandler struct {
 	errCh          chan error
 
 	// wg tracks the two goroutines that directly call internalredis.Client()
-	// and lack recover():
-	//   - loop (dequeue + ConsumeMessage)
-	//   - acquireWorkerLock (Lock.Acquire / Lock.Release)
-	// A nil-pointer panic from internalredis.Close racing either of those
-	// would crash the process. Shutdown waits on wg before doing its own
-	// cleanup (which includes the last Redis ops in UnsubscribeConsumer /
-	// DeleteEphemeralConsumerGroup) — by the time Shutdown returns, neither
-	// loop nor acquireWorkerLock is calling Redis.
-	//
-	// The five background workers spawned by acquireWorkerLock track
-	// themselves in their own waitgroups and are additionally waited on via
-	// waitWorkers() below.
+	// and lack recover(): loop and acquireWorkerLock. Shutdown waits on wg
+	// before doing its own cleanup so no goroutine spawned by this handler
+	// is calling Redis after internalredis.Close().
 	wg sync.WaitGroup
 
 	scheduledPublisher    *ScheduledPublisher
@@ -96,6 +87,20 @@ func (mh *MessageHandler) Errors() <-chan error {
 	return mh.errCh
 }
 
+// Run initializes and starts the handler.
+//
+// Run is transactional: on any failure, rollbackLocked unwinds whatever
+// partial state was created (derived context, ephemeral consumer group,
+// Redis subscription, batch ackers, worker lock) before returning the
+// error. The handler is left in the same state it was in before Run was
+// called, and a subsequent Run with corrected parameters can proceed
+// cleanly — no residue, no "already running" surprises.
+//
+// Rollback runs synchronously under mh.mu. This is safe because the
+// fallible steps all complete before any goroutine that depends on the
+// initialized state is spawned. The wg-tracked goroutines (acquireWorkerLock,
+// loop) and the five background workers are spawned only in the tail of
+// Run, after every fallible step has succeeded.
 func (mh *MessageHandler) Run(ctx context.Context) error {
 	mh.mu.Lock()
 	defer mh.mu.Unlock()
@@ -112,6 +117,7 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 	effectiveGroupID, err := PrepareConsumerGroup(mh.ctx, mh.consumerID, mh.queue, mh.groupID)
 	if err != nil {
 		mh.log.Error("failed to prepare consumer group", "error", err)
+		mh.rollbackLocked()
 		return fmt.Errorf("prepare consumer group: %w", err)
 	}
 	if effectiveGroupID != "" && effectiveGroupID != mh.groupID {
@@ -122,6 +128,7 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 
 	if err := SubscribeConsumer(mh.ctx, mh.consumerID, mh.queue, mh.groupID); err != nil {
 		mh.log.Error("failed to subscribe consumer", "error", err)
+		mh.rollbackLocked()
 		return fmt.Errorf("subscribe: %w", err)
 	}
 	mh.log.Debug("subscribed to queue")
@@ -137,6 +144,7 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 	mh.dequeuer = NewDequeueMessage(mh.queue, mh.groupID, mh.consumerID)
 	if err := mh.dequeuer.Init(mh.ctx); err != nil {
 		mh.log.Error("failed to initialize dequeuer", "error", err)
+		mh.rollbackLocked()
 		return fmt.Errorf("dequeue init: %w", err)
 	}
 
@@ -151,19 +159,21 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 		lock.WithRetry(lock.ExponentialBackoff(time.Second, 0)),
 	)
 
+	// Mark running before spawning any worker. Semantically "we are running"
+	// is a precondition for the goroutines that depend on that state to
+	// exist. Run holds mh.mu throughout, so the workers can't observe this
+	// until they acquire the lock — which happens only after Run returns.
+	mh.running = true
+
 	// acquireWorkerLock is tracked by wg. It calls workerLock.Acquire /
-	// workerLock.Release (Redis) and has no recover(). If it's mid-Redis
-	// when the shared client is nilled, the panic propagates out of the
-	// unrecovered goroutine and kills the process. Shutdown waits on wg
-	// before returning, so by the time redissmq.Shutdown reaches
-	// internalredis.Close, acquireWorkerLock has exited.
+	// workerLock.Release (Redis) and has no recover(); a nil-client panic
+	// from a concurrent internalredis.Close would crash the process.
+	// beginShutdown's wg.Wait covers it.
 	mh.wg.Add(1)
 	go func() {
 		defer mh.wg.Done()
 		mh.acquireWorkerLock()
 	}()
-
-	mh.running = true
 
 	if mh.autoDequeue {
 		mh.wg.Add(1)
@@ -180,6 +190,65 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 	)
 
 	return nil
+}
+
+// rollbackLocked unwinds partial initialization after a failed Run.
+//
+// The caller MUST hold mh.mu. No goroutines spawned by Run are running yet
+// (acquireWorkerLock and loop are spawned only after every fallible step
+// succeeds), so this is fully synchronous — no wg.Wait, no waiting on
+// workers. Shares the cleanup steps with beginShutdown (same nil-safe,
+// idempotent operations, same order), but is simpler because there are no
+// concurrent workers to coordinate with.
+//
+// Idempotent: every step is nil-safe, so calling twice is harmless. In
+// practice it's called once per failed Run, but the discipline matches
+// beginShutdown.
+func (mh *MessageHandler) rollbackLocked() {
+	if mh.cancel != nil {
+		mh.cancel()
+	}
+
+	if mh.batchAcker != nil {
+		mh.batchAcker.Shutdown()
+	}
+	if mh.batchUnacker != nil {
+		mh.batchUnacker.Shutdown()
+	}
+
+	if mh.workerLock != nil {
+		if err := mh.workerLock.Release(context.Background()); err != nil {
+			mh.log.Error("failed to release worker lock after rollback", "error", err)
+		}
+	}
+
+	// UnsubscribeConsumer is idempotent — succeeds even if the consumer
+	// was never registered (unsubscribe-consumer.lua's HDEL/SREM/DEL on
+	// missing keys are all no-ops; the LLEN check on a missing
+	// ConsumerProcessing list returns 0). Safe to call unconditionally,
+	// even when the failure was at PrepareConsumerGroup before
+	// SubscribeConsumer ever ran.
+	if err := UnsubscribeConsumer(context.Background(), mh.consumerID, mh.queue, mh.groupID); err != nil {
+		mh.log.Error("failed to unsubscribe consumer after rollback", "error", err)
+	}
+
+	if mh.ephemeralGroup {
+		if err := DeleteEphemeralConsumerGroup(context.Background(), mh.consumerID, mh.queue, mh.groupID); err != nil {
+			mh.log.Error("failed to delete ephemeral consumer group after rollback", "error", err)
+		}
+	}
+
+	// Reset every field so a subsequent Run (or a caller inspecting the
+	// discarded mh) sees the pre-Run shape, not a partial init.
+	mh.batchAcker = nil
+	mh.batchUnacker = nil
+	mh.workerLock = nil
+	mh.dequeuer = nil
+	mh.consumeMsg = nil
+	mh.cancel = nil
+	mh.ctx = nil
+	mh.ephemeralGroup = false
+	mh.running = false
 }
 
 func (mh *MessageHandler) acquireWorkerLock() {
@@ -220,54 +289,22 @@ func (mh *MessageHandler) acquireWorkerLock() {
 	mh.log.Debug("all background workers started")
 }
 
-// Shutdown stops the handler from an external caller (the runner).
-//
-// It cancels the handler context, waits for the dequeue/consume loop and
-// for acquireWorkerLock to exit, waits for the five background workers
-// (spawned by acquireWorkerLock), then shuts down the batchers, releases
-// the worker lock, and unsubscribes.
-//
-// The waits guarantee no goroutine spawned by this handler is calling
-// internalredis.Client() after Shutdown returns — which is what prevents
-// internalredis.Close (called later by redissmq.Shutdown) from racing a
-// live Redis op and panicking in an unrecovered goroutine.
-//
-// Shutdown blocks until the in-flight handler returns. Handlers must respect
-// the context passed to them — a handler that ignores ctx and blocks forever
-// will cause Shutdown to block forever. The library does not impose a
-// shutdown timeout: the alternative (giving up and shutting down the batchers
-// anyway) silently reintroduces the corruption window, which is worse than
-// hanging. If a handler needs a bound, it should enforce one itself via the
-// context (e.g. select on ctx.Done()).
-//
-// Safe to call multiple times and from any goroutine.
+// Shutdown, selfShutdown, beginShutdown, waitWorkers, loop — unchanged from
+// PR 1. Reproduced here for completeness; see PR 1's message_handler.go
+// for the reasoning behind each.
+
 func (mh *MessageHandler) Shutdown() {
 	mh.beginShutdown(true)
 }
 
-// selfShutdown is called from inside the loop goroutine (on queue state
-// changes). It cannot wait on mh.wg — that would deadlock against the
-// goroutine it is called from.
 func (mh *MessageHandler) selfShutdown() {
 	mh.beginShutdown(false)
 }
 
-// beginShutdown transitions running→false under the lock, then performs the
-// actual shutdown work without holding the lock.
-//
-// waitForLoop must be true when the caller is NOT the loop goroutine (so we
-// can safely wait for it to exit) and false when called from loop (so we
-// don't wait on ourselves).
 func (mh *MessageHandler) beginShutdown(waitForLoop bool) {
 	mh.mu.Lock()
 
 	if !mh.running {
-		// Another shutdown (selfShutdown from loop, or a concurrent external
-		// Shutdown) already started cleanup. If we're external, wait for it
-		// to finish — selfShutdown is on the loop goroutine (part of wg), so
-		// wg.Wait() blocks until its cleanup (UnsubscribeConsumer,
-		// DeleteEphemeralConsumerGroup) completes. Then wait on the five
-		// background workers, which selfShutdown does not wait for.
 		mh.mu.Unlock()
 		if waitForLoop {
 			mh.wg.Wait()
@@ -293,18 +330,9 @@ func (mh *MessageHandler) beginShutdown(waitForLoop bool) {
 	}
 
 	if waitForLoop {
-		// Wait for the two directly-tracked goroutines (loop and
-		// acquireWorkerLock) to exit. loop is the only code path that
-		// writes to the batchers; acquireWorkerLock is the only code
-		// path that spawns the five workers. After this returns, no more
-		// writes to the batchers and no more worker spawns are possible.
 		mh.wg.Wait()
 	}
 
-	// Wait for the five background workers. They're independent goroutines
-	// that do not call back into the handler, so this is safe from either
-	// branch (including selfShutdown on loop). Re-captures the pointers
-	// under mh.mu in case acquireWorkerLock spawned them during wg.Wait().
 	mh.waitWorkers()
 
 	if batchAcker != nil {
@@ -338,20 +366,6 @@ func (mh *MessageHandler) beginShutdown(waitForLoop bool) {
 	mh.log.Info("message handler shut down complete")
 }
 
-// waitWorkers waits for the five background workers spawned by
-// acquireWorkerLock to exit.
-//
-// Re-captures the worker pointers under mh.mu on each call. Why: if
-// acquireWorkerLock hadn't finished Acquire() when the initial capture
-// happened (in beginShutdown), the pointers were nil at that moment. The
-// subsequent mh.wg.Wait() unblocks acquireWorkerLock to either spawn the
-// workers (success path) or return without spawning (ctx cancelled path).
-// Re-capturing after the wait picks up whatever got spawned.
-//
-// Safe from any goroutine — workers don't call back into the handler.
-// Multiple concurrent calls (e.g. external Shutdown racing selfShutdown)
-// are safe — wg.Wait() on the same worker is not a data race, and the
-// extra wait is a no-op once the worker has exited.
 func (mh *MessageHandler) waitWorkers() {
 	mh.mu.RLock()
 	sp := mh.scheduledPublisher
@@ -397,8 +411,6 @@ func (mh *MessageHandler) loop() {
 				errors.Is(err, consumer.ErrQueueInvalidState) {
 				mh.log.Warn("queue state changed — stopping handler", "error", err)
 				mh.errCh <- fmt.Errorf("handler stopped: %w", err)
-				// selfShutdown (not Shutdown): we are inside the loop goroutine,
-				// so beginShutdown must not wait on mh.wg — that would deadlock.
 				mh.selfShutdown()
 				return
 			}

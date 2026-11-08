@@ -436,3 +436,70 @@ func TestEdge_RunShutdownRace_NoOrphanedHandlers(t *testing.T) {
 		sm.Resume(ctx, params, nil)
 	}
 }
+
+// Scenario: Run's failure path leaves no residue, and a subsequent Run
+// with corrected parameters on a FRESH consumer succeeds.
+func TestRunFailureRollsBackCleanly(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := publicqueue.MustQueueParams("test-pr2-rollback")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	// Attempt 1: fail deterministically — ConsumeWithGroup on a P2P queue.
+	cons := redissmq.NewConsumer()
+	cons.ConsumeWithGroup(params, "some-group", func(ctx context.Context, m *msg.Transferable) error {
+		return nil
+	})
+
+	err := cons.Run(ctx)
+	if err == nil {
+		cons.Shutdown()
+		t.Fatal("expected error: consumer group not supported for P2P queue")
+	}
+	if !strings.Contains(err.Error(), "consumer group not supported") {
+		t.Errorf("unexpected error: %v", err)
+	}
+	cons.Shutdown() // idempotent — verifies no panic on double cleanup
+
+	// Verify no residue from the failed Run.
+	exists, err := redis.Client().Exists(ctx, keys.System{}.ConsumerHeartbeat(cons.ID())).Result()
+	if err != nil {
+		t.Fatalf("check heartbeat: %v", err)
+	}
+	if exists != 0 {
+		t.Errorf("heartbeat key remains after failed Run — rollbackLocked did not clear it")
+	}
+
+	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+	inConsumersHash, err := redis.Client().HExists(ctx, qKey.Consumers(), cons.ID()).Result()
+	if err != nil {
+		t.Fatalf("check Consumers hash: %v", err)
+	}
+	if inConsumersHash {
+		t.Errorf("consumer registered in Consumers hash after failed Run — SubscribeConsumer was not rolled back")
+	}
+
+	// Attempt 2: fresh consumer, valid config. Must succeed.
+	cons2 := redissmq.NewConsumer()
+	consumed := make(chan struct{}, 1)
+	cons2.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		consumed <- struct{}{}
+		return nil
+	})
+	if err := cons2.Run(ctx); err != nil {
+		t.Fatalf("second Run with valid config: %v", err)
+	}
+	defer cons2.Shutdown()
+
+	prod := testutil.StartProducer(t, ctx)
+	if _, err := prod.Produce(ctx, msg.New().SetBody("test").SetQueue(params)); err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+
+	select {
+	case <-consumed:
+		// Success — the retry fully worked
+	case <-time.After(5 * time.Second):
+		t.Fatal("message not consumed after successful retry")
+	}
+}
