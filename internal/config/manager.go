@@ -81,6 +81,9 @@ func Close() {
 }
 
 // Init loads or creates the configuration singleton.
+//
+// On subscription failure (internalConfigEvents.SubscribeUpdated returning
+// an error), Init rolls back the loaded config and returns the error.
 func (m *Manager) Init(ctx context.Context) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -90,7 +93,17 @@ func (m *Manager) Init(ctx context.Context) error {
 	if err := m.loadOrCreateLocked(ctx); err != nil {
 		return err
 	}
-	m.subscribeToUpdatesLocked()
+	if err := m.subscribeToUpdatesLocked(); err != nil {
+		// Roll back the loaded config so a retry starts clean. The Redis
+		// state (config hash, and defaults if just created) is left in
+		// place — loadOrCreateLocked is idempotent and will re-read it on
+		// retry. Only the in-memory singleton and its public snapshot are
+		// cleared, matching Close's post-state.
+		m.instance = nil
+		m.epoch = ""
+		pubconfig.Set(nil)
+		return fmt.Errorf("config: subscribe to updates: %w", err)
+	}
 	return nil
 }
 
@@ -135,28 +148,31 @@ func (m *Manager) Reload(ctx context.Context) error {
 	return m.loadOrCreateLocked(ctx)
 }
 
-// Close releases the configuration singleton and clears the public
-// snapshot.
+// Close releases the configuration singleton and clears the public snapshot.
 //
-// After Close, pubconfig.Get() returns nil until the next Init. Two
-// classes of caller are affected:
+// After Close, pubconfig.Get() returns nil until the next Init. Two classes
+// of caller are affected:
 //
 //   - Callers that legitimately run in the shutdown window (loggers,
-//     deferred cleanup) must handle nil. logger.currentConfig does;
-//     the runtime's own shutdown path short-circuits via
-//     logger.Shutdown's `closed` flag before reaching the config read.
-//     This nil-signal is intentional — pre-fix, Get returned stale
-//     config after Close, silently breaking queue/exchange key
-//     construction for any post-shutdown caller (H8).
+//     deferred cleanup) must handle nil. logger.currentConfig does; the
+//     runtime's own shutdown path short-circuits via logger.Shutdown's
+//     `closed` flag before reaching the config read. This nil-signal is
+//     intentional — pre-fix, Get returned stale config after Close,
+//     silently breaking queue/exchange key construction for any
+//     post-shutdown caller (H8).
 //
 //   - Callers that should not run after Shutdown (queue construction,
-//     message managers, purges) panic on the nil read. That's the
-//     correct signal that the runtime is no longer initialised — a
-//     panic is preferable to silently operating against a stale
-//     namespace.
+//     message managers, purges) panic on the nil read. That's the correct
+//     signal that the runtime is no longer initialised — a panic is
+//     preferable to silently operating against a stale namespace.
 //
-// Idempotent: safe to call multiple times. A subsequent Init restores
-// the snapshot from Redis (or creates fresh defaults).
+// m.epoch is reset as well so the closed state is fully cleared. Not a
+// correctness requirement — loadOrCreateLocked overwrites m.epoch on the
+// next Init — but keeps the post-Close state consistent with the
+// pre-Init state (both zero-valued on all mutable fields).
+//
+// Idempotent: safe to call multiple times. A subsequent Init restores the
+// snapshot from Redis (or creates fresh defaults).
 func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -165,6 +181,7 @@ func (m *Manager) Close() {
 		m.sub = nil
 	}
 	m.instance = nil
+	m.epoch = ""
 	pubconfig.Set(nil)
 }
 
@@ -267,9 +284,22 @@ func (m *Manager) createDefaultsLocked(ctx context.Context) error {
 	return nil
 }
 
-// subscribeToUpdatesLocked subscribes to configuration.updated events.
-// It filters events by epoch and triggers a reload on mismatch.
-func (m *Manager) subscribeToUpdatesLocked() {
+// subscribeToUpdatesLocked subscribes to configuration.updated events on the
+// system bus. Returns an error if subscription fails — the caller (Init)
+// propagates it rather than silently running with peer sync disabled.
+//
+// The callback filters events by epoch: if the event's epoch differs from
+// the local m.epoch, the local manager is out of sync (e.g., after a Redis
+// flush on another instance), so it triggers a Reload. Otherwise, it
+// applies the event's config if its version is newer.
+//
+// The `go func() { m.Reload(...) }()` inside the callback is untracked.
+// It is safe: Reload takes m.mu, which serializes with Close; and Close
+// nils m.instance before redissmq.Shutdown proceeds to internalredis.Close.
+// So the goroutine either sees m.instance == nil (early-returns) or runs
+// its Redis ops before internalredis.Close fires. No crash vector, and
+// the goroutine terminates on its own.
+func (m *Manager) subscribeToUpdatesLocked() error {
 	sub, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		m.mu.Lock()
 		defer m.mu.Unlock()
@@ -286,8 +316,8 @@ func (m *Manager) subscribeToUpdatesLocked() {
 		}
 	})
 	if err != nil {
-		fmt.Printf("config: failed to subscribe to configuration updates: %v\n", err)
-		return
+		return fmt.Errorf("config: subscribe to updates: %w", err)
 	}
 	m.sub = sub
+	return nil
 }
