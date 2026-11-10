@@ -180,7 +180,7 @@ func (d *DequeueMessage) unacknowledgePoppedMessage(ctx context.Context, message
 	}
 
 	entries := []UnackEntry{{Message: envelope, Cause: *cause}}
-	if err := d.unacknowledger.UnacknowledgeBatch(ctx, entries); err != nil {
+	if _, err := d.unacknowledger.UnacknowledgeBatch(ctx, entries); err != nil {
 		d.log.Error("failed to unacknowledge popped message after checkout error",
 			"messageID", messageID, "cause", int(*cause), "checkoutErr", checkoutErr, "unackErr", err)
 	}

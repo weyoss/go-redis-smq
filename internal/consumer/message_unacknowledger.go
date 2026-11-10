@@ -37,6 +37,52 @@ type UnackEntry struct {
 	Cause   consumer.UnacknowledgeCause
 }
 
+// UnackResult is the per-message outcome of an UnacknowledgeBatch call.
+//
+// Fields:
+//
+//   - Processed: true if the Lua removed the message from ConsumerProcessing
+//     and applied the action; false if it skipped it (already handled
+//     elsewhere — a peer's ReapConsumers cycle, a concurrent batch, etc.).
+//     Callers MUST check this before publishing any unack-related event.
+//     Populated from the Lua reply, which is the only authoritative source
+//     for "did this script actually transition this message."
+//
+//   - Action: the action the script was asked to execute (ActionDeadLetter,
+//     ActionRequeue, or ActionDelay). Populated from the single
+//     resolveUnackAction call made in buildBatchLuaArgs — the same call
+//     that produced the retryAction ARGV the Lua acted on. Not recomputed
+//     after the Eval returns, and not echoed back from the Lua (the Lua
+//     treats Requeue and Delay identically — both RPUSH to the requeue
+//     list — so it has no independent notion of "which action" to report).
+//     Meaningful only when Processed is true.
+//
+//   - Cause: the dead-letter cause for ActionDeadLetter entries
+//     (DeadLetterTTLExpired / DeadLetterRetryThresholdExceeded /
+//     DeadLetterPeriodicMessage). Populated from the same buildBatchLuaArgs
+//     resolveUnackAction call. Meaningful only when Processed is true and
+//     Action is ActionDeadLetter.
+//
+// The TTL-boundary divergence that pre-fix existed between ARGV construction
+// and event publishing (IsExpired() sampled twice at different instants)
+// is closed by design: resolveUnackAction is called exactly once per entry,
+// here in buildBatchLuaArgs, and its outputs flow through UnackResult
+// unchanged.
+type UnackResult struct {
+	Processed bool
+	Action    UnacknowledgeAction
+	Cause     consumer.DeadLetterCause
+}
+
+// unackPrecompute is the internal per-entry payload threaded from
+// buildBatchLuaArgs to UnackResult population. It carries the same Action
+// and Cause that drove the ARGV, so UnackResult can be populated without a
+// second resolveUnackAction call.
+type unackPrecompute struct {
+	Action UnacknowledgeAction
+	Cause  consumer.DeadLetterCause
+}
+
 // MessageUnacknowledger handles unacknowledging messages for a consumer.
 type MessageUnacknowledger struct {
 	queue      *queue.Params
@@ -55,6 +101,12 @@ func NewMessageUnacknowledger(queue *queue.Params, consumerID string) *MessageUn
 
 // UnacknowledgeProcessingQueue unacknowledges all messages in a consumer's
 // processing queue with the given cause.
+//
+// The UnackResult slice is discarded — this method is used by
+// ReapConsumers to recover a dead consumer's in-flight messages, where
+// event publishing is handled elsewhere (or not at all). Any entry the
+// Lua skips (already recovered by another peer) is benign; the caller
+// does not need per-message outcomes.
 func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Context, cause consumer.UnacknowledgeCause) error {
 	qKey := redisKeys.Queue{
 		Namespace: mu.queue.NS(),
@@ -84,13 +136,43 @@ func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Contex
 		entries[i] = UnackEntry{Message: msg, Cause: cause}
 	}
 
-	return mu.UnacknowledgeBatch(ctx, entries)
+	_, err = mu.UnacknowledgeBatch(ctx, entries)
+	return err
 }
 
-// UnacknowledgeBatch unacknowledges multiple messages in a single Lua script call.
-func (mu *MessageUnacknowledger) UnacknowledgeBatch(ctx context.Context, entries []UnackEntry) error {
+// UnacknowledgeBatch unacknowledges multiple messages in a single Lua
+// script call.
+//
+// Returns one UnackResult per entry, in the same order as entries. On any
+// script-level error (Redis failure, string error reply like QUEUE_LOCKED,
+// or malformed reply), returns (nil, err).
+//
+// Reply shape (matches internal/redis/scripts/scripts/core/unacknowledge-message.lua):
+//
+//	[]interface{} of int64, one element per submitted entry:
+//	  1 = the Lua removed the message from ConsumerProcessing and applied
+//	      the action
+//	  0 = the Lua skipped the message (already handled elsewhere)
+//
+//	len(reply) == len(entries) is required; any other length indicates a
+//	Lua/Go contract drift and is returned as an error. Do NOT change the
+//	Lua to return per-entry pairs without also updating this parser — the
+//	length check will reject the batch and silently drop the unack path.
+//
+// The Processed field comes from the Lua reply — it's the only
+// authoritative source for "did this script actually transition this
+// message." Action and Cause come from the single resolveUnackAction
+// call made in buildBatchLuaArgs — the same call that produced the
+// retryAction ARGV the Lua acted on. They are NOT recomputed after the
+// Eval returns.
+//
+// Callers MUST use these values directly. Do not re-derive the action or
+// cause from the message envelope; the envelope's IsExpired() is
+// time-dependent and would produce a different answer at this point in
+// the flow.
+func (mu *MessageUnacknowledger) UnacknowledgeBatch(ctx context.Context, entries []UnackEntry) ([]UnackResult, error) {
 	if len(entries) == 0 {
-		return nil
+		return []UnackResult{}, nil
 	}
 
 	mu.log.Debug("unacknowledging batch", "count", len(entries))
@@ -100,25 +182,79 @@ func (mu *MessageUnacknowledger) UnacknowledgeBatch(ctx context.Context, entries
 		Name:      mu.queue.Name(),
 	}
 
-	luaKeys, luaArgs := mu.buildBatchLuaArgs(ctx, qKey, entries)
+	luaKeys, luaArgs, precompute := mu.buildBatchLuaArgs(ctx, qKey, entries)
 
-	_, err := redisClient.Eval(ctx, scripts.UnacknowledgeMessage, luaKeys, luaArgs...)
+	reply, err := redisClient.Eval(ctx, scripts.UnacknowledgeMessage, luaKeys, luaArgs...)
 	if err != nil {
 		mu.log.Error("unacknowledge script failed", "count", len(entries), "error", err)
-		return err
+		return nil, err
 	}
 
-	mu.log.Debug("batch unacknowledged", "count", len(entries))
+	// String reply = script-level error (QUEUE_NOT_FOUND, QUEUE_LOCKED,
+	// QUEUE_STOPPED, QUEUE_INVALID_STATE, INVALID_ARGS_ERROR). Pre-fix,
+	// these were silently discarded and treated as success; the parser
+	// rewrite that implements H7 also fixes that class of bug.
+	if errStr, ok := reply.(string); ok {
+		mu.log.Warn("unacknowledge script rejected", "count", len(entries), "reply", errStr)
+		return nil, fmt.Errorf("unacknowledge: %s", errStr)
+	}
 
-	return nil
+	arr, ok := reply.([]interface{})
+	if !ok {
+		mu.log.Error("unexpected unacknowledge reply", "reply", fmt.Sprintf("%v", reply))
+		return nil, fmt.Errorf("unacknowledge: unexpected reply type %T", reply)
+	}
+
+	// Result-only reply: one element per entry (1 = processed, 0 = skipped).
+	if len(arr) != len(entries) {
+		mu.log.Error("unacknowledge reply element count mismatch",
+			"entries", len(entries), "reply_len", len(arr))
+		return nil, fmt.Errorf("unacknowledge: reply has %d elements, expected %d for %d entries",
+			len(arr), len(entries), len(entries))
+	}
+
+	results := make([]UnackResult, len(entries))
+	for i := 0; i < len(entries); i++ {
+		resultVal, ok := arr[i].(int64)
+		if !ok {
+			mu.log.Error("unexpected unacknowledge element type",
+				"index", i, "type", fmt.Sprintf("%T", arr[i]))
+			return nil, fmt.Errorf("unacknowledge: unexpected element type at index %d", i)
+		}
+		results[i] = UnackResult{
+			Processed: resultVal == 1,
+			Action:    precompute[i].Action,
+			Cause:     precompute[i].Cause,
+		}
+	}
+
+	processed := 0
+	for _, r := range results {
+		if r.Processed {
+			processed++
+		}
+	}
+	mu.log.Debug("batch unacknowledged",
+		"count", len(entries),
+		"processed", processed,
+	)
+
+	return results, nil
 }
 
-// buildBatchLuaArgs builds the KEYS and ARGV for the UNACKNOWLEDGE_MESSAGE Lua script.
+// buildBatchLuaArgs builds KEYS, ARGV, and a parallel precompute slice for
+// the UNACKNOWLEDGE_MESSAGE script.
+//
+// resolveUnackAction is called exactly once per entry here. Its action
+// output drives the retryAction and deadLetteredAt ARGV values that the
+// Lua acts on; both its action and cause outputs are returned as
+// per-entry precompute values, so UnackResult can carry them without
+// recomputation.
 func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 	_ context.Context,
 	qKey redisKeys.Queue,
 	entries []UnackEntry,
-) ([]string, []interface{}) {
+) ([]string, []interface{}, []unackPrecompute) {
 	cfg := config.Get()
 	now := time.Now().UnixMilli()
 
@@ -147,40 +283,43 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 	}
 
 	staticArgv := []interface{}{
-		strconv.Itoa(int(ActionDelay)),           // ARGV[1]: ERetryActionDelay
-		strconv.Itoa(int(ActionRequeue)),         // ARGV[2]: ERetryActionRequeue
-		storeMessages,                            // ARGV[3]
-		expireStoredMessages,                     // ARGV[4]
-		storedMessagesSize,                       // ARGV[5]
-		schema.Status.Key(),                      // ARGV[6]
-		qSchema.ProcessingMessagesCount.Key(),    // ARGV[7]
-		qSchema.DeadLetteredMessagesCount.Key(),  // ARGV[8]
-		qSchema.RequeuedMessagesCount.Key(),      // ARGV[9]
-		publicmessage.StatusUnackRequeuing.Int(), // ARGV[10]
-		publicmessage.StatusDeadLettered.Int(),   // ARGV[11]
-		schema.DeadLetteredAt.Key(),              // ARGV[12]
-		schema.UnacknowledgedAt.Key(),            // ARGV[13]
-		schema.LastUnacknowledgedAt.Key(),        // ARGV[14]
-		schema.Expired.Key(),                     // ARGV[15]
-		qSchema.OperationalState.Key(),           // ARGV[16]
-		queue.StateActive.Int(),                  // ARGV[17]
-		queue.StatePaused.Int(),                  // ARGV[18]
-		queue.StateStopped.Int(),                 // ARGV[19]
-		queue.StateLocked.Int(),                  // ARGV[20]
-		strconv.Itoa(maxHistorySize),             // ARGV[21]
+		strconv.Itoa(int(ActionDelay)),
+		strconv.Itoa(int(ActionRequeue)),
+		storeMessages,
+		expireStoredMessages,
+		storedMessagesSize,
+		schema.Status.Key(),
+		qSchema.ProcessingMessagesCount.Key(),
+		qSchema.DeadLetteredMessagesCount.Key(),
+		qSchema.RequeuedMessagesCount.Key(),
+		publicmessage.StatusUnackRequeuing.Int(),
+		publicmessage.StatusDeadLettered.Int(),
+		schema.DeadLetteredAt.Key(),
+		schema.UnacknowledgedAt.Key(),
+		schema.LastUnacknowledgedAt.Key(),
+		schema.Expired.Key(),
+		qSchema.OperationalState.Key(),
+		queue.StateActive.Int(),
+		queue.StatePaused.Int(),
+		queue.StateStopped.Int(),
+		queue.StateLocked.Int(),
+		strconv.Itoa(maxHistorySize),
 	}
 
-	deadLetteredCount := 0
-	requeuedCount := 0
-	delayedCount := 0
+	precompute := make([]unackPrecompute, len(entries))
 
-	for _, entry := range entries {
+	for i, entry := range entries {
 		msgID := entry.Message.ID()
 		msgKey := redisKeys.System{}.Message(msgID)
 		historyKey := redisKeys.System{}.MessageAcknowledgementHistory(msgID)
 		state := entry.Message.MessageState()
 
-		action, _ := resolveUnackAction(entry.Message, entry.Cause)
+		// Single call to resolveUnackAction per entry. Its action drives
+		// the ARGV; both action and cause are captured into `precompute`
+		// for UnackResult population. No recomputation happens after the
+		// Lua returns.
+		action, deadLetterCause := resolveUnackAction(entry.Message, entry.Cause)
+		precompute[i] = unackPrecompute{Action: action, Cause: deadLetterCause}
 
 		retryAction := ""
 		if action != ActionDeadLetter {
@@ -188,14 +327,8 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		}
 
 		deadLetteredAt := ""
-		switch action {
-		case ActionDeadLetter:
+		if action == ActionDeadLetter {
 			deadLetteredAt = fmt.Sprintf("%d", now)
-			deadLetteredCount++
-		case ActionDelay:
-			delayedCount++
-		default:
-			requeuedCount++
 		}
 
 		messageExpired := "0"
@@ -228,17 +361,14 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		)
 	}
 
-	mu.log.Debug("built unacknowledge batch",
-		"total", len(entries),
-		"deadLettered", deadLetteredCount,
-		"delayed", delayedCount,
-		"requeued", requeuedCount,
-	)
-
-	return luaKeys, staticArgv
+	return luaKeys, staticArgv, precompute
 }
 
 // loadMessages loads full message envelopes from Redis by their IDs.
+// Missing messages are silently skipped — this is used by
+// UnacknowledgeProcessingQueue to recover a dead consumer's in-flight
+// messages, and a message that another process already removed from
+// Redis is not an error condition.
 func (mu *MessageUnacknowledger) loadMessages(ctx context.Context, ids []string) ([]*internalMessage.Envelope, error) {
 	messages := make([]*internalMessage.Envelope, 0, len(ids))
 	for _, id := range ids {

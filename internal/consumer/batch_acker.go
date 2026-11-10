@@ -246,6 +246,25 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 	ba.log.Debug("batch ack completed", "total", len(ids), "succeeded", succeeded)
 }
 
+// unacknowledgeFailed is called when the ack Lua rejects the batch. It
+// unacknowledges the batch (which may dead-letter, requeue, or delay the
+// messages depending on retry threshold, TTL, and delay settings) so the
+// messages aren't stranded in the consumer's processing queue after the
+// ack failure.
+//
+// The []UnackResult returned by UnacknowledgeBatch is discarded. This
+// function's purpose is to make sure the messages leave
+// ConsumerProcessing — not to publish events. The events for
+// unacknowledgment and its downstream action (dead-letter, requeue,
+// delay) are published by the normal unack path when the consumer
+// processes the failed message again, or by a peer's ReapConsumers
+// cycle if the message ends up stranded. Publishing from here would
+// produce a race with those paths and double-publish.
+//
+// If the unacknowledgment itself fails (Redis unreachable, script
+// rejected the batch, etc.), the messages remain in ConsumerProcessing
+// and will be recovered by a peer's ReapConsumers cycle when this
+// consumer's heartbeat expires.
 func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cause consumer.UnacknowledgeCause) {
 	entries := make([]UnackEntry, 0, len(ids))
 	for _, id := range ids {
@@ -265,7 +284,7 @@ func (ba *BatchAcker) unacknowledgeFailed(ctx context.Context, ids []string, cau
 	}
 
 	if len(entries) > 0 {
-		if err := ba.unacknowledger.UnacknowledgeBatch(ctx, entries); err != nil {
+		if _, err := ba.unacknowledger.UnacknowledgeBatch(ctx, entries); err != nil {
 			ba.log.Error("failed to unacknowledge after ack failure", "count", len(entries), "error", err)
 		}
 	}

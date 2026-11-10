@@ -161,6 +161,32 @@ func (bu *BatchUnacker) flush() {
 
 // unacknowledge processes a batch of unacknowledgments and publishes the
 // corresponding consumer events.
+//
+// Uses the UnackResult returned by UnacknowledgeBatch directly — the
+// Action is what the Lua actually executed, the Cause is what
+// buildBatchLuaArgs computed from the same sample of the message envelope
+// that produced the ARGV the Lua acted on. Neither is recomputed here.
+//
+// Pre-fix, this function called resolveUnackAction a second time after the
+// Lua had already acted. The second call sampled IsExpired() at a later
+// wall-clock instant than the first, so a message whose TTL expired in the
+// interim would be requeued by the Lua but reported as dead-lettered by
+// this function — a divergence between the event stream and the state in
+// Redis. The same recomputation also doubled the CPU cost of
+// resolveUnackAction per unack (once in buildBatchLuaArgs, once here) and
+// meant the two sites could drift if the function were ever changed.
+//
+// Post-fix, resolveUnackAction is called exactly once per entry, in
+// buildBatchLuaArgs. The UnackResult carries both the Lua-reported action
+// and the Go-computed cause, so neither is derived from the envelope after
+// the Eval returns.
+//
+// Event publishing is also filtered by UnackResult.Processed: entries the
+// Lua skipped (message not in the consumer's processing queue — already
+// recovered by a peer's ReapConsumers cycle or a concurrent batch) get no
+// event. Pre-fix, events fired for every submitted entry regardless, so
+// monitoring and audit subscribers saw phantom events for messages that
+// were never transitioned by this batch. That was H7.
 func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
@@ -173,16 +199,42 @@ func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 		}
 	}
 
-	if err := bu.unacknowledger.UnacknowledgeBatch(ctx, unackEntries); err != nil {
+	results, err := bu.unacknowledger.UnacknowledgeBatch(ctx, unackEntries)
+	if err != nil {
 		bu.log.Error("batch unack failed", "count", len(entries), "error", err)
 		return
 	}
 
-	bu.log.Debug("batch unack completed", "count", len(entries))
+	processed := 0
+	for _, r := range results {
+		if r.Processed {
+			processed++
+		}
+	}
+	bu.log.Debug("batch unack completed",
+		"count", len(entries),
+		"processed", processed,
+	)
 
-	for _, entry := range entries {
+	for i, entry := range entries {
+		// Defensive: if the Lua returned fewer results than entries (should
+		// not happen given the KEYS/ARGV validation, but be safe), treat
+		// out-of-range indices as skipped.
+		if i >= len(results) || !results[i].Processed {
+			// Lua skipped this entry: the message was not in the consumer's
+			// processing queue at flush time — already handled elsewhere.
+			// Do NOT publish events for it; there was no state transition
+			// to report.
+			bu.log.Debug("skipping phantom unack event",
+				"messageID", entry.msg.ID(),
+				"cause", int(entry.cause),
+			)
+			continue
+		}
+
 		msgID := entry.msg.ID()
-		action, deadLetterCause := resolveUnackAction(entry.msg, entry.cause)
+		action := results[i].Action
+		deadLetterCause := results[i].Cause
 
 		switch action {
 		case ActionDeadLetter:
@@ -209,6 +261,16 @@ func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 			)
 			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
 			consumerEvents.PublishMessageRequeued(ctx, msgID, *bu.queue, bu.consumerID)
+
+		default:
+			// Should not happen: the Lua's action field is one of
+			// ACTION_DEAD_LETTER (0), ACTION_REQUEUE (1), ACTION_DELAY (2).
+			// Log and skip rather than panic — a future Lua change adding a
+			// new action value should not crash the consumer.
+			bu.log.Error("unexpected unack action from Lua",
+				"messageID", msgID,
+				"action", int(action),
+			)
 		}
 	}
 }

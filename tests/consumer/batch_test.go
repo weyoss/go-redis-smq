@@ -13,6 +13,7 @@ package consumer_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -264,5 +265,143 @@ func TestBatchAck_ShutdownWaitsForInFlightHandler(t *testing.T) {
 	}
 	if exists != 0 {
 		t.Errorf("ConsumerProcessing key still exists after Shutdown")
+	}
+}
+
+// Scenario: BatchUnacker must NOT publish unack-related events for
+// messages that the Lua script skipped because they were no longer in
+// the consumer's processing queue.
+func TestBatchUnack_NoPhantomEventsForSkippedMessages(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-h7-phantom")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	var mu sync.Mutex
+	unackEvents := make(map[string]int)
+	requeueEvents := make(map[string]int)
+
+	unackSub, err := consumer.SubscribeMessageUnacknowledged(func(p consumer.MessageUnacknowledgedPayload) {
+		mu.Lock()
+		unackEvents[p.MessageID]++
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe unack: %v", err)
+	}
+	defer unackSub.Unsubscribe()
+
+	requeueSub, err := consumer.SubscribeMessageRequeued(func(p consumer.MessagePayload) {
+		mu.Lock()
+		requeueEvents[p.MessageID]++
+		mu.Unlock()
+	})
+	if err != nil {
+		t.Fatalf("subscribe requeue: %v", err)
+	}
+	defer requeueSub.Unsubscribe()
+
+	// BatchSize=100 and BatchTimeout=10s are both larger than this test's
+	// scale, so the batch never auto-flushes. Only the explicit Shutdown
+	// at the end triggers the flush — after we've manually removed the
+	// message from ConsumerProcessing.
+	cons := redissmq.NewConsumer(
+		consumer.WithBatchUnacks(consumer.BatchConfig{
+			Enabled:      true,
+			BatchSize:    100,
+			BatchTimeout: 10 * time.Second,
+		}),
+	)
+
+	handlerRan := make(chan struct{}, 1)
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		handlerRan <- struct{}{}
+		return fmt.Errorf("intentional failure to trigger unack")
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+	t.Cleanup(cons.Shutdown) // idempotent; explicit Shutdown below is the primary path
+
+	prod := testutil.StartProducer(t, ctx)
+	ids, err := prod.Produce(ctx, msg.New().
+		SetBody("test-h7").
+		SetQueue(params).
+		SetRetryThreshold(10). // high enough that we never exceed it → requeue path
+		SetRetryDelay(0),      // 0 → requeue, not delay
+	)
+	if err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+	msgID := ids[0]
+
+	// Wait for the handler to run. After this returns, ConsumeMessage.Consume
+	// calls batchUnacker.Unack synchronously, appending the entry to the buffer.
+	select {
+	case <-handlerRan:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for handler to run")
+	}
+
+	// Give Unack time to buffer the entry. Safe because BatchTimeout is 10s
+	// and BatchSize is 100 — no auto-flush happens in this window.
+	time.Sleep(200 * time.Millisecond)
+
+	// Sanity: the message must be in ConsumerProcessing before we remove it.
+	// If it isn't, the test setup is wrong (message already acked, or never
+	// checked out); the assertions below would be vacuous.
+	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+	processingKey := qKey.ConsumerProcessing(cons.ID())
+	pending, err := redis.Client().LRange(ctx, processingKey, 0, -1).Result()
+	if err != nil {
+		t.Fatalf("lrange ConsumerProcessing: %v", err)
+	}
+	found := false
+	for _, id := range pending {
+		if id == msgID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("message %s not in ConsumerProcessing %v; test setup is wrong", msgID, pending)
+	}
+
+	// Manually remove the message from ConsumerProcessing. This simulates
+	// a peer's ReapConsumers cycle having recovered the message (removed it
+	// from the dead consumer's processing queue) while our consumer is
+	// still alive. When the batch flushes, the Lua's LREM returns 0 and
+	// skips the entry — but pre-fix, the phantom event still fired.
+	removed, err := redis.Client().LRem(ctx, processingKey, 1, msgID).Result()
+	if err != nil {
+		t.Fatalf("lrem ConsumerProcessing: %v", err)
+	}
+	if removed != 1 {
+		t.Fatalf("expected to remove 1 message from ConsumerProcessing, got %d", removed)
+	}
+
+	// Force the batch to flush via Shutdown.
+	cons.Shutdown()
+
+	// Give events time to be delivered through Redis pub/sub to our
+	// subscribers. The publish call is synchronous (returns when the
+	// PUBLISH command is accepted by Redis), but delivery to subscribers
+	// is asynchronous.
+	time.Sleep(500 * time.Millisecond)
+
+	mu.Lock()
+	defer mu.Unlock()
+
+	if n := unackEvents[msgID]; n != 0 {
+		t.Errorf("phantom consumer.messageUnacknowledged event for %s: %d occurrence(s) (H7). "+
+			"The message was removed from ConsumerProcessing before the batch flushed; "+
+			"the Lua LREM returned 0 and skipped it, but BatchUnacker published the event anyway.",
+			msgID, n)
+	}
+	if n := requeueEvents[msgID]; n != 0 {
+		t.Errorf("phantom consumer.messageRequeued event for %s: %d occurrence(s) (H7). "+
+			"The message was removed from ConsumerProcessing before the batch flushed; "+
+			"the Lua LREM returned 0 and skipped it, but BatchUnacker published the event anyway.",
+			msgID, n)
 	}
 }
