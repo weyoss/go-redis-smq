@@ -201,8 +201,22 @@ func (m *ProducibleMessage) SetScheduledRepeatPeriod(period time.Duration) *Prod
 // ScheduledRepeat returns the repeat count.
 func (m *ProducibleMessage) ScheduledRepeat() int { return m.scheduledRepeat }
 
-// SetScheduledRepeat sets the number of times to repeat after initial delivery.
-// Negative values are treated as zero.
+// SetScheduledRepeat sets the number of additional deliveries after the
+// initial delivery.
+//
+// Semantics:
+//
+//   - 0 (the default value):
+//     the message is delivered exactly once and not repeated. The
+//     scheduled-repeat-period, if set, is ignored — there is no repeat
+//     for it to govern.
+//   - N > 0: N additional deliveries after the first, at the interval set
+//     by SetScheduledRepeatPeriod. Total deliveries = N + 1.
+//   - Negative values are clamped to 0 (no repeats).
+//
+// There is no "repeat indefinitely" mode in this implementation. If you
+// need unbounded repetition, use a large finite count or a CRON expression
+// via SetScheduledCron.
 func (m *ProducibleMessage) SetScheduledRepeat(repeat int) *ProducibleMessage {
 	if repeat < 0 {
 		repeat = 0

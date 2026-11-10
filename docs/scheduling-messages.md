@@ -51,19 +51,30 @@ Invalid CRON expressions (wrong field count or invalid syntax) are rejected and 
 
 ## Repeating Delivery
 
-Repeat a message a fixed number of times (or indefinitely) after an initial delay.
+Repeat a message a fixed number of times after an initial delay.
 
 ```go
 m := message.New().
     SetQueue(queueParams).
     SetBody(data).
-    SetScheduledDelay(10 * time.Second).      // First delivery after 10s
-    SetScheduledRepeat(5).                    // Repeat 5 times after the first delivery
-    SetScheduledRepeatPeriod(60 * time.Second) // Every 60 seconds between repeats
+    SetScheduledDelay(10 * time.Second).       // First delivery after 10s
+    SetScheduledRepeat(5).                     // 5 additional deliveries after the first
+    SetScheduledRepeatPeriod(60 * time.Second) // 60 seconds between deliveries
 ```
 
-- `SetScheduledRepeat(0)` means repeat indefinitely.
-- If `SetScheduledRepeatPeriod` is not set, repeats occur immediately (or with the same delay as the first delivery) depending on implementation.
+Semantics:
+
+- **`SetScheduledRepeat(0)` — no repeats.** The message is delivered
+  exactly once. This is the default, and it is also the effective value
+  when `SetScheduledRepeat` is never called. If a repeat period was set
+  via `SetScheduledRepeatPeriod`, it is ignored — there is no repeat
+  for it to govern, and the message is published immediately (or after
+  `ScheduledDelay` if that was set), delivering once.
+- **`SetScheduledRepeat(N)` for N > 0** — N additional deliveries after
+  the first, for N + 1 total. The interval between deliveries is
+  `ScheduledRepeatPeriod`.
+- **Negative values** are clamped to 0 (no repeats).
+- **No period set** with N > 0: consecutive repeats occur immediately.
 
 ## Clearing Scheduling
 
@@ -97,8 +108,11 @@ See [Message Browsing](message-browsing.md) for details.
 ## Scheduling Rules
 
 - **Delay** takes precedence over CRON and repeat for the *first* delivery.
-- **CRON + Repeat** — the repeat period is used between CRON-triggered deliveries, but the first delivery occurs at the next CRON tick (unless a delay is set, which overrides the first tick).
-- **Repeat only** — first delivery is immediate if no delay, subsequent deliveries follow the repeat period.
+- **CRON + Repeat** — the repeat period is used between CRON-triggered
+  deliveries, but the first delivery occurs at the next CRON tick (unless
+  a delay is set, which overrides the first tick).
+- **Repeat only** — first delivery is immediate if no delay, subsequent
+  deliveries follow the repeat period.
 
 ## Related
 
