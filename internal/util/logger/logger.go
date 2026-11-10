@@ -53,13 +53,36 @@ func Init() {
 }
 
 // currentConfig returns the logger settings from the public configuration
-// snapshot. If logging is shut down, it returns a disabled config.
+// snapshot. If logging is shut down or the config snapshot is nil, it
+// returns a disabled config.
+//
+// Nil-handling rationale: internalconfig.Close now calls
+// pubconfig.Set(nil), so appconfig.Get() returns nil after Close. The
+// logger survives past config.Close in two orderings:
+//
+//  1. Normal shutdown: redissmq.Shutdown calls logger.Shutdown (sets
+//     `closed`) BEFORE internalconfig.Close (nils the snapshot). The
+//     `closed` guard short-circuits every subsequent log call, so the
+//     nil read is never reached.
+//
+//  2. Failed-then-retried Init: redissmq.Init calls logger.Init (clears
+//     `closed`) BEFORE internalconfig.Init. If the previous Init's
+//     shutdownLocked ran, the snapshot is nil in the window between
+//     logger.Init and internalconfig.Init's Set. A log in that window
+//     would reach the nil read.
+//
+// Both cases are handled by the same nil guard — defense in depth so
+// the logger can't panic during a lifecycle edge.
 func currentConfig() Config {
 	if closed.Load() {
 		return Config{Enabled: false}
 	}
 
 	c := appconfig.Get()
+	if c == nil {
+		return Config{Enabled: false}
+	}
+
 	return Config{
 		Enabled:          c.Logger.Enabled,
 		Level:            slogLevelFromInt(c.Logger.Options.LogLevel),

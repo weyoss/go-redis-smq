@@ -11,14 +11,17 @@
 package config_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
 
 	redissmq "github.com/weyoss/go-redis-smq"
+	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
+	"github.com/weyoss/go-redis-smq/internal/util/logger"
 	pubconfig "github.com/weyoss/go-redis-smq/pkg/config"
 )
 
@@ -149,5 +152,55 @@ func TestManager_Close(t *testing.T) {
 	cfg := manager.Get()
 	if cfg == nil {
 		t.Fatal("Get returned nil after re-init")
+	}
+}
+
+// Scenario: Manager.Close clears the public config snapshot (H8).
+//
+// Pre-fix, internalconfig.Close nilled m.instance but left
+// pubconfig.Get() returning the last-live config. Any code running in
+// the shutdown window (deferred cleanups, post-shutdown logging) that
+// called NewQueueParams or NewExchangeParams would bake the
+// pre-shutdown namespace into a params value, and any code that read
+// Get().Namespace directly would silently operate against stale data.
+//
+// Post-fix, Close nils both m.instance and the public snapshot. The
+// documented contract (pkg/config.Get) becomes: non-nil during the
+// [Init..Close] runtime window, nil after Close. Logging is the one
+// post-Close reader that legitimately runs and is handled by a nil
+// guard in logger.currentConfig.
+func TestManager_Close_ClearsSnapshot(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	// Sanity: after Setup's internalconfig.Init, Get returns non-nil.
+	if cfg := pubconfig.Get(); cfg == nil {
+		t.Fatal("pubconfig.Get() = nil after Init; expected non-nil")
+	}
+
+	// Close clears the snapshot.
+	internalconfig.Close()
+
+	if cfg := pubconfig.Get(); cfg != nil {
+		t.Fatalf("pubconfig.Get() = %+v after Close; expected nil (H8)", cfg)
+	}
+
+	// Logging after Close must not panic. The logger's nil-guard returns
+	// a disabled config so the message is silently dropped — that's the
+	// correct behavior; what we're asserting is that no panic occurs.
+	// Pre-fix (with H8 not applied but with the nil guard absent), this
+	// would panic on c.Logger.Enabled dereference.
+	var buf bytes.Buffer
+	log := logger.NewWithWriter(&buf, "post-close")
+	log.Info("post-close log message")
+	if buf.Len() != 0 {
+		t.Errorf("post-close log emitted output: %q (expected empty)", buf.String())
+	}
+
+	// Re-init restores the snapshot.
+	if err := internalconfig.Init(ctx); err != nil {
+		t.Fatalf("re-init: %v", err)
+	}
+	if cfg := pubconfig.Get(); cfg == nil {
+		t.Fatal("pubconfig.Get() = nil after re-Init; expected non-nil")
 	}
 }

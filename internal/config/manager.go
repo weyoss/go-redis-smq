@@ -135,6 +135,28 @@ func (m *Manager) Reload(ctx context.Context) error {
 	return m.loadOrCreateLocked(ctx)
 }
 
+// Close releases the configuration singleton and clears the public
+// snapshot.
+//
+// After Close, pubconfig.Get() returns nil until the next Init. Two
+// classes of caller are affected:
+//
+//   - Callers that legitimately run in the shutdown window (loggers,
+//     deferred cleanup) must handle nil. logger.currentConfig does;
+//     the runtime's own shutdown path short-circuits via
+//     logger.Shutdown's `closed` flag before reaching the config read.
+//     This nil-signal is intentional — pre-fix, Get returned stale
+//     config after Close, silently breaking queue/exchange key
+//     construction for any post-shutdown caller (H8).
+//
+//   - Callers that should not run after Shutdown (queue construction,
+//     message managers, purges) panic on the nil read. That's the
+//     correct signal that the runtime is no longer initialised — a
+//     panic is preferable to silently operating against a stale
+//     namespace.
+//
+// Idempotent: safe to call multiple times. A subsequent Init restores
+// the snapshot from Redis (or creates fresh defaults).
 func (m *Manager) Close() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -143,6 +165,7 @@ func (m *Manager) Close() {
 		m.sub = nil
 	}
 	m.instance = nil
+	pubconfig.Set(nil)
 }
 
 // persistAndPublishLocked persists the given config, updates in‑memory state,
