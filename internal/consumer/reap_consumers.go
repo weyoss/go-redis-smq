@@ -12,6 +12,7 @@ package consumer
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"sync"
 	"time"
@@ -77,7 +78,7 @@ func (rc *ReapConsumers) Run(ctx context.Context) {
 // The goroutine exits as soon as its select observes ctx.Done() — but if
 // it's mid-reap (a Redis HKEYS plus MGET heartbeats plus the per-dead-
 // consumer recovery work — UnacknowledgeProcessingQueue, UnsubscribeConsumer,
-// DeleteEphemeralConsumerGroup), Wait blocks until that entire cycle
+// removeFromAllConsumerGroups), Wait blocks until that entire cycle
 // completes. That's the point: shutdown cannot proceed until the last
 // Redis op is done.
 func (rc *ReapConsumers) Wait() {
@@ -132,10 +133,15 @@ func (rc *ReapConsumers) reap(ctx context.Context) {
 	}
 }
 
+// recoverConsumer tears down a dead consumer's state: recovers its in-flight
+// messages, deletes its ephemeral group (if any), removes its registration,
+// and removes it from every consumer group on the queue.
 func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string, qKey redisKeys.Queue) {
 	rc.log.Debug("recovering consumer", "consumerID", consumerID)
 
-	// Use the dead consumer's ID to create an unacknowledger for its processing queue.
+	// Step 1: Recover in-flight messages from the dead consumer's processing
+	// queue. Must run before unsubscription deletes the ConsumerProcessing
+	// key — otherwise the messages would be silently dropped.
 	deadUnack := NewMessageUnacknowledger(rc.queue, consumerID)
 	if err := deadUnack.UnacknowledgeProcessingQueue(ctx, consumer.CauseOfflineConsumer); err != nil {
 		rc.log.Error("failed to unacknowledge messages for dead consumer",
@@ -144,11 +150,12 @@ func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string,
 		)
 	}
 
-	// Determine the ephemeral group ID for this consumer.
+	// Step 2: If the dead consumer was using an ephemeral group, delete the
+	// group itself. This also removes it from ConsumerGroups and drops its
+	// per-group pending lists. Idempotent; skipped if no ephemeral group.
 	deadGroupID := ephemeralGroupID(consumerID)
 	groupExists, err := redisClient.Client().SIsMember(ctx, qKey.ConsumerGroups(), deadGroupID).Result()
 	if err == nil && groupExists {
-		// The dead consumer was using an ephemeral group. Delete it.
 		if err := DeleteEphemeralConsumerGroup(ctx, consumerID, rc.queue, deadGroupID); err != nil {
 			rc.log.Error("failed to delete ephemeral group for dead consumer",
 				"consumerID", consumerID,
@@ -156,23 +163,57 @@ func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string,
 				"error", err,
 			)
 		}
-		// Unsubscribe with the ephemeral group ID to remove from group members.
-		if err := UnsubscribeConsumer(ctx, consumerID, rc.queue, deadGroupID); err != nil {
-			rc.log.Error("failed to unsubscribe dead consumer from ephemeral group",
-				"consumerID", consumerID,
-				"group", deadGroupID,
-				"error", err,
-			)
-		}
-	} else {
-		// The dead consumer was using an explicit group or no group. Unsubscribe without group.
-		if err := UnsubscribeConsumer(ctx, consumerID, rc.queue, ""); err != nil {
-			rc.log.Error("failed to unsubscribe dead consumer",
-				"consumerID", consumerID,
-				"error", err,
-			)
-		}
+	}
+
+	// Step 3: Remove the dead consumer's registration (Consumers hash,
+	// ProcessingQueues hash, ConsumerQueues set). Called with groupID=""
+	// because the Lua's per-group SREM would be a no-op on the ephemeral
+	// group (already deleted in step 2) and doesn't run at all for the
+	// explicit-group case. Group cleanup is handled explicitly in step 4.
+	if err := UnsubscribeConsumer(ctx, consumerID, rc.queue, ""); err != nil {
+		rc.log.Error("failed to unsubscribe dead consumer",
+			"consumerID", consumerID,
+			"error", err,
+		)
+	}
+
+	// Step 4 (C3): Unconditionally SREM the dead consumer from every group
+	// on this queue. This is the fix. Covers the explicit-group case the
+	// Lua misses when groupID="", and is a harmless no-op if the consumer
+	// wasn't in any group.
+	if err := rc.removeFromAllConsumerGroups(ctx, qKey, consumerID); err != nil {
+		rc.log.Error("failed to remove dead consumer from consumer groups",
+			"consumerID", consumerID,
+			"error", err,
+		)
 	}
 
 	rc.log.Info("consumer recovered", "consumerID", consumerID)
+}
+
+// removeFromAllConsumerGroups removes consumerID from every group's
+// ConsumerGroupMembers set on the given queue. Idempotent: SREM on a
+// missing member is a no-op. Used by recoverConsumer to close the
+// leak where a dead consumer in an explicit group never got removed from
+// that group's member set.
+func (rc *ReapConsumers) removeFromAllConsumerGroups(ctx context.Context, qKey redisKeys.Queue, consumerID string) error {
+	groups, err := redisClient.Client().SMembers(ctx, qKey.ConsumerGroups()).Result()
+	if err != nil {
+		return fmt.Errorf("load consumer groups: %w", err)
+	}
+	if len(groups) == 0 {
+		return nil
+	}
+
+	for _, groupID := range groups {
+		membersKey := qKey.ConsumerGroupMembers(groupID)
+		if err := redisClient.Client().SRem(ctx, membersKey, consumerID).Err(); err != nil {
+			return fmt.Errorf("srem consumer from group %s: %w", groupID, err)
+		}
+	}
+	rc.log.Debug("removed dead consumer from all groups",
+		"consumerID", consumerID,
+		"groupCount", len(groups),
+	)
+	return nil
 }
