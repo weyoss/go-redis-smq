@@ -142,9 +142,12 @@ func (s *Store) SaveWithRateLimit(
 	switch replyStr {
 	case "OK":
 		queueEvents.PublishCreated(ctx, *queueParams, publicqueue.Props{
-			Type:          queueType,
-			DeliveryModel: deliveryModel,
-			RateLimit:     rateLimit,
+			Type:              queueType,
+			DeliveryModel:     deliveryModel,
+			OperationalState:  publicqueue.StateActive,
+			RateLimit:         rateLimit,
+			LastStateChangeAt: time.UnixMilli(now),
+			LockID:            "",
 		})
 		return nil
 	case "QUEUE_EXISTS":
