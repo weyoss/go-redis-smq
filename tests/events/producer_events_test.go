@@ -149,8 +149,8 @@ func TestProducerEvents_MessagePublished_DirectToQueue(t *testing.T) {
 	if received.MessageID != ids[0] {
 		t.Errorf("messageID = %s, want %s", received.MessageID, ids[0])
 	}
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 	if received.ProducerID == "" {
 		t.Error("producerID should not be empty")

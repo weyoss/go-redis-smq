@@ -50,12 +50,12 @@ func PublishGoingDown(ctx context.Context, producerID string) {
 	publish(ctx, EventGoingDown, producerID)
 }
 
-// PublishMessagePublished publishes a producer.messagePublished event to the
-// public user bus.
+// PublishMessagePublished publishes a producer.messagePublished event to
+// the public user bus.
 //
 // The arguments match the TypeScript event signature:
 //
 //	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
-func PublishMessagePublished(ctx context.Context, messageID string, queue queue.Params, producerID string) {
+func PublishMessagePublished(ctx context.Context, messageID string, queue queue.ParsedParams, producerID string) {
 	publish(ctx, EventMessagePublished, messageID, queue, producerID)
 }

@@ -36,11 +36,20 @@ type LifecyclePayload struct {
 // MessagePublishedPayload is used by public subscribers to receive the
 // arguments of a producer.messagePublished event.
 //
-// It matches the TypeScript event signature:
+// Queue is a queue.ParsedParams whose JSON wire format matches:
 //
-//	(messageId: string, queue: IQueueParsedParams, producerId: string) => void
+//	{
+//	  "queueParams": { "name": "orders", "ns": "default" },
+//	  "groupId": "email-service"
+//	}
+//
+// For point-to-point queues, groupId is null on the wire (empty in Go).
+// For Pub/Sub queues, groupId is the consumer group the message was
+// dispatched to. The producer emits one event per dispatch — one per
+// destination queue, multiplied by the number of consumer groups for
+// Pub/Sub destinations.
 type MessagePublishedPayload struct {
-	MessageID  string       `json:"messageId"`
-	Queue      queue.Params `json:"queue"`
-	ProducerID string       `json:"producerId"`
+	MessageID  string             `json:"messageId"`
+	Queue      queue.ParsedParams `json:"queue"`
+	ProducerID string             `json:"producerId"`
 }
