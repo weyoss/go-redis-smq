@@ -203,6 +203,9 @@ func (prod *Producer) cleanup(ctx context.Context) {
 
 	PublishGoingDown(ctx, prod.id)
 
+	// Acquiring Lock here blocks until every in-flight Produce has
+	// released its RLock. Once we hold it, no Produce is using the
+	// resolver — clear it safely. See Produce's doc for the invariant.
 	prod.mu.Lock()
 	if prod.pubSubResolver != nil {
 		prod.pubSubResolver.Clear()
@@ -227,19 +230,41 @@ func (prod *Producer) ID() string { return prod.id }
 
 // Produce publishes a message to its configured destination.
 func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMessage) ([]string, error) {
+	// RLock is held for the entire produce operation. cleanup acquires
+	// Lock, which blocks until every in-flight Produce has released its
+	// RLock — guaranteeing that:
+	//
+	//   1. cleanup cannot clear pubSubResolver while a Produce is using
+	//      it. Pre-fix, Produce captured resolver under a brief RLock,
+	//      then released before doing Redis I/O. A concurrent cleanup
+	//      could clear the resolver in that window; Resolve() would
+	//      return (nil, false), which makes Produce dispatch to the
+	//      queue-level Pending list. On a Pub/Sub queue that list is
+	//      never read — the message was silently orphaned. This is the
+	//      exact class of bug ErrNoConsumerGroups exists to prevent.
+	//
+	//   2. Shutdown cannot return while a Produce is still calling
+	//      internalredis.Client() / Eval. Shutdown blocks on cleanup,
+	//      cleanup blocks on the Lock, which blocks on every in-flight
+	//      RLock. By the time Shutdown returns, no produce goroutine can
+	//      touch the Redis client — so internalredis.Close cannot panic
+	//      an in-flight produce.
+	//
+	// Holding RLock across Redis I/O is the same discipline used by
+	// consumer.MessageHandler and queue.PurgeWorker: an unbounded wait,
+	// bounded in practice by the Redis client's own dial/read/write
+	// timeouts. A bounded wait would reintroduce both races.
+	defer prod.mu.RUnlock()
 	prod.mu.RLock()
-	running := prod.running
-	resolver := prod.pubSubResolver
-	prod.mu.RUnlock()
 
-	if !running {
+	if !prod.running {
 		prod.log.Warn("produce called but producer not running")
 		return nil, publicproducer.ErrNotRunning
 	}
 
 	if queueParams := m.Queue(); queueParams != nil {
 		prod.log.Debug("producing to queue", "queue", queueParams.String())
-		return prod.produceToQueue(ctx, m, queueParams, resolver)
+		return prod.produceToQueue(ctx, m, queueParams, prod.pubSubResolver)
 	}
 
 	exchangeParams := m.Exchange()
@@ -253,7 +278,7 @@ func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMe
 		"type", exchangeParams.Type().String(),
 		"routingKey", m.ExchangeRoutingKey(),
 	)
-	return prod.produceToExchange(ctx, m, exchangeParams, resolver)
+	return prod.produceToExchange(ctx, m, exchangeParams, prod.pubSubResolver)
 }
 
 // resolvePubSubTargets returns the consumer groups to publish to for the
