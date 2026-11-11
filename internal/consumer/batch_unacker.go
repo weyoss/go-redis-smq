@@ -216,6 +216,15 @@ func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 		"processed", processed,
 	)
 
+	// Build the queue.ParsedParams once for all event publishes below. The
+	// queue is nested under "queueParams" with the effective consumer group
+	// ID alongside it, so cross-language subscribers see a consistent
+	// payload shape.
+	queueParsed := queue.ParsedParams{
+		QueueParams: *bu.queue,
+		GroupID:     bu.groupID,
+	}
+
 	for i, entry := range entries {
 		// Defensive: if the Lua returned fewer results than entries (should
 		// not happen given the KEYS/ARGV validation, but be safe), treat
@@ -243,24 +252,24 @@ func (bu *BatchUnacker) unacknowledge(entries []unackEntry) {
 				"cause", int(entry.cause),
 				"deadLetterCause", int(deadLetterCause),
 			)
-			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
-			consumerEvents.PublishMessageDeadLettered(ctx, msgID, *bu.queue, bu.consumerID, int(deadLetterCause))
+			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, queueParsed, bu.consumerID, int(entry.cause))
+			consumerEvents.PublishMessageDeadLettered(ctx, msgID, queueParsed, bu.consumerID, int(deadLetterCause))
 
 		case ActionDelay:
 			bu.log.Debug("message delayed for retry",
 				"messageID", msgID,
 				"cause", int(entry.cause),
 			)
-			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
-			consumerEvents.PublishMessageDelayed(ctx, msgID, *bu.queue, bu.consumerID)
+			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, queueParsed, bu.consumerID, int(entry.cause))
+			consumerEvents.PublishMessageDelayed(ctx, msgID, queueParsed, bu.consumerID)
 
 		case ActionRequeue:
 			bu.log.Debug("message requeued",
 				"messageID", msgID,
 				"cause", int(entry.cause),
 			)
-			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, *bu.queue, bu.consumerID, int(entry.cause))
-			consumerEvents.PublishMessageRequeued(ctx, msgID, *bu.queue, bu.consumerID)
+			consumerEvents.PublishMessageUnacknowledged(ctx, msgID, queueParsed, bu.consumerID, int(entry.cause))
+			consumerEvents.PublishMessageRequeued(ctx, msgID, queueParsed, bu.consumerID)
 
 		default:
 			// Should not happen: the Lua's action field is one of

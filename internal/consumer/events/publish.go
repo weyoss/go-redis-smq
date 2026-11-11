@@ -52,36 +52,36 @@ func PublishGoingDown(ctx context.Context, consumerID string) {
 
 // PublishMessageReceived publishes a consumer.messageReceived event to the
 // public user bus.
-func PublishMessageReceived(ctx context.Context, messageID string, queue queue.Params, consumerID string) {
+func PublishMessageReceived(ctx context.Context, messageID string, queue queue.ParsedParams, consumerID string) {
 	publish(ctx, EventMessageReceived, messageID, queue, consumerID)
 }
 
 // PublishMessageAcknowledged publishes a consumer.messageAcknowledged event
 // to the public user bus.
-func PublishMessageAcknowledged(ctx context.Context, messageID string, queue queue.Params, consumerID string) {
+func PublishMessageAcknowledged(ctx context.Context, messageID string, queue queue.ParsedParams, consumerID string) {
 	publish(ctx, EventMessageAcknowledged, messageID, queue, consumerID)
 }
 
 // PublishMessageUnacknowledged publishes a consumer.messageUnacknowledged
 // event to the public user bus.
-func PublishMessageUnacknowledged(ctx context.Context, messageID string, queue queue.Params, consumerID string, cause int) {
+func PublishMessageUnacknowledged(ctx context.Context, messageID string, queue queue.ParsedParams, consumerID string, cause int) {
 	publish(ctx, EventMessageUnacknowledged, messageID, queue, consumerID, cause)
 }
 
 // PublishMessageDeadLettered publishes a consumer.messageDeadLettered event
 // to the public user bus.
-func PublishMessageDeadLettered(ctx context.Context, messageID string, queue queue.Params, consumerID string, cause int) {
+func PublishMessageDeadLettered(ctx context.Context, messageID string, queue queue.ParsedParams, consumerID string, cause int) {
 	publish(ctx, EventMessageDeadLettered, messageID, queue, consumerID, cause)
 }
 
 // PublishMessageRequeued publishes a consumer.messageRequeued event to the
 // public user bus.
-func PublishMessageRequeued(ctx context.Context, messageID string, queue queue.Params, consumerID string) {
+func PublishMessageRequeued(ctx context.Context, messageID string, queue queue.ParsedParams, consumerID string) {
 	publish(ctx, EventMessageRequeued, messageID, queue, consumerID)
 }
 
 // PublishMessageDelayed publishes a consumer.messageDelayed event to the
 // public user bus.
-func PublishMessageDelayed(ctx context.Context, messageID string, queue queue.Params, consumerID string) {
+func PublishMessageDelayed(ctx context.Context, messageID string, queue queue.ParsedParams, consumerID string) {
 	publish(ctx, EventMessageDelayed, messageID, queue, consumerID)
 }

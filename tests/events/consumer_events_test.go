@@ -126,8 +126,8 @@ func TestConsumerEvents_MessageAcknowledged(t *testing.T) {
 	if received.MessageID != ids[0] {
 		t.Errorf("messageID = %s, want %s", received.MessageID, ids[0])
 	}
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 	if received.ConsumerID == "" {
 		t.Error("consumerID should not be empty")
@@ -228,8 +228,8 @@ func TestConsumerEvents_MessageDeadLettered(t *testing.T) {
 	if received.Cause != int(publicConsumer.DeadLetterRetryThresholdExceeded) {
 		t.Errorf("cause = %d, want %d", received.Cause, publicConsumer.DeadLetterRetryThresholdExceeded)
 	}
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 }
 
@@ -274,8 +274,8 @@ func TestConsumerEvents_MessageRequeued(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 }
 
@@ -320,8 +320,8 @@ func TestConsumerEvents_MessageDelayed(t *testing.T) {
 		t.Fatal("timeout waiting for event")
 	}
 
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 }
 
@@ -529,8 +529,8 @@ func TestConsumerEvents_EventPayloadInfo(t *testing.T) {
 	if received.ConsumerID != consumerID {
 		t.Errorf("consumerID = %s, want %s", received.ConsumerID, consumerID)
 	}
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 }
 
@@ -580,8 +580,8 @@ func TestConsumerEvents_MessageReceived(t *testing.T) {
 	if received.MessageID != ids[0] {
 		t.Errorf("messageID = %s, want %s", received.MessageID, ids[0])
 	}
-	if received.Queue.Name() != params.Name() {
-		t.Errorf("queue = %s, want %s", received.Queue.Name(), params.Name())
+	if received.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("queue = %s, want %s", received.Queue.QueueParams.Name(), params.Name())
 	}
 	if received.ConsumerID != consumerID {
 		t.Errorf("consumerID = %s, want %s", received.ConsumerID, consumerID)

@@ -35,9 +35,14 @@ type LifecyclePayload struct {
 	ConsumerID string
 }
 
+// MessagePayload is the base payload for consumer message events.
+//
+// Queue carries both the queue's (name, ns) identity and the effective
+// consumer group ID.
+// For point-to-point queues, Queue.GroupID is empty.
 type MessagePayload struct {
 	MessageID  string
-	Queue      queue.Params
+	Queue      queue.ParsedParams
 	ConsumerID string
 }
 
@@ -53,7 +58,7 @@ type MessageDeadLetteredPayload struct {
 
 type MessageReceivedPayload struct {
 	MessageID  string
-	Queue      queue.Params
+	Queue      queue.ParsedParams
 	ConsumerID string
 }
 
@@ -63,6 +68,43 @@ func decodeArg(arg interface{}, target interface{}) error {
 		return err
 	}
 	return json.Unmarshal(data, target)
+}
+
+// decodeQueueArg decodes the queue argument from an event payload into a
+// queue.ParsedParams. Two wire formats are accepted:
+//
+//  1. The current format, matching TypeScript's IQueueParsedParams:
+//     {"queueParams":{"name":"...","ns":"..."},"groupId":"..."}
+//
+//  2. The legacy format emitted by older Go versions:
+//     {"name":"...","ns":"..."}
+//
+// The current format is tried first; if the decoded QueueParams has an
+// empty name (meaning the input didn't have a nested "queueParams" field
+// — Params.UnmarshalJSON rejects empty names so a successful decode
+// always has a non-empty name), the legacy path is used. This makes
+// two-phase rolling upgrades possible: deploy the subscriber update
+// first (accepts both), then deploy the publisher update (emits only the
+// new format).
+func decodeQueueArg(arg interface{}, target *queue.ParsedParams) error {
+	data, err := json.Marshal(arg)
+	if err != nil {
+		return err
+	}
+
+	var pp queue.ParsedParams
+	if err := json.Unmarshal(data, &pp); err == nil && pp.QueueParams.Name() != "" {
+		*target = pp
+		return nil
+	}
+
+	var legacy queue.Params
+	if err := json.Unmarshal(data, &legacy); err == nil && legacy.Name() != "" {
+		*target = queue.ParsedParams{QueueParams: legacy, GroupID: ""}
+		return nil
+	}
+
+	return fmt.Errorf("decode queue: unrecognized format")
 }
 
 // SubscribeUp registers a handler for the consumer.up event.
@@ -155,20 +197,20 @@ func SubscribeMessageReceived(handler func(MessageReceivedPayload)) (eventbus.Su
 		}
 
 		var messageID string
-		var queueParams queue.Params
+		var queueParsed queue.ParsedParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queueParams); err != nil {
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &consumerID); err != nil {
 			return
 		}
 
-		handler(MessageReceivedPayload{MessageID: messageID, Queue: queueParams, ConsumerID: consumerID})
+		handler(MessageReceivedPayload{MessageID: messageID, Queue: queueParsed, ConsumerID: consumerID})
 	}, EventMessageReceived)
 }
 
@@ -186,13 +228,13 @@ func SubscribeMessageAcknowledged(handler func(MessagePayload)) (eventbus.Subscr
 		}
 
 		var messageID string
-		var queueParams queue.Params
+		var queueParsed queue.ParsedParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queueParams); err != nil {
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &consumerID); err != nil {
@@ -201,7 +243,7 @@ func SubscribeMessageAcknowledged(handler func(MessagePayload)) (eventbus.Subscr
 
 		handler(MessagePayload{
 			MessageID:  messageID,
-			Queue:      queueParams,
+			Queue:      queueParsed,
 			ConsumerID: consumerID,
 		})
 	}, EventMessageAcknowledged)
@@ -221,14 +263,14 @@ func SubscribeMessageUnacknowledged(handler func(MessageUnacknowledgedPayload)) 
 		}
 
 		var messageID string
-		var queueParams queue.Params
+		var queueParsed queue.ParsedParams
 		var consumerID string
 		var cause int
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queueParams); err != nil {
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &consumerID); err != nil {
@@ -241,7 +283,7 @@ func SubscribeMessageUnacknowledged(handler func(MessageUnacknowledgedPayload)) 
 		handler(MessageUnacknowledgedPayload{
 			MessagePayload: MessagePayload{
 				MessageID:  messageID,
-				Queue:      queueParams,
+				Queue:      queueParsed,
 				ConsumerID: consumerID,
 			},
 			Cause: cause,
@@ -263,14 +305,14 @@ func SubscribeMessageDeadLettered(handler func(MessageDeadLetteredPayload)) (eve
 		}
 
 		var messageID string
-		var queueParams queue.Params
+		var queueParsed queue.ParsedParams
 		var consumerID string
 		var cause int
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queueParams); err != nil {
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &consumerID); err != nil {
@@ -283,7 +325,7 @@ func SubscribeMessageDeadLettered(handler func(MessageDeadLetteredPayload)) (eve
 		handler(MessageDeadLetteredPayload{
 			MessagePayload: MessagePayload{
 				MessageID:  messageID,
-				Queue:      queueParams,
+				Queue:      queueParsed,
 				ConsumerID: consumerID,
 			},
 			Cause: cause,
@@ -305,13 +347,13 @@ func SubscribeMessageRequeued(handler func(MessagePayload)) (eventbus.Subscripti
 		}
 
 		var messageID string
-		var queueParams queue.Params
+		var queueParsed queue.ParsedParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queueParams); err != nil {
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &consumerID); err != nil {
@@ -320,7 +362,7 @@ func SubscribeMessageRequeued(handler func(MessagePayload)) (eventbus.Subscripti
 
 		handler(MessagePayload{
 			MessageID:  messageID,
-			Queue:      queueParams,
+			Queue:      queueParsed,
 			ConsumerID: consumerID,
 		})
 	}, EventMessageRequeued)
@@ -340,13 +382,13 @@ func SubscribeMessageDelayed(handler func(MessagePayload)) (eventbus.Subscriptio
 		}
 
 		var messageID string
-		var queueParams queue.Params
+		var queueParsed queue.ParsedParams
 		var consumerID string
 
 		if err := decodeArg(args[0], &messageID); err != nil {
 			return
 		}
-		if err := decodeArg(args[1], &queueParams); err != nil {
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
 			return
 		}
 		if err := decodeArg(args[2], &consumerID); err != nil {
@@ -355,7 +397,7 @@ func SubscribeMessageDelayed(handler func(MessagePayload)) (eventbus.Subscriptio
 
 		handler(MessagePayload{
 			MessageID:  messageID,
-			Queue:      queueParams,
+			Queue:      queueParsed,
 			ConsumerID: consumerID,
 		})
 	}, EventMessageDelayed)

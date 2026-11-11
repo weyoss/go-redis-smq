@@ -63,8 +63,17 @@ func NewConsumeMessage(
 func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.Envelope) {
 	m := envelope.ToTransferable()
 
+	// Build the queue.ParsedParams once for all event publishes below. The
+	// queue is nested under "queueParams" with the effective consumer group
+	// ID alongside it, so cross-language subscribers see a consistent
+	// payload shape.
+	queueParsed := queue.ParsedParams{
+		QueueParams: *c.queue,
+		GroupID:     c.groupID,
+	}
+
 	// Publish message received event.
-	consumerEvents.PublishMessageReceived(ctx, m.ID, *c.queue, c.consumerID)
+	consumerEvents.PublishMessageReceived(ctx, m.ID, queueParsed, c.consumerID)
 
 	c.log.Debug("consuming message", "messageID", m.ID)
 
@@ -121,7 +130,7 @@ func (c *ConsumeMessage) Consume(ctx context.Context, envelope *internalMessage.
 	} else {
 		c.log.Debug("handler succeeded — acknowledging", "messageID", m.ID)
 		c.batchAcker.Ack(m.ID)
-		consumerEvents.PublishMessageAcknowledged(ctx, m.ID, *c.queue, c.consumerID)
+		consumerEvents.PublishMessageAcknowledged(ctx, m.ID, queueParsed, c.consumerID)
 	}
 }
 
