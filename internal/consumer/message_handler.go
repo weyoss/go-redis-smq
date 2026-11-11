@@ -251,10 +251,37 @@ func (mh *MessageHandler) rollbackLocked() {
 	mh.running = false
 }
 
+// acquireWorkerLock blocks until the worker lock is acquired, then starts
+// the background recovery workers (scheduler, requeuers, reaper, orphaned
+// lock recoverer). Called from a wg-tracked goroutine spawned in Run.
 func (mh *MessageHandler) acquireWorkerLock() {
 	mh.log.Debug("attempting to acquire worker lock")
 	if err := mh.workerLock.Acquire(mh.ctx); err != nil {
-		mh.log.Error("failed to acquire worker lock", "error", err)
+		if mh.ctx.Err() != nil {
+			mh.log.Debug("worker lock acquisition cancelled by shutdown")
+			return
+		}
+
+		mh.log.Error("worker lock acquisition failed — shutting down handler",
+			"error", err)
+
+		// errCh is buffered(1); a non-blocking send is safe even when no
+		// reader is attached (see Errors). Signals to any future reader
+		// (e.g. a runner-side reconciler) that this handler degraded.
+		select {
+		case mh.errCh <- fmt.Errorf("acquire worker lock: %w", err):
+		default:
+		}
+
+		// selfShutdown acquires mh.mu internally. This goroutine does NOT
+		// hold mh.mu at this point — Run released it long before spawning
+		// this goroutine, and we haven't re-acquired it yet (the mu.Lock
+		// below runs only on the success path). Safe to call directly.
+		//
+		// selfShutdown uses waitForLoop=false; beginShutdown does not wait
+		// on mh.wg. That's required here: this goroutine is itself tracked
+		// by mh.wg, so waiting would deadlock.
+		mh.selfShutdown()
 		return
 	}
 
