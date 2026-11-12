@@ -25,7 +25,7 @@ type Envelope struct {
 	producibleMessage *publicmessage.ProducibleMessage
 	messageState      *publicmessage.State
 	status            publicmessage.Status
-	destinationQueue  *publicqueue.Params
+	destinationQueue  publicqueue.Params
 	consumerGroupID   string
 }
 
@@ -73,12 +73,12 @@ func (e *Envelope) SetStatus(status publicmessage.Status) *Envelope {
 }
 
 // DestinationQueue returns the resolved destination queue.
-func (e *Envelope) DestinationQueue() *publicqueue.Params {
+func (e *Envelope) DestinationQueue() publicqueue.Params {
 	return e.destinationQueue
 }
 
 // SetDestinationQueue sets the destination queue (called once during routing).
-func (e *Envelope) SetDestinationQueue(q *publicqueue.Params) *Envelope {
+func (e *Envelope) SetDestinationQueue(q publicqueue.Params) *Envelope {
 	e.destinationQueue = q
 	return e
 }
@@ -239,8 +239,15 @@ func (e *Envelope) ToParams() *publicmessage.Params {
 
 // ToTransferable converts the envelope to a transferable representation
 // suitable for serialization and cross-system transfer.
-// Matches TypeScript IMessageTransferable format.
 func (e *Envelope) ToTransferable() *publicmessage.Transferable {
+	if e.destinationQueue.Name() == "" {
+		panic("internal/message: Envelope.ToTransferable called with unset " +
+			"destination queue — the producer sets this in dispatch, and " +
+			"DecodeEnvelope sets it from the persisted params. Reaching this " +
+			"method without a destination queue indicates a bug " +
+			"(missing SetDestinationQueue call).")
+	}
+
 	params := e.ToParams()
 
 	return &publicmessage.Transferable{

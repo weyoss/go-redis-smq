@@ -125,12 +125,7 @@ func (prod *Producer) Run(ctx context.Context) error {
 		//
 		// No recover() here. PublishGoingDown / PublishDown are
 		// Redis-touching (publish through eventmultiplexer → eventbus →
-		// Redis PUBLISH). Pre-PR-3, this was a crash vector: Shutdown
-		// returned without waiting, and internalredis.Close could nil
-		// the client mid-publish. Post-PR-3, Shutdown waits on done, so
-		// by the time redissmq.Shutdown reaches internalredis.Close,
-		// this goroutine has exited. The wait is the fix — a recover()
-		// here would mask a failure of the wait discipline.
+		// Redis PUBLISH).
 		prod.cleanup(context.Background())
 	}()
 
@@ -235,13 +230,7 @@ func (prod *Producer) Produce(ctx context.Context, m *publicmessage.ProducibleMe
 	// RLock — guaranteeing that:
 	//
 	//   1. cleanup cannot clear pubSubResolver while a Produce is using
-	//      it. Pre-fix, Produce captured resolver under a brief RLock,
-	//      then released before doing Redis I/O. A concurrent cleanup
-	//      could clear the resolver in that window; Resolve() would
-	//      return (nil, false), which makes Produce dispatch to the
-	//      queue-level Pending list. On a Pub/Sub queue that list is
-	//      never read — the message was silently orphaned. This is the
-	//      exact class of bug ErrNoConsumerGroups exists to prevent.
+	//      it.
 	//
 	//   2. Shutdown cannot return while a Produce is still calling
 	//      internalredis.Client() / Eval. Shutdown blocks on cleanup,
@@ -481,7 +470,7 @@ func (prod *Producer) dispatch(
 	envelope *internalMessage.Envelope,
 	queueParams *queue.Params,
 ) (string, error) {
-	envelope.SetDestinationQueue(queueParams)
+	envelope.SetDestinationQueue(*queueParams)
 	messageID := envelope.ID()
 
 	nextScheduledTimestamp := envelope.NextScheduledTimestamp()

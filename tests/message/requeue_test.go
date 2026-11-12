@@ -172,9 +172,6 @@ func TestRequeue_PreservesMessage(t *testing.T) {
 	}
 
 	// Destination queue should be preserved
-	if newMsg.DestinationQueue == nil {
-		t.Fatal("destination queue should be set")
-	}
 	if newMsg.DestinationQueue.Name() != params.Name() {
 		t.Errorf("queue name = %s, want %s", newMsg.DestinationQueue.Name(), params.Name())
 	}

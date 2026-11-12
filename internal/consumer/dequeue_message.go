@@ -174,7 +174,7 @@ func (d *DequeueMessage) unacknowledgePoppedMessage(ctx context.Context, message
 	msg.SetConsumeTimeout(0)
 	envelope := internalMessage.NewEnvelope(msg)
 	envelope.MessageState().SetID(messageID)
-	envelope.SetDestinationQueue(d.queue)
+	envelope.SetDestinationQueue(*d.queue)
 	if d.groupID != "" {
 		envelope.SetConsumerGroupID(d.groupID)
 	}

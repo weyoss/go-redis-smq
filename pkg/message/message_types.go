@@ -286,7 +286,7 @@ func (m *ProducibleMessage) SetQueue(params *queue.Params) *ProducibleMessage {
 }
 
 // ToParams converts the message to a serializable params struct.
-func (m *ProducibleMessage) ToParams(destinationQueue *queue.Params, consumerGroupID string) *Params {
+func (m *ProducibleMessage) ToParams(destinationQueue queue.Params, consumerGroupID string) *Params {
 	p := &Params{
 		CreatedAt:        m.createdAt.UnixMilli(),
 		TTL:              m.ttl.Milliseconds(),

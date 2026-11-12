@@ -117,9 +117,6 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 	groups := make(map[string]map[string]*messageGroup)
 	for _, env := range messages {
 		destQueue := env.DestinationQueue()
-		if destQueue == nil {
-			continue
-		}
 		queueID := destQueue.NS() + ":" + destQueue.Name()
 		cgID := env.ConsumerGroupID()
 		if cgID == "" {
@@ -129,7 +126,7 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 			groups[queueID] = make(map[string]*messageGroup)
 		}
 		if groups[queueID][cgID] == nil {
-			groups[queueID][cgID] = &messageGroup{queue: destQueue}
+			groups[queueID][cgID] = &messageGroup{queue: &destQueue}
 		}
 		groups[queueID][cgID].messages = append(groups[queueID][cgID].messages, env)
 	}
@@ -262,10 +259,6 @@ func (s *Store) RequeueMessage(ctx context.Context, messageID string) (string, e
 	}
 
 	destQueue := original.DestinationQueue()
-	if destQueue == nil {
-		return "", fmt.Errorf("requeue: message has no destination queue")
-	}
-
 	ts := time.Now().UnixMilli()
 
 	clone := CloneMessage(original)
