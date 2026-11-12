@@ -20,14 +20,21 @@ import (
 
 var log = logger.New("config", "events")
 
-// PublishUpdated publishes a configuration.updated event to the system bus.
+// PublishUpdated publishes a configuration.updated event on the system bus.
 //
 // This event is internal-only and is used to synchronise configuration
 // changes across connected instances.
 //
-// The epoch uniquely identifies the generation of the configuration record.
-// Subscribers compare it with their local epoch to determine whether the
-// event is relevant or stale.
+// The three-argument form (config, version, epoch) is the Go publisher's
+// native wire format. Go subscribers consume all three (epoch is used
+// for staleness detection — see subscribe.go). TypeScript subscribers
+// define their handler with two parameters (config, version); JavaScript
+// handler dispatch silently ignores the third argument, so a 3-arg
+// publish is accepted by both Go and TypeScript subscribers.
+//
+// TypeScript publishers emit only two args. Go subscribers detect this
+// by the absence of the epoch argument and fall back to version-only
+// comparison — see subscribe.go.
 func PublishUpdated(ctx context.Context, cfg *pubconfig.Config, version int, epoch string) {
 	if err := eventmultiplexer.Publish(ctx, EventUpdated, cfg, version, epoch); err != nil {
 		log.Error("failed to publish event",

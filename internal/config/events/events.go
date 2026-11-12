@@ -10,7 +10,7 @@
 
 // Package events defines internal configuration event names and payload types.
 //
-// The configuration updated event is published to the system bus to
+// The configuration updated event is published on the system bus to
 // synchronise configuration changes across connected RedisSMQ instances.
 package events
 
@@ -25,11 +25,18 @@ const EventUpdated = "configuration.updated"
 
 // UpdatedPayload contains the data for a configuration.updated event.
 //
-// It is used internally to deserialize the positional event arguments
-// received from the event bus. The struct fields match the TypeScript
-// event signature:
+// Hybrid wire format:
 //
-//	(config: IRedisSMQParsedConfig, version: number) => void
+//   - Go publishers emit 3 positional args (config, version, epoch).
+//   - TypeScript publishers emit 2 positional args (config, version);
+//     JS handler dispatch ignores extra args on the receiving side, so
+//     a TS subscriber sees a well-formed 2-arg call even when the
+//     publisher emitted 3.
+//
+// Epoch is populated when the event was published by a Go process; it
+// is the empty string when the event was published by TypeScript. The
+// subscriber dispatches on this to pick the right staleness-detection
+// strategy — see config.Manager.subscribeToUpdatesLocked.
 type UpdatedPayload struct {
 	// Config is the full configuration that was saved.
 	Config *pubconfig.Config `json:"config"`
@@ -37,9 +44,8 @@ type UpdatedPayload struct {
 	// Version is the configuration version after the update.
 	Version int `json:"version"`
 
-	// Epoch is the unique generation identifier of the configuration record.
-	// It changes whenever the configuration is re-created from scratch
-	// (for example, after a Redis flush). It allows subscribers to ignore
-	// stale events from a previous generation.
-	Epoch string `json:"epoch"`
+	// Epoch is the unique generation identifier of the configuration
+	// record. Populated only when the event originated from a Go
+	// publisher. Empty when the event originated from TypeScript.
+	Epoch string `json:"epoch,omitempty"`
 }

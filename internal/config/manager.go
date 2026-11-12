@@ -150,26 +150,7 @@ func (m *Manager) Reload(ctx context.Context) error {
 
 // Close releases the configuration singleton and clears the public snapshot.
 //
-// After Close, pubconfig.Get() returns nil until the next Init. Two classes
-// of caller are affected:
-//
-//   - Callers that legitimately run in the shutdown window (loggers,
-//     deferred cleanup) must handle nil. logger.currentConfig does; the
-//     runtime's own shutdown path short-circuits via logger.Shutdown's
-//     `closed` flag before reaching the config read. This nil-signal is
-//     intentional — pre-fix, Get returned stale config after Close,
-//     silently breaking queue/exchange key construction for any
-//     post-shutdown caller (H8).
-//
-//   - Callers that should not run after Shutdown (queue construction,
-//     message managers, purges) panic on the nil read. That's the correct
-//     signal that the runtime is no longer initialised — a panic is
-//     preferable to silently operating against a stale namespace.
-//
-// m.epoch is reset as well so the closed state is fully cleared. Not a
-// correctness requirement — loadOrCreateLocked overwrites m.epoch on the
-// next Init — but keeps the post-Close state consistent with the
-// pre-Init state (both zero-valued on all mutable fields).
+// After Close, pubconfig.Get() returns nil until the next Init.
 //
 // Idempotent: safe to call multiple times. A subsequent Init restores the
 // snapshot from Redis (or creates fresh defaults).
@@ -288,17 +269,37 @@ func (m *Manager) createDefaultsLocked(ctx context.Context) error {
 // system bus. Returns an error if subscription fails — the caller (Init)
 // propagates it rather than silently running with peer sync disabled.
 //
-// The callback filters events by epoch: if the event's epoch differs from
-// the local m.epoch, the local manager is out of sync (e.g., after a Redis
-// flush on another instance), so it triggers a Reload. Otherwise, it
-// applies the event's config if its version is newer.
+// Hybrid dispatch based on the presence of the epoch argument:
 //
-// The `go func() { m.Reload(...) }()` inside the callback is untracked.
-// It is safe: Reload takes m.mu, which serializes with Close; and Close
-// nils m.instance before redissmq.Shutdown proceeds to internalredis.Close.
-// So the goroutine either sees m.instance == nil (early-returns) or runs
-// its Redis ops before internalredis.Close fires. No crash vector, and
-// the goroutine terminates on its own.
+//   - 3-arg event (p.Epoch != "") came from a Go publisher. Use the
+//     pre-M1 epoch-based staleness detection: if the epoch differs from
+//     local, Reload from Redis; otherwise apply the event's config if
+//     its version is newer. This preserves the no-op fast path for
+//     rapid-save self-echoes and correctly rejects stale events from
+//     previous Close/Init cycles.
+//
+//   - 2-arg event (p.Epoch == "") came from a TypeScript publisher. There
+//     is no epoch to compare — TS never generates one — so fall back to
+//     version-based detection. Any version difference (higher or lower)
+//     triggers a Reload from Redis. Same-version events are no-ops
+//     (duplicate delivery).
+//
+//     Reload-on-any-difference is correct for TS-originated events
+//     because (a) TS saves are rare, so the HGETALL cost is negligible,
+//     (b) there is no self-echo case (Go doesn't emit 2-arg events), and
+//     (c) it can't apply a stale payload — Redis is the single source
+//     of truth for what m.instance gets set to.
+//
+//     Version-only comparison with apply-on-higher
+//     is NOT used here, because it can corrupt state when a stale 2-arg
+//     event with a higher version arrives from a previous TS session.
+//     Reload-on-difference is the safe fallback without an epoch.
+//
+// The `go func() { m.Reload(...) }()` indirection is untracked. It is
+// safe: Reload takes m.mu (serializes with Close); Close nils m.instance
+// before redissmq.Shutdown proceeds to internalredis.Close. So the
+// goroutine either sees m.instance == nil (early-returns) or runs its
+// Redis ops before internalredis.Close fires.
 func (m *Manager) subscribeToUpdatesLocked() error {
 	sub, err := internalConfigEvents.SubscribeUpdated(func(p internalConfigEvents.UpdatedPayload) {
 		m.mu.Lock()
@@ -307,12 +308,22 @@ func (m *Manager) subscribeToUpdatesLocked() error {
 		if m.instance == nil {
 			return
 		}
-		if p.Epoch != m.epoch {
-			go func() { _ = m.Reload(context.Background()) }()
+
+		if p.Epoch != "" {
+			// Go-originated event — epoch-based dispatch.
+			if p.Epoch != m.epoch {
+				go func() { _ = m.Reload(context.Background()) }()
+				return
+			}
+			if p.Version > m.instance.Version {
+				m.setCurrentConfigLocked(p.Config, p.Version)
+			}
 			return
 		}
-		if p.Version > m.instance.Version {
-			m.setCurrentConfigLocked(p.Config, p.Version)
+
+		// TS-originated event — no epoch, fall back to reload-on-difference.
+		if p.Version != m.instance.Version {
+			go func() { _ = m.Reload(context.Background()) }()
 		}
 	})
 	if err != nil {
