@@ -21,6 +21,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/message/schema"
+	internalProducer "github.com/weyoss/go-redis-smq/internal/producer"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -145,6 +146,21 @@ func (sp *ScheduledPublisher) publishDue(ctx context.Context) {
 	}
 }
 
+// enqueueScheduled publishes the due scheduled messages for one consumer
+// group (or for the queue-level pending list, if consumerGroupID is empty).
+//
+// The publish-scheduled.lua script returns { published_ids, dead_lettered_ids }:
+//
+//   - published_ids: messages the script actually moved into a pending
+//     list. For simple scheduled messages, this is the message's own ID.
+//     For repeating messages, this is the clone's ID (the parent stays
+//     in the scheduled set for its next tick).
+//
+//   - dead_lettered_ids: messages the script moved to the dead-letter
+//     list instead, because the target consumer group had been deleted
+//     between when the message was scheduled and when its delivery was
+//     due. A Pub/Sub message whose group is gone has nowhere to go —
+//     dead-lettering makes the loss visible instead of orphaning it.
 func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope, consumerGroupID string) {
 	pendingKey := qKey.Pending()
 	priorityKey := qKey.Priority()
@@ -239,14 +255,83 @@ func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 		return
 	}
 
+	// String reply = script-level error (publish_message failure inside
+	// the repeating-message path, or a malformed KEYS/ARGV shape). No
+	// events fire — state is potentially partial and the error is a
+	// single string, not per-message results.
 	if replyStr, ok := reply.(string); ok && replyStr != "" {
 		sp.log.Error("scheduled publish script returned error", "reply", replyStr)
 		return
 	}
 
-	if n, ok := reply.(int64); ok && n > 0 {
-		sp.log.Info("scheduled messages published", "count", n)
+	arr, ok := reply.([]interface{})
+	if !ok {
+		sp.log.Error("unexpected scheduled publish reply type",
+			"type", fmt.Sprintf("%T", reply),
+		)
+		return
 	}
+	if len(arr) < 2 {
+		sp.log.Error("unexpected scheduled publish reply shape",
+			"len", len(arr))
+		return
+	}
+
+	publishedIDs := toStringSlice(arr[0])
+	if publishedIDs == nil {
+		sp.log.Error("scheduled publish reply: published_ids is not a string array",
+			"type", fmt.Sprintf("%T", arr[0]))
+		return
+	}
+
+	deadLetteredIDs := toStringSlice(arr[1])
+	if deadLetteredIDs == nil {
+		sp.log.Error("scheduled publish reply: dead_lettered_ids is not a string array",
+			"type", fmt.Sprintf("%T", arr[1]))
+		return
+	}
+
+	if len(deadLetteredIDs) > 0 {
+		sp.log.Warn("scheduled messages dead-lettered during publication "+
+			"(consumer group no longer exists)",
+			"count", len(deadLetteredIDs),
+			"group", consumerGroupID,
+		)
+	}
+
+	if len(publishedIDs) == 0 {
+		return
+	}
+
+	queueParsed := queue.ParsedParams{
+		QueueParams: *sp.queue,
+		GroupID:     consumerGroupID,
+	}
+	for _, publishedID := range publishedIDs {
+		internalProducer.PublishMessagePublished(ctx, publishedID, queueParsed, "")
+	}
+}
+
+// toStringSlice extracts a []string from a Lua-replied table whose
+// elements are all strings. Returns nil for non-table input, or for a
+// table containing any non-string element. Callers treat nil as
+// "malformed reply" and suppress event publishing — a wrong-shaped
+// reply is a deployment error (stale script, contract drift), not a
+// condition to handle gracefully with best-effort firing.
+func toStringSlice(v interface{}) []string {
+	arr, ok := v.([]interface{})
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(arr))
+	for _, item := range arr {
+		s, ok := item.(string)
+		if !ok {
+			return nil
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 // buildScheduledArgs builds the static ARGV for the PublishScheduled Lua script.
