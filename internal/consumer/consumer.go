@@ -254,7 +254,7 @@ func (cons *Consumer) shutdownLocked() {
 	consumerEvents.PublishDown(context.Background(), cons.id)
 }
 
-func (cons *Consumer) Queues() []*queue.Params {
+func (cons *Consumer) Queues() []queue.ParsedParams {
 	return cons.runner.Queues()
 }
 

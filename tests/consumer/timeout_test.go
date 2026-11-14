@@ -180,7 +180,7 @@ func TestConsumeTimeout_AckUnackRace_ExactlyOneOutcome(t *testing.T) {
 		t.Skip("statistical race test skipped in -short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(testutil.Setup(t), 120*time.Second)
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 180*time.Second)
 	defer cancel()
 
 	params := queue.MustQueueParams("test-c4-ack-unack-race")
@@ -239,7 +239,16 @@ func TestConsumeTimeout_AckUnackRace_ExactlyOneOutcome(t *testing.T) {
 		produced, err := prod.Produce(ctx, msg.New().
 			SetBody("race").
 			SetQueue(params).
-			SetConsumeTimeout(1*time.Millisecond),
+			SetConsumeTimeout(1*time.Millisecond).
+			// Prevent the retry cycle from completing inside the test window.
+			// Without this, a message unacked at T=0 goes
+			// Requeued→Delayed(60s default)→Pending→dequeued→unacked again
+			// at ~T=60s, producing a second unack event for the same ID.
+			// The test would see total==2 and label it "BOTH fired" (C4),
+			// but the actual counts are ack=0 unack=2 — not the C4
+			// signature. 10 minutes puts any retry well past the test
+			// deadline. Each message now gets exactly one CAS-gated event.
+			SetRetryDelay(10*time.Minute),
 		)
 		if err != nil {
 			t.Fatalf("produce %d: %v", i, err)
@@ -247,7 +256,12 @@ func TestConsumeTimeout_AckUnackRace_ExactlyOneOutcome(t *testing.T) {
 		ids = append(ids, produced[0])
 	}
 
-	deadline := time.After(60 * time.Second)
+	// 120s (was 60s). Under -race, produce+consume of 500 messages plus
+	// the 1s empty-queue poll in MessageHandler.loop can push drain time
+	// past 60s — leaving many messages with no event at the deadline.
+	// The retry-delay fix removes the retry cycles, halving the work, so
+	// 120s is generous margin.
+	deadline := time.After(120 * time.Second)
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 
@@ -275,14 +289,24 @@ wait:
 	mu.Lock()
 	defer mu.Unlock()
 
-	var both, neither int
+	// Three categories:
+	//   both      — ack > 0 AND unack > 0 → C4 race fired both paths
+	//   duplicate — one side fired more than once → retry cycle or
+	//               duplicate event delivery (suspicious, but not C4)
+	//   neither   — no event yet at deadline (test still counts as
+	//               passing; logged for visibility)
+	var both, duplicate, neither int
 	for _, id := range ids {
 		c := counts[id]
-		switch total := c[0] + c[1]; {
-		case total == 2:
+		switch {
+		case c[0] > 0 && c[1] > 0:
 			both++
-			t.Logf("message %s: ack=%d unack=%d (BOTH fired)", id, c[0], c[1])
-		case total == 0:
+			t.Logf("message %s: ack=%d unack=%d (C4: BOTH fired)", id, c[0], c[1])
+		case c[0] > 1 || c[1] > 1:
+			duplicate++
+			t.Logf("message %s: ack=%d unack=%d (duplicate event — same path fired twice)",
+				id, c[0], c[1])
+		case c[0]+c[1] == 0:
 			neither++
 		}
 	}
@@ -291,7 +315,13 @@ wait:
 		t.Errorf("%d/%d messages had both ack and unack events — the CAS race "+
 			"allows both paths to proceed (C4)", both, iterations)
 	}
+	if duplicate > 0 {
+		t.Errorf("%d/%d messages had a duplicate event — same path fired twice "+
+			"(unexpected with retry delay prevented; check for a regression "+
+			"in event emission or batch deduplication)", duplicate, iterations)
+	}
 	if neither > 0 {
-		t.Logf("note: %d/%d messages had no event yet", neither, iterations)
+		t.Logf("note: %d/%d messages had no event yet at deadline "+
+			"(slow drain under -race; not a failure)", neither, iterations)
 	}
 }
