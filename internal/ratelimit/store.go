@@ -22,13 +22,11 @@ import (
 )
 
 // Store handles rate limit persistence for queues.
-type Store struct {
-	codec *Codec
-}
+type Store struct{}
 
 // NewStore creates a new rate limit store.
 func NewStore() *Store {
-	return &Store{codec: NewCodec()}
+	return &Store{}
 }
 
 // Set stores the given rate limit on a queue.

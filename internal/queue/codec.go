@@ -26,15 +26,11 @@ import (
 
 // Codec handles serialisation for queue Params and Props.
 // It centralises all queue‑related encoding and decoding.
-type Codec struct {
-	rateLimitCodec *ratelimit.Codec
-}
+type Codec struct{}
 
 // NewCodec creates a new Codec with default dependencies.
 func NewCodec() *Codec {
-	return &Codec{
-		rateLimitCodec: ratelimit.NewCodec(),
-	}
+	return &Codec{}
 }
 
 // EncodeParams serialises Params to a JSON string for Redis set storage.
