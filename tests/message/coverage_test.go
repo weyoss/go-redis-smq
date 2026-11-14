@@ -128,11 +128,6 @@ func TestMessage_StateAccessors(t *testing.T) {
 		t.Error("expired should be true")
 	}
 
-	state.MarkPublished()
-	if state.PublishedAt() == nil {
-		t.Error("publishedAt should be set")
-	}
-
 	state.SetProcessingStartedAt(time.Now().UnixMilli())
 	if state.ProcessingStartedAt() == nil {
 		t.Error("processingStartedAt should be set")

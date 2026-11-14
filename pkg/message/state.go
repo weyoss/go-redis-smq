@@ -115,14 +115,6 @@ func (ms *State) Expired() bool { return ms.expired }
 // SetExpired marks the message as expired or not expired.
 func (ms *State) SetExpired(expired bool) { ms.expired = expired }
 
-// IsExpired checks whether the message TTL has elapsed.
-func (ms *State) IsExpired(ttl time.Duration, createdAt time.Time) bool {
-	if ttl <= 0 {
-		return false
-	}
-	return time.Since(createdAt) >= ttl
-}
-
 // ScheduledTimes returns the number of times the message has been scheduled.
 func (ms *State) ScheduledTimes() int { return ms.scheduledTimes }
 
@@ -353,12 +345,6 @@ func (ms *State) SetLastScheduledAt(ts int64) {
 func (ms *State) SetLastRetriedAttemptAt(ts int64) {
 	t := time.UnixMilli(ts)
 	ms.lastRetriedAttemptAt = &t
-}
-
-// MarkPublished records the current time as the publish timestamp.
-func (ms *State) MarkPublished() {
-	now := time.Now()
-	ms.publishedAt = &now
 }
 
 // ToTransferable converts the state to a transferable representation.

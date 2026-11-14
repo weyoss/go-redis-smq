@@ -33,13 +33,3 @@ func Int64(reply interface{}) (int64, error) {
 	}
 	return n, nil
 }
-
-// Slice extracts a []interface{} from a Redis Lua script reply.
-// Returns an error if the reply is not a slice.
-func Slice(reply interface{}) ([]interface{}, error) {
-	s, ok := reply.([]interface{})
-	if !ok {
-		return nil, fmt.Errorf("%w: expected []interface{}, got %T", ErrUnexpectedScriptReply, reply)
-	}
-	return s, nil
-}
