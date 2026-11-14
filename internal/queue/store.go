@@ -330,3 +330,65 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		return fmt.Errorf("delete queue: unexpected script reply: %s", replyStr)
 	}
 }
+
+// GetConsumers returns the consumers currently registered for a queue,
+// keyed by consumer ID.
+//
+// The queue's Consumers hash maps consumer ID → JSON-encoded consumer
+// info. Malformed entries are skipped (not fatal) to tolerate partial
+// writes or version skew, matching the pattern used by Lookup.decodeParams.
+func (s *Store) GetConsumers(ctx context.Context, queueParams *publicqueue.Params) (map[string]publicqueue.QueueConsumer, error) {
+	key := keys.Queue{
+		Namespace: queueParams.NS(),
+		Name:      queueParams.Name(),
+	}
+
+	exists, err := redisClient.Client().Exists(ctx, key.Properties()).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get consumers: check queue exists: %w", err)
+	}
+	if exists == 0 {
+		return nil, publicqueue.ErrNotFound
+	}
+
+	raw, err := redisClient.Client().HGetAll(ctx, key.Consumers()).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get consumers: %w", err)
+	}
+
+	consumers := make(map[string]publicqueue.QueueConsumer, len(raw))
+	for consumerID, infoJSON := range raw {
+		var c publicqueue.QueueConsumer
+		if err := json.Unmarshal([]byte(infoJSON), &c); err != nil {
+			continue
+		}
+		consumers[consumerID] = c
+	}
+	return consumers, nil
+}
+
+// GetConsumerIds returns the IDs of the consumers currently registered
+// for a queue.
+//
+// HKeys on the Consumers hash — no JSON decoding needed. Use
+// GetConsumers when the full consumer metadata is required.
+func (s *Store) GetConsumerIds(ctx context.Context, queueParams *publicqueue.Params) ([]string, error) {
+	key := keys.Queue{
+		Namespace: queueParams.NS(),
+		Name:      queueParams.Name(),
+	}
+
+	exists, err := redisClient.Client().Exists(ctx, key.Properties()).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get consumer ids: check queue exists: %w", err)
+	}
+	if exists == 0 {
+		return nil, publicqueue.ErrNotFound
+	}
+
+	ids, err := redisClient.Client().HKeys(ctx, key.Consumers()).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get consumer ids: %w", err)
+	}
+	return ids, nil
+}

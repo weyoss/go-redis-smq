@@ -119,6 +119,16 @@ func (m *Manager) ListByNamespace(ctx context.Context, namespace string) ([]publ
 	return m.lookup.ByNamespace(ctx, namespace)
 }
 
+// GetConsumers implements publicqueue.Manager.
+func (m *Manager) GetConsumers(ctx context.Context, params *publicqueue.Params) (map[string]publicqueue.QueueConsumer, error) {
+	return m.store.GetConsumers(ctx, params)
+}
+
+// GetConsumerIds implements publicqueue.Manager.
+func (m *Manager) GetConsumerIds(ctx context.Context, params *publicqueue.Params) ([]string, error) {
+	return m.store.GetConsumerIds(ctx, params)
+}
+
 // BrowseMessages implements publicqueue.Manager.
 func (m *Manager) BrowseMessages(ctx context.Context, queueParams *publicqueue.Params, params *publicqueue.BrowseParams) (*publicqueue.BrowseResult, error) {
 	return m.browse.BrowseMessages(ctx, queueParams, params)

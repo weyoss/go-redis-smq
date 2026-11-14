@@ -41,6 +41,26 @@ type Manager interface {
 	// ListByNamespace returns all queues within a namespace.
 	ListByNamespace(ctx context.Context, namespace string) ([]Params, error)
 
+	// GetConsumers returns the consumers currently registered for a
+	// queue, keyed by consumer ID.
+	//
+	// Fails with ErrNotFound if the queue does not exist. Returns an
+	// empty map if the queue exists but has no consumers.
+	//
+	// The consumer metadata is captured at subscription time and not
+	// refreshed — see QueueConsumer for details.
+	GetConsumers(ctx context.Context, params *Params) (map[string]QueueConsumer, error)
+
+	// GetConsumerIds returns the IDs of the consumers currently
+	// registered for a queue.
+	//
+	// A lightweight alternative to GetConsumers when only the set of
+	// IDs is needed — avoids decoding the consumer metadata JSON.
+	//
+	// Fails with ErrNotFound if the queue does not exist. Returns an
+	// empty slice if the queue exists but has no consumers.
+	GetConsumerIds(ctx context.Context, params *Params) ([]string, error)
+
 	// BrowseMessages returns a page of message IDs from a queue.
 	BrowseMessages(ctx context.Context, queueParams *Params, params *BrowseParams) (*BrowseResult, error)
 

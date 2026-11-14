@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net"
 	"os"
 	"time"
 
@@ -25,18 +26,11 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-type consumerInfo struct {
-	IPAddresses []string `json:"ipAddress"`
-	Hostname    string   `json:"hostname"`
-	PID         int      `json:"pid"`
-	CreatedAt   int64    `json:"createdAt"`
-}
-
 // SubscribeConsumer registers a consumer with a queue.
 func SubscribeConsumer(ctx context.Context, consumerID string, q *queue.Params, groupID string) error {
 	log := logger.New("consumer", "subscribe", consumerID, q.Name())
 
-	info := consumerInfo{
+	info := queue.QueueConsumer{
 		IPAddresses: localIPs(),
 		Hostname:    hostname(),
 		PID:         os.Getpid(),
@@ -163,6 +157,55 @@ func hostname() string {
 	return name
 }
 
+// localIPs returns every non-internal IPv4 address of the host, as
+// reported by net.InterfaceAddrs() at the time of the call.
+//
+// Matches TypeScript's behavior when building IQueueConsumer.ipAddress:
+//
+//   - IPv4 only. IPv6 addresses (including ::1) are excluded
+//
+//   - Loopback (127.0.0.0/8) is excluded. Loopback addresses are
+//     not remotely reachable and give an operator no diagnostic signal.
+//
+//   - Link-local IPv4 (169.254.0.0/16) is included. This is a corner case
+//     (interface without DHCP lease) that some operators do want to see
+//     reflected in the consumer registry.
+//
+// Returns an empty (non-nil) slice if no non-internal IPv4 address
+// exists — an unusual state, but possible on a container with only
+// loopback connectivity, or a host whose only interface is down.
+//
+// Errors from InterfaceAddrs are swallowed and treated as "no addresses".
+// IP discovery is best-effort diagnostic metadata, not a critical
+// operational input. A failure here (or any transient issue reading the
+// interface table) must not prevent consumer subscription — the
+// subscription write succeeds with an empty ipAddress list.
 func localIPs() []string {
-	return []string{"127.0.0.1"}
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return []string{}
+	}
+
+	ips := make([]string, 0, len(addrs))
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok {
+			// net.InterfaceAddrs returns *net.IPNet on every platform
+			// Go targets, but the type assertion is defensive — a
+			// future platform addition (or a test stub) that returns
+			// something else should be skipped, not panic.
+			continue
+		}
+		ip := ipNet.IP
+		if ip.To4() == nil {
+			// IPv6 — excluded.
+			continue
+		}
+		if ip.IsLoopback() {
+			// 127.0.0.0/8 — excluded.
+			continue
+		}
+		ips = append(ips, ip.String())
+	}
+	return ips
 }
