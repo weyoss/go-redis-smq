@@ -54,7 +54,20 @@ func NewPurgeManager(state *State, messageStore *internalMessage.Store) *PurgeMa
 }
 
 // Enqueue creates a new purge job and locks the queue.
-func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *publicqueue.Params, filter publicqueue.BrowseFilter) (string, error) {
+//
+// parsedParams carries both the queue identity and (for Pub/Sub queues)
+// the target consumer group. The group is written into the persisted
+// payload so the eventual purgeMessages call can resolve the correct
+// per-group storage key. See resolveCategoryKey for the dispatch rules.
+func (pm *PurgeManager) Enqueue(
+	ctx context.Context,
+	parsedParams publicqueue.ParsedParams,
+	filter publicqueue.BrowseFilter,
+) (string, error) {
+	if parsedParams.QueueParams.Name() == "" {
+		return "", publicqueue.ErrNameRequired
+	}
+
 	if err := pm.validateFilter(filter); err != nil {
 		return "", err
 	}
@@ -64,13 +77,16 @@ func (pm *PurgeManager) Enqueue(ctx context.Context, queueParams *publicqueue.Pa
 	lockOpts := &publicqueue.StateTransitionOptions{
 		Description: ptr("Queue is being purged"),
 	}
-	if _, err := pm.state.acquireLock(ctx, queueParams, publicqueue.LockOwnerPurgeJob, jobID, reason, lockOpts); err != nil {
+	if _, err := pm.state.acquireLock(
+		ctx, &parsedParams.QueueParams,
+		publicqueue.LockOwnerPurgeJob, jobID, reason, lockOpts,
+	); err != nil {
 		return "", fmt.Errorf("purge: lock queue: %w", err)
 	}
 
-	job := newPurgeJob(jobID, queueParams, filter)
+	job := newPurgeJob(jobID, parsedParams, filter)
 	if err := pm.jobStore.Create(ctx, job); err != nil {
-		pm.unlockQueue(ctx, queueParams, jobID, publicqueue.PurgeJobFailed, err.Error())
+		pm.unlockQueue(ctx, &parsedParams.QueueParams, jobID, publicqueue.PurgeJobFailed, err.Error())
 		return "", fmt.Errorf("purge: enqueue job: %w", err)
 	}
 
@@ -83,6 +99,11 @@ func (pm *PurgeManager) Get(ctx context.Context, jobID string) (*publicqueue.Pur
 }
 
 // Cancel cancels a pending or processing purge job.
+//
+// queueParams is the queue-level identity only — the lock is acquired at
+// the queue level, not per consumer group, so the caller's *Params is
+// sufficient for releasing it. The job's own payload may carry a group
+// ID; that has no bearing on the unlock path.
 func (pm *PurgeManager) Cancel(ctx context.Context, queueParams *publicqueue.Params, jobID string) error {
 	job, err := pm.jobStore.Get(ctx, jobID)
 	if err != nil {
@@ -107,7 +128,10 @@ func (pm *PurgeManager) execute(ctx context.Context, jobID string) {
 		return
 	}
 
-	queueParams := job.Payload.Queue
+	// queueParams is the queue-level identity needed by state transitions.
+	// The group ID, if present, is part of Payload.Queue and is consumed
+	// by purgeMessages via resolveCategoryKey.
+	queueParams := &job.Payload.Queue.QueueParams
 
 	job.Status = publicqueue.PurgeJobProcessing
 	job.StartedAt = time.Now().UnixMilli()
@@ -147,9 +171,33 @@ func (pm *PurgeManager) execute(ctx context.Context, jobID string) {
 }
 
 // purgeMessages deletes messages in batches for the given job.
+//
+// The category key is derived from three inputs (see resolveCategoryKey):
+// the filter, the queue type, and the payload's group ID. Loading the
+// queue properties is required because priority queues store pending
+// messages in a zset (Priority / PriorityWithGroup) rather than a list
+// (Pending / PendingWithGroup) — reading the wrong structure returns
+// nothing, so a priority pending purge would silently be a no-op.
+//
+// For Pub/Sub queues the group ID is essential: messages live in
+// per-group PendingWithGroup lists, and the queue-level Pending list
+// is empty. Reading it without the group would return nothing.
 func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.PurgeJob) (int64, error) {
-	qKey := keys.Queue{Namespace: job.Payload.Queue.NS(), Name: job.Payload.Queue.Name()}
-	categoryKey := resolveCategoryKey(job.Payload.MessageType, qKey)
+	parsed := job.Payload.Queue
+	qKey := keys.Queue{
+		Namespace: parsed.QueueParams.NS(),
+		Name:      parsed.QueueParams.Name(),
+	}
+
+	props, err := NewStore(nil).Load(ctx, &parsed.QueueParams)
+	if err != nil {
+		return 0, fmt.Errorf("load queue properties: %w", err)
+	}
+
+	categoryKey := resolveCategoryKey(job.Payload.MessageType, qKey, props.Type, parsed.GroupID)
+	if categoryKey == "" {
+		return 0, fmt.Errorf("purge: unresolvable category for filter %d", job.Payload.MessageType)
+	}
 
 	var purged int64
 	for {
@@ -193,13 +241,14 @@ func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.Purg
 
 		updated, err := pm.jobStore.SaveProgress(ctx, job)
 		if err != nil {
-			// Redis is unreachable / misbehaving. Log and continue — the next batch's
-			// SaveProgress will retry, and the final Complete/Fail will reconcile.
+			// Redis is unreachable / misbehaving. Log and continue — the next
+			// batch's SaveProgress will retry, and the final Complete/Fail
+			// will reconcile.
 			pm.log.Error("save job progress failed", "jobID", job.ID, "error", err)
 		} else if !updated {
-			// Job transitioned out of PROCESSING (almost always: concurrent Cancel).
-			// Stop processing immediately — the caller will observe via IsCanceled
-			// and return, leaving status untouched.
+			// Job transitioned out of PROCESSING (almost always: concurrent
+			// Cancel). Stop processing immediately — the caller will observe
+			// via IsCanceled and return, leaving status untouched.
 			pm.log.Info("job transitioned out of PROCESSING; stopping batch loop",
 				"jobID", job.ID, "purgedSoFar", purged)
 			return purged, nil
@@ -216,7 +265,12 @@ func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.Purg
 }
 
 // failJob marks a job as failed and unlocks the queue.
-func (pm *PurgeManager) failJob(ctx context.Context, job *publicqueue.PurgeJob, queueParams *publicqueue.Params, errMsg string) {
+func (pm *PurgeManager) failJob(
+	ctx context.Context,
+	job *publicqueue.PurgeJob,
+	queueParams *publicqueue.Params,
+	errMsg string,
+) {
 	job.Status = publicqueue.PurgeJobFailed
 	job.Error = errMsg
 	job.CompletedAt = time.Now().UnixMilli()
@@ -227,7 +281,17 @@ func (pm *PurgeManager) failJob(ctx context.Context, job *publicqueue.PurgeJob, 
 }
 
 // unlockQueue releases the lock held by a purge job.
-func (pm *PurgeManager) unlockQueue(ctx context.Context, queueParams *publicqueue.Params, jobID string, status publicqueue.PurgeJobStatus, description string) {
+//
+// queueParams is the queue-level identity. The lock was acquired at the
+// queue level (regardless of any group carried in the payload), so the
+// unlock path needs only {name, ns}.
+func (pm *PurgeManager) unlockQueue(
+	ctx context.Context,
+	queueParams *publicqueue.Params,
+	jobID string,
+	status publicqueue.PurgeJobStatus,
+	description string,
+) {
 	var reason publicqueue.TransitionReason
 	switch status {
 	case publicqueue.PurgeJobCompleted:
@@ -300,11 +364,20 @@ func (pm *PurgeManager) recoverStuckJobs(ctx context.Context) {
 }
 
 // newPurgeJob creates a new pending purge job.
-func newPurgeJob(jobID string, queueParams *publicqueue.Params, filter publicqueue.BrowseFilter) *publicqueue.PurgeJob {
+//
+// parsedParams is written into the payload verbatim — including the group
+// ID, if any. This is what purgeMessages later reads to resolve the
+// per-group category key. Passing the group through unmodified is what
+// makes PurgeQueueWithGroup work end-to-end.
+func newPurgeJob(
+	jobID string,
+	parsedParams publicqueue.ParsedParams,
+	filter publicqueue.BrowseFilter,
+) *publicqueue.PurgeJob {
 	return &publicqueue.PurgeJob{
 		ID: jobID,
 		Payload: publicqueue.PurgeJobPayload{
-			Queue:       queueParams.Clone(),
+			Queue:       parsedParams,
 			MessageType: filter,
 		},
 		Status:    publicqueue.PurgeJobPending,
@@ -312,21 +385,5 @@ func newPurgeJob(jobID string, queueParams *publicqueue.Params, filter publicque
 		DelayMs:   defaultPurgeBatchDelay.Milliseconds(),
 		CreatedAt: time.Now().UnixMilli(),
 		Meta:      &publicqueue.PurgeJobMeta{Purged: 0},
-	}
-}
-
-// resolveCategoryKey maps a browse filter to its Redis key.
-func resolveCategoryKey(filter publicqueue.BrowseFilter, qKey keys.Queue) string {
-	switch filter {
-	case publicqueue.BrowsePending:
-		return qKey.Pending()
-	case publicqueue.BrowseScheduled:
-		return qKey.Scheduled()
-	case publicqueue.BrowseAcknowledged:
-		return qKey.Acknowledged()
-	case publicqueue.BrowseDeadLettered:
-		return qKey.DeadLetter()
-	default:
-		return ""
 	}
 }

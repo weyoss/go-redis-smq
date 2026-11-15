@@ -152,11 +152,14 @@ func TestLifecycle_JobMetadata(t *testing.T) {
 		t.Fatalf("get job: %v", err)
 	}
 
-	if job.Payload.Queue.NS() != params.NS() {
-		t.Errorf("ns = %s, want %s", job.Payload.Queue.NS(), params.NS())
+	if job.Payload.Queue.QueueParams.NS() != params.NS() {
+		t.Errorf("ns = %s, want %s", job.Payload.Queue.QueueParams.NS(), params.NS())
 	}
-	if job.Payload.Queue.Name() != params.Name() {
-		t.Errorf("name = %s, want %s", job.Payload.Queue.Name(), params.Name())
+	if job.Payload.Queue.QueueParams.Name() != params.Name() {
+		t.Errorf("name = %s, want %s", job.Payload.Queue.QueueParams.Name(), params.Name())
+	}
+	if job.Payload.Queue.GroupID != "" {
+		t.Errorf("groupId = %q, want empty for point-to-point purge", job.Payload.Queue.GroupID)
 	}
 	if job.Payload.MessageType != publicqueue.BrowsePending {
 		t.Errorf("messageType = %v, want PENDING", job.Payload.MessageType)

@@ -166,15 +166,6 @@ func TestCancel_AlreadyCompleted(t *testing.T) {
 
 // Scenario: A stale SaveProgress (in-memory job struct still says Processing)
 // must not clobber a Cancel that landed in the meantime.
-//
-// Regression test for the pre-fix bug where PurgeJobStore.Save did an
-// unconditional HSET of the whole job blob, resurrecting the job as Processing
-// after Cancel had already marked it Canceled.
-//
-// The job is seeded directly into Redis with PROCESSING status — NOT via
-// qm.PurgeQueue. PurgeQueue LPUSHes onto PendingPurgeJobs, where the Init
-// worker is blocked on BRPOPLPUSH; it can race the test and Complete the job
-// before the test can drive its own state transitions.
 func TestCancel_StaleSaveDoesNotClobberStatus(t *testing.T) {
 	ctx := testutil.Setup(t)
 
@@ -190,7 +181,7 @@ func TestCancel_StaleSaveDoesNotClobberStatus(t *testing.T) {
 	job := &publicqueue.PurgeJob{
 		ID: jobID,
 		Payload: publicqueue.PurgeJobPayload{
-			Queue:       params,
+			Queue:       publicqueue.ParsedParams{QueueParams: *params},
 			MessageType: publicqueue.BrowsePending,
 		},
 		Status:    publicqueue.PurgeJobProcessing,

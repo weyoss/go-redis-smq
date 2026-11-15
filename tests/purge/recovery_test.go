@@ -56,7 +56,7 @@ func TestRecovery_SeededStuckJobIsRecovered(t *testing.T) {
 	job := &publicqueue.PurgeJob{
 		ID: jobID,
 		Payload: publicqueue.PurgeJobPayload{
-			Queue:       params,
+			Queue:       publicqueue.ParsedParams{QueueParams: *params},
 			MessageType: publicqueue.BrowsePending,
 		},
 		Status:    publicqueue.PurgeJobProcessing,
@@ -124,11 +124,6 @@ func TestRecovery_SeededStuckJobIsRecovered(t *testing.T) {
 // Scenario: A job whose worker crashes AFTER startup is recovered by the
 // periodic recovery loop, without requiring a worker restart.
 //
-// Regression test for H12: recoverStuckJobs ran only at worker startup, so a
-// worker that crashed mid-purge left its job in ActivePurgeJobs — and the
-// queue LOCKED — until the process restarted. The periodic scan closes that
-// window.
-//
 // The test starts a worker with a short recovery interval, waits for startup
 // recovery to finish, THEN seeds a stuck job. Seeding after startup recovery
 // is what isolates the periodic path — startup recovery can't see the job
@@ -158,10 +153,15 @@ func TestRecovery_PeriodicScanCatchesStuckJob(t *testing.T) {
 		t.Fatalf("lock queue: %v", err)
 	}
 
+	// H4: Payload.Queue is now queue.ParsedParams (the wire shape both
+	// languages share), not *queue.Params. Passing ParsedParams with an
+	// empty GroupID mirrors the original *Params construction — a
+	// point-to-point queue with no group — and matches what
+	// QueueManager.PurgeQueue(ctx, params, filter) writes in production.
 	job := &publicqueue.PurgeJob{
 		ID: jobID,
 		Payload: publicqueue.PurgeJobPayload{
-			Queue:       params,
+			Queue:       publicqueue.ParsedParams{QueueParams: *params},
 			MessageType: publicqueue.BrowsePending,
 		},
 		Status:    publicqueue.PurgeJobProcessing,

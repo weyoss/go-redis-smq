@@ -65,7 +65,25 @@ type Manager interface {
 	BrowseMessages(ctx context.Context, queueParams *Params, params *BrowseParams) (*BrowseResult, error)
 
 	// PurgeQueue enqueues a background purge job for a queue.
+	//
+	// The purge job targets the queue-level structure for the given
+	// category (pending list, scheduled set, acknowledged list,
+	// dead-letter list). For Pub/Sub queues, the queue-level pending
+	// list is empty — messages live in per-group pending lists. Use
+	// PurgeQueueWithGroup to target a specific group's pending list.
 	PurgeQueue(ctx context.Context, queueParams *Params, filter BrowseFilter) (string, error)
+
+	// PurgeQueueWithGroup enqueues a background purge job scoped to a
+	// specific consumer group.
+	//
+	// For Pub/Sub queues, this is the correct method for BrowsePending:
+	// the group's PendingWithGroup list is where the messages actually
+	// live. For other filters (scheduled, acknowledged, dead-lettered),
+	// the group is ignored — those structures are queue-level.
+	//
+	// parsedParams.GroupID may be empty, in which case this behaves
+	// identically to PurgeQueue with the same queue params.
+	PurgeQueueWithGroup(ctx context.Context, parsedParams *ParsedParams, filter BrowseFilter) (string, error)
 
 	// GetPurgeJob returns a purge job by its ID.
 	GetPurgeJob(ctx context.Context, jobID string) (*PurgeJob, error)

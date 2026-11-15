@@ -16,6 +16,7 @@ package queue
 
 import (
 	"context"
+	"fmt"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -135,8 +136,30 @@ func (m *Manager) BrowseMessages(ctx context.Context, queueParams *publicqueue.P
 }
 
 // PurgeQueue implements publicqueue.Manager.
-func (m *Manager) PurgeQueue(ctx context.Context, queueParams *publicqueue.Params, filter publicqueue.BrowseFilter) (string, error) {
-	return m.purge.Enqueue(ctx, queueParams, filter)
+func (m *Manager) PurgeQueue(
+	ctx context.Context,
+	queueParams *publicqueue.Params,
+	filter publicqueue.BrowseFilter,
+) (string, error) {
+	if queueParams == nil {
+		return "", fmt.Errorf("purge: nil queue params")
+	}
+	return m.purge.Enqueue(ctx, publicqueue.ParsedParams{
+		QueueParams: *queueParams,
+		GroupID:     "",
+	}, filter)
+}
+
+// PurgeQueueWithGroup implements publicqueue.Manager.
+func (m *Manager) PurgeQueueWithGroup(
+	ctx context.Context,
+	parsedParams *publicqueue.ParsedParams,
+	filter publicqueue.BrowseFilter,
+) (string, error) {
+	if parsedParams == nil {
+		return "", fmt.Errorf("purge: nil parsed params")
+	}
+	return m.purge.Enqueue(ctx, *parsedParams, filter)
 }
 
 // GetPurgeJob implements publicqueue.Manager.

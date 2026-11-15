@@ -16,6 +16,8 @@ import (
 	"time"
 
 	"github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
+	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 const (
@@ -89,6 +91,55 @@ func trimCategory(ctx context.Context, key string, count int64) error {
 		return redis.Client().ZRem(ctx, key, members...).Err()
 	}
 	return nil
+}
+
+// resolveCategoryKey maps a browse filter to its Redis key.
+//
+// For BrowsePending, the key depends on two payload fields:
+//
+//   - queueType: priority queues store pending messages in a sorted set
+//     (Priority / PriorityWithGroup); FIFO and LIFO store them in a
+//     list (Pending / PendingWithGroup). Reading the wrong structure
+//     returns nothing — a priority purge that reads the FIFO list, or
+//     vice versa, is silently a no-op.
+//
+//   - groupID: Pub/Sub messages live in per-group lists. groupID == ""
+//     is correct only for point-to-point queues.
+//
+// The other categories (scheduled, acknowledged, dead-lettered) are
+// queue-level and ignore both fields — a scheduled or dead-lettered
+// message is not scoped to a consumer group.
+func resolveCategoryKey(
+	filter publicqueue.BrowseFilter,
+	qKey keys.Queue,
+	queueType publicqueue.Type,
+	groupID string,
+) string {
+	switch filter {
+	case publicqueue.BrowsePending:
+		if queueType == publicqueue.TypePriority {
+			if groupID != "" {
+				return qKey.PriorityWithGroup(groupID)
+			}
+			return qKey.Priority()
+		}
+		if groupID != "" {
+			return qKey.PendingWithGroup(groupID)
+		}
+		return qKey.Pending()
+
+	case publicqueue.BrowseScheduled:
+		return qKey.Scheduled()
+
+	case publicqueue.BrowseAcknowledged:
+		return qKey.Acknowledged()
+
+	case publicqueue.BrowseDeadLettered:
+		return qKey.DeadLetter()
+
+	default:
+		return ""
+	}
 }
 
 // ptr returns a pointer to the given value.

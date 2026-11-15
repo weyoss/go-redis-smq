@@ -174,7 +174,7 @@ func TestPurgeErrors_ReturnCodeSemantics(t *testing.T) {
 		job := &publicqueue.PurgeJob{
 			ID: jobID,
 			Payload: publicqueue.PurgeJobPayload{
-				Queue:       params,
+				Queue:       publicqueue.ParsedParams{QueueParams: *params},
 				MessageType: publicqueue.BrowsePending,
 			},
 			Status:      status,
