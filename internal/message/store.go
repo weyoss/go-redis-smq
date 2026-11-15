@@ -74,7 +74,40 @@ func (s *Store) GetMessage(ctx context.Context, messageID string) (*Envelope, er
 	return s.codec.DecodeEnvelope(ctx, hash)
 }
 
+// GetMessages loads messages by ID. If any ID is missing, the entire
+// call fails with ErrNotFound — matching TypeScript's strict contract
+// for IMessageManager.getMessagesByIds.
+//
+// Empty input returns an empty slice with no error:
+// no IDs to resolve means nothing to reject.
+//
+// On any non-ErrNotFound error from an individual read (Redis
+// unreachable, hash malformed), that error propagates immediately.
+// Strictness is about the not-found case only — transport errors are
+// always fatal.
 func (s *Store) GetMessages(ctx context.Context, messageIDs []string) ([]*Envelope, error) {
+	if len(messageIDs) == 0 {
+		return []*Envelope{}, nil
+	}
+	envelopes := make([]*Envelope, 0, len(messageIDs))
+	for _, id := range messageIDs {
+		env, err := s.GetMessage(ctx, id)
+		if err != nil {
+			// ErrNotFound propagates as-is. Any other error propagates
+			// wrapped by GetMessage. Either way, the whole call fails.
+			return nil, err
+		}
+		envelopes = append(envelopes, env)
+	}
+	return envelopes, nil
+}
+
+// GetMessagesLenient loads messages by ID, silently skipping IDs that
+// do not resolve to an existing message. Used internally where a
+// missing message is not a caller error — specifically by
+// DeleteMessages, which reports per-batch success and notFound counts
+// rather than rejecting the whole batch.
+func (s *Store) GetMessagesLenient(ctx context.Context, messageIDs []string) ([]*Envelope, error) {
 	envelopes := make([]*Envelope, 0, len(messageIDs))
 	for _, id := range messageIDs {
 		env, err := s.GetMessage(ctx, id)
@@ -97,7 +130,12 @@ func (s *Store) DeleteMessages(ctx context.Context, messageIDs []string, lockID 
 		return response, nil
 	}
 
-	messages, err := s.GetMessages(ctx, messageIDs)
+	// DeleteMessages uses the lenient variant: a batch that includes
+	// already-deleted IDs is normal (concurrent deletes, prior purges).
+	// Reporting notFound counts and processing the rest is the correct
+	// contract; rejecting the whole batch because one ID is gone would
+	// make batch deletes unusable in the face of concurrent writers.
+	messages, err := s.GetMessagesLenient(ctx, messageIDs)
 	if err != nil {
 		return nil, err
 	}

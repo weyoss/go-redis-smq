@@ -109,10 +109,21 @@ func TestQueue_RateLimitParamsString(t *testing.T) {
 func TestQueue_PurgeJobQueueParams(t *testing.T) {
 	queueParams := publicqueue.MustQueueParams("orders")
 	job := &publicqueue.PurgeJob{
-		Payload: publicqueue.PurgeJobPayload{Queue: queueParams},
+		Payload: publicqueue.PurgeJobPayload{
+			Queue: publicqueue.ParsedParams{QueueParams: *queueParams},
+		},
 	}
-	if job.QueueParams() != queueParams {
-		t.Error("Params returned unexpected value")
+	got := job.QueueParams()
+	if got == nil {
+		t.Fatal("QueueParams() returned nil")
+	}
+	if got.Name() != queueParams.Name() {
+		t.Errorf("QueueParams().Name() = %q, want %q",
+			got.Name(), queueParams.Name())
+	}
+	if got.NS() != queueParams.NS() {
+		t.Errorf("QueueParams().NS() = %q, want %q",
+			got.NS(), queueParams.NS())
 	}
 }
 

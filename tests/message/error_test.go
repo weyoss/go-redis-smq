@@ -11,6 +11,7 @@
 package message_test
 
 import (
+	"errors"
 	"testing"
 
 	redissmq "github.com/weyoss/go-redis-smq"
@@ -49,16 +50,20 @@ func TestError_StateNotFound(t *testing.T) {
 	}
 }
 
-// Scenario: GetAll with all non-existent IDs returns empty
+// Scenario: GetAll rejects when all IDs are missing
 func TestError_GetAllNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
 	messages, err := redissmq.NewMessageManager().GetAll(ctx, []string{"fake-1", "fake-2", "fake-3"})
-	if err != nil {
-		t.Fatalf("get all: %v", err)
+	if err == nil {
+		t.Fatalf("expected error for all-missing IDs, got %d messages",
+			len(messages))
 	}
-	if len(messages) != 0 {
-		t.Errorf("expected 0 messages, got %d", len(messages))
+	if !errors.Is(err, message.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+	if messages != nil {
+		t.Errorf("messages = %v, want nil on error", messages)
 	}
 }
 

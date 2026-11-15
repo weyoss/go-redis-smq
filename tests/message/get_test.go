@@ -11,6 +11,7 @@
 package message_test
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -176,7 +177,7 @@ func TestGet_ScheduledMessage(t *testing.T) {
 	}
 }
 
-// Scenario: Get multiple messages with mix of found and not found
+// Scenario: GetAll rejects when any ID is missing
 func TestGet_MixedFoundAndNotFound(t *testing.T) {
 	ctx := testutil.Setup(t)
 
@@ -190,14 +191,15 @@ func TestGet_MixedFoundAndNotFound(t *testing.T) {
 	searchIDs := []string{ids[0], "fake-id-1", "fake-id-2"}
 
 	messages, err := redissmq.NewMessageManager().GetAll(ctx, searchIDs)
-	if err != nil {
-		t.Fatalf("get all: %v", err)
+	if err == nil {
+		t.Fatalf("expected error for mixed found/not-found, got %d messages",
+			len(messages))
 	}
-	if len(messages) != 1 {
-		t.Fatalf("got %d messages, want 1 (not found are silently skipped)", len(messages))
+	if !errors.Is(err, message.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
 	}
-	if messages[0].ID != ids[0] {
-		t.Errorf("id = %s, want %s", messages[0].ID, ids[0])
+	if messages != nil {
+		t.Errorf("messages = %v, want nil on error", messages)
 	}
 }
 
@@ -211,5 +213,45 @@ func TestGet_GetAllEmptyList(t *testing.T) {
 	}
 	if len(messages) != 0 {
 		t.Errorf("expected 0 messages, got %d", len(messages))
+	}
+}
+
+// Scenario: A single missing ID anywhere in the batch rejects the
+// whole call — not just the all-missing case covered by
+// TestError_GetAllNotFound. Guards against a future regression where
+// someone "softens" GetAll by returning the found subset with a
+// non-nil error, or where lenient behavior is reintroduced for
+// "convenience".
+func TestGet_GetAllStrictPartialReject(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-get-strict-partial")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	prod := testutil.StartProducer(t, ctx)
+	var realIDs []string
+	for i := 0; i < 3; i++ {
+		ids, _ := prod.Produce(ctx, message.New().SetBody("real").SetQueue(params))
+		realIDs = append(realIDs, ids[0])
+	}
+
+	// First two IDs exist, last is fake. Strict path must reject.
+	messages, err := redissmq.NewMessageManager().GetAll(ctx,
+		[]string{realIDs[0], realIDs[1], "nonexistent-id"})
+	if err == nil {
+		t.Fatalf("expected error on partially-missing batch, got %d messages",
+			len(messages))
+	}
+	if !errors.Is(err, message.ErrNotFound) {
+		t.Errorf("err = %v, want ErrNotFound", err)
+	}
+
+	// Sanity: all-exist batch still succeeds.
+	allMessages, err := redissmq.NewMessageManager().GetAll(ctx, realIDs)
+	if err != nil {
+		t.Fatalf("all-exist batch should succeed: %v", err)
+	}
+	if len(allMessages) != len(realIDs) {
+		t.Errorf("got %d messages, want %d", len(allMessages), len(realIDs))
 	}
 }
