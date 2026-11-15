@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"sync/atomic"
 	"syscall"
 	"testing"
@@ -24,6 +25,7 @@ import (
 	"github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
+	publicConsumer "github.com/weyoss/go-redis-smq/pkg/consumer"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -97,6 +99,25 @@ func TestRecovery_CrashAndRecover(t *testing.T) {
 	}
 	t.Logf("crash consumer %s has in‑flight message", crashConsumerID)
 
+	// subscribe to messageUnacknowledged BEFORE starting Consumer B.
+	// Consumer B's reaper is what fires the event (via
+	// ReapConsumers.recoverConsumer), so the subscription must be live
+	// before B acquires the worker lock and runs its first reap cycle.
+	var mu sync.Mutex
+	var unackEvents []publicConsumer.MessageUnacknowledgedPayload
+	sub, err := publicConsumer.SubscribeMessageUnacknowledged(
+		func(p publicConsumer.MessageUnacknowledgedPayload) {
+			mu.Lock()
+			unackEvents = append(unackEvents, p)
+			mu.Unlock()
+		})
+	if err != nil {
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		cmd.Wait()
+		t.Fatalf("subscribe unack: %v", err)
+	}
+	defer sub.Unsubscribe()
+
 	// Simulate a real crash by killing the entire process group.
 	t.Log("killing crash consumer process group")
 	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
@@ -120,10 +141,10 @@ func TestRecovery_CrashAndRecover(t *testing.T) {
 	}
 	defer consB.Shutdown()
 
-	// The dead consumer's worker lock (TTL 30 s) will expire soon because its
+	// The dead consumer's worker lock (TTL 30 s) will expire soon because its
 	// refresh loop stopped when we killed the process.  After the lock expires,
-	// Consumer B will acquire it and start its reaper (runs every 30 s).
-	// We wait up to 70 seconds for the lock to expire, the reaper to run,
+	// Consumer B will acquire it and start its reaper (runs every 30 s).
+	// We wait up to 120 seconds for the lock to expire, the reaper to run,
 	// and all three messages to be consumed.
 	deadline := time.After(120 * time.Second)
 	ticker := time.NewTicker(500 * time.Millisecond)
@@ -140,7 +161,61 @@ func TestRecovery_CrashAndRecover(t *testing.T) {
 				consumedByB.Load(), pendingLen, requeuedLen, lockExists > 0)
 		case <-ticker.C:
 			if consumedByB.Load() >= 3 {
-				t.Logf("Consumer B received all 3 messages – crash recovery works")
+				// All messages consumed by Consumer B. Now assert H6:
+				// the reaper must have emitted exactly one
+				// consumer.messageUnacknowledged event for the recovered
+				// message, with Cause = CauseOfflineConsumer and
+				// ConsumerID = the dead consumer's ID.
+				//
+				// The crash consumer's handler blocks forever after the
+				// first message (see testdata/crash_consumer/main.go —
+				// the handler waits on a signal that never arrives), so
+				// exactly 1 message was in its ConsumerProcessing list
+				// at kill time. That's the count expected below.
+				//
+				// Give the async event delivery a moment to settle.
+				// The publish call itself is synchronous inside the
+				// reaper's recoverConsumer; delivery to subscribers is
+				// async via Redis pub/sub. The reaper fires before
+				// Consumer B is able to dequeue the second message, so
+				// by the time we get here the publish has long since
+				// occurred — 300ms is generous for delivery.
+				time.Sleep(300 * time.Millisecond)
+
+				mu.Lock()
+				got := len(unackEvents)
+				var causes []int
+				var consumerIDs []string
+				for _, ev := range unackEvents {
+					causes = append(causes, ev.Cause)
+					consumerIDs = append(consumerIDs, ev.ConsumerID)
+				}
+				mu.Unlock()
+
+				if got != 1 {
+					t.Fatalf("unack events = %d, want 1 (crash consumer had "+
+						"1 in-flight message at kill time). causes: %v, "+
+						"consumerIDs: %v", got, causes, consumerIDs)
+				}
+				if unackEvents[0].Cause != int(publicConsumer.CauseOfflineConsumer) {
+					t.Errorf("cause = %d, want CauseOfflineConsumer(%d)",
+						unackEvents[0].Cause, publicConsumer.CauseOfflineConsumer)
+				}
+				if unackEvents[0].ConsumerID != crashConsumerID {
+					t.Errorf("consumerID = %q, want crashConsumerID %q",
+						unackEvents[0].ConsumerID, crashConsumerID)
+				}
+				if unackEvents[0].Queue.QueueParams.Name() != params.Name() {
+					t.Errorf("queue = %q, want %q",
+						unackEvents[0].Queue.QueueParams.Name(), params.Name())
+				}
+				if unackEvents[0].Queue.QueueParams.NS() != params.NS() {
+					t.Errorf("queue ns = %q, want %q",
+						unackEvents[0].Queue.QueueParams.NS(), params.NS())
+				}
+
+				t.Logf("Consumer B received all 3 messages – crash recovery works; " +
+					"reaper emitted 1 unack event with CauseOfflineConsumer")
 				return
 			}
 		}

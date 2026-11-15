@@ -17,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	consumerEvents "github.com/weyoss/go-redis-smq/internal/consumer/events"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	redisKeys "github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
@@ -142,12 +143,61 @@ func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string,
 	// Step 1: Recover in-flight messages from the dead consumer's processing
 	// queue. Must run before unsubscription deletes the ConsumerProcessing
 	// key — otherwise the messages would be silently dropped.
+	//
+	// The per-message RecoveredMessage slice is used below to publish
+	// consumer.messageUnacknowledged (plus the action-specific event)
+	// for every message that was actually transitioned. Without this,
+	// a consumer crash and the subsequent recovery would be invisible
+	// on the event bus — subscribers would see the messages eventually
+	// ack or dead-letter from a live handler, but never the recovery
+	// transition that moved them there.
 	deadUnack := NewMessageUnacknowledger(rc.queue, consumerID)
-	if err := deadUnack.UnacknowledgeProcessingQueue(ctx, consumer.CauseOfflineConsumer); err != nil {
+	recovered, err := deadUnack.UnacknowledgeProcessingQueue(ctx, consumer.CauseOfflineConsumer)
+	if err != nil {
 		rc.log.Error("failed to unacknowledge messages for dead consumer",
 			"consumerID", consumerID,
 			"error", err,
 		)
+	}
+
+	// Publish the event pair (unacknowledged + action-specific) for each
+	// message the Lua actually transitioned. The payload's ConsumerID is
+	// the dead consumer's ID — the messages belonged to its processing
+	// queue. Subscribers distinguish these events from live unacks by
+	// the Cause field (CauseOfflineConsumer).
+	//
+	// Skipped entries (Processed == false) are silent by design: the Lua
+	// skipped them because they were already gone from ConsumerProcessing
+	// (peer recovery, concurrent batch). Firing an event for them would
+	// misreport the transition as having happened here.
+	queueParsed := queue.ParsedParams{
+		QueueParams: *rc.queue,
+		GroupID:     rc.groupID,
+	}
+	for _, rec := range recovered {
+		if !rec.Result.Processed {
+			rc.log.Debug("skipping event for already-recovered message",
+				"messageID", rec.Message.ID(),
+				"consumerID", consumerID,
+			)
+			continue
+		}
+
+		msgID := rec.Message.ID()
+		consumerEvents.PublishMessageUnacknowledged(
+			ctx, msgID, queueParsed, consumerID, int(consumer.CauseOfflineConsumer),
+		)
+
+		switch rec.Result.Action {
+		case ActionDeadLetter:
+			consumerEvents.PublishMessageDeadLettered(
+				ctx, msgID, queueParsed, consumerID, int(rec.Result.Cause),
+			)
+		case ActionRequeue:
+			consumerEvents.PublishMessageRequeued(ctx, msgID, queueParsed, consumerID)
+		case ActionDelay:
+			consumerEvents.PublishMessageDelayed(ctx, msgID, queueParsed, consumerID)
+		}
 	}
 
 	// Step 2: If the dead consumer was using an ephemeral group, delete the
@@ -177,7 +227,7 @@ func (rc *ReapConsumers) recoverConsumer(ctx context.Context, consumerID string,
 		)
 	}
 
-	// Step 4 (C3): Unconditionally SREM the dead consumer from every group
+	// Step 4: Unconditionally SREM the dead consumer from every group
 	// on this queue. This is the fix. Covers the explicit-group case the
 	// Lua misses when groupID="", and is a harmless no-op if the consumer
 	// wasn't in any group.

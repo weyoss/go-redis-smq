@@ -99,15 +99,34 @@ func NewMessageUnacknowledger(queue *queue.Params, consumerID string) *MessageUn
 	}
 }
 
+// RecoveredMessage pairs an in-flight message with the outcome of its
+// unacknowledgment. Returned by UnacknowledgeProcessingQueue so callers
+// can publish per-message events for the messages that were actually
+// transitioned, and skip phantom events for the ones the Lua skipped.
+type RecoveredMessage struct {
+	Message *internalMessage.Envelope
+	Result  UnackResult
+}
+
 // UnacknowledgeProcessingQueue unacknowledges all messages in a consumer's
 // processing queue with the given cause.
 //
-// The UnackResult slice is discarded — this method is used by
-// ReapConsumers to recover a dead consumer's in-flight messages, where
-// event publishing is handled elsewhere (or not at all). Any entry the
-// Lua skips (already recovered by another peer) is benign; the caller
-// does not need per-message outcomes.
-func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Context, cause consumer.UnacknowledgeCause) error {
+// Returns one RecoveredMessage per message that was submitted to the
+// batch, in the order they appeared in the processing queue. Each
+// entry's Result.Processed is true iff the Lua script actually
+// transitioned that message; false means the message was already gone
+// from ConsumerProcessing (typically: a peer's Reaper cycle raced this
+// call, or a concurrent batch handled it).
+//
+// Callers that only need to make the messages leave ConsumerProcessing
+// can ignore the returned slice. Callers that also need to publish
+// per-message events — currently ReapConsumers, so a consumer crash is
+// observable on the event bus — use the Processed flag to suppress
+// phantom events for messages the Lua skipped.
+func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(
+	ctx context.Context,
+	cause consumer.UnacknowledgeCause,
+) ([]RecoveredMessage, error) {
 	qKey := redisKeys.Queue{
 		Namespace: mu.queue.NS(),
 		Name:      mu.queue.Name(),
@@ -117,10 +136,10 @@ func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Contex
 	ids, err := redisClient.Client().LRange(ctx, processingKey, 0, -1).Result()
 	if err != nil {
 		mu.log.Error("failed to fetch processing queue", "error", err)
-		return nil
+		return nil, nil
 	}
 	if len(ids) == 0 {
-		return nil
+		return nil, nil
 	}
 
 	mu.log.Debug("unacknowledging processing queue", "count", len(ids), "cause", int(cause))
@@ -128,7 +147,7 @@ func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Contex
 	messages, err := mu.loadMessages(ctx, ids)
 	if err != nil {
 		mu.log.Error("failed to load messages", "error", err)
-		return fmt.Errorf("load messages: %w", err)
+		return nil, fmt.Errorf("load messages: %w", err)
 	}
 
 	entries := make([]UnackEntry, len(messages))
@@ -136,8 +155,22 @@ func (mu *MessageUnacknowledger) UnacknowledgeProcessingQueue(ctx context.Contex
 		entries[i] = UnackEntry{Message: msg, Cause: cause}
 	}
 
-	_, err = mu.UnacknowledgeBatch(ctx, entries)
-	return err
+	results, err := mu.UnacknowledgeBatch(ctx, entries)
+	if err != nil {
+		return nil, err
+	}
+
+	// Pair each message with its result. UnacknowledgeBatch guarantees
+	// len(results) == len(entries) — see its doc — so the index-based
+	// pairing is safe.
+	recovered := make([]RecoveredMessage, len(entries))
+	for i, entry := range entries {
+		recovered[i] = RecoveredMessage{
+			Message: entry.Message,
+			Result:  results[i],
+		}
+	}
+	return recovered, nil
 }
 
 // UnacknowledgeBatch unacknowledges multiple messages in a single Lua
