@@ -68,6 +68,16 @@ func NewHeartbeat(cfg HeartbeatConfig) *Heartbeat {
 // Start begins sending Heartbeat updates in a background goroutine.
 func (h *Heartbeat) Start(ctx context.Context) {
 	h.log.Info("starting heartbeat", "ttl", h.ttl, "interval", h.interval)
+
+	// Synchronous first beat — before the goroutine starts, and before
+	// Start returns. This closes the window where a consumer is
+	// subscribed (visible in Consumers hash) but has no heartbeat key:
+	// a reaper scanning the queue during that window would consider the
+	// consumer dead and recover its (empty) processing queue, delete its
+	// ephemeral group, and unsubscribe it. Cheap: one SET before the
+	// first tick.
+	h.beat(ctx)
+
 	h.ticker = time.NewTicker(h.interval)
 	h.wg.Add(1)
 	go func() {
