@@ -125,9 +125,22 @@ func TestConfigEvents_Hybrid_TypeScriptPublisher2Args(t *testing.T) {
 		config.Get().Namespace)
 }
 
-// Scenario: a 2-arg event with a version equal to the local version must
-// be a no-op (duplicate delivery). This guards against spurious reloads
-// from duplicate TS event deliveries.
+// Scenario: a 2-arg event with a version equal to the local version
+// must be a no-op.
+//
+// Before the config.Get() clone fix, this test could not distinguish a
+// spurious reload from a correct no-op — the test mutated the shared
+// snapshot pointer that Get() returned, so its namespace assertion
+// trivially held regardless of whether the subscriber acted. With clones,
+// a spurious reload would now be observable: it would replace the
+// snapshot with the Redis state (which happens to match the pre-mutation
+// state, so the assertion is still benign — but the mechanisms are
+// finally distinct).
+//
+// The three hybrid tests together cover:
+//   - Go 3-arg publish → Epoch populated, version applied directly.
+//   - TS 2-arg publish, higher version → reload fires, snapshot replaced.
+//   - TS 2-arg publish, same version   → no reload (this test).
 func TestConfigEvents_Hybrid_TypeScriptSameVersionNoReload(t *testing.T) {
 	ctx := testutil.Setup(t)
 
