@@ -101,6 +101,7 @@ func (prod *Producer) Run(ctx context.Context) error {
 
 	prod.pubSubResolver = NewPubSubTargetResolver(prod.id)
 	if err := prod.pubSubResolver.Load(ctx); err != nil {
+		prod.pubSubResolver.Clear() // unsubscribes + clears map
 		prod.pubSubResolver = nil
 		// Close the lifecycle event pair. Pre-fix, subscribers saw
 		// "producer.goingUp" with no matching "producer.goingDown" for
