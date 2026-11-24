@@ -230,8 +230,23 @@ func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.Purg
 
 		purged += int64(result.Stats.Success)
 
-		if err := trimCategory(ctx, categoryKey, int64(len(ids))); err != nil {
-			return purged, fmt.Errorf("trim category: %w", err)
+		// DeleteMessages is atomic per message: each successfully-deleted
+		// ID is LREM'd/ZREM'd from the category by delete-message.lua.
+		//
+		// The only IDs that survive in the category after that are
+		// orphan IDs — message hash gone (counted as NotFound by
+		// GetMessagesLenient's pre-skip). Left unchecked, orphan IDs
+		// would be re-fetched on every iteration and the loop would
+		// never make progress. Force-remove them now.
+		//
+		// InProcess IDs are NOT in the category (the consumer popped
+		// them out during a fetch/delete race) — no cleanup needed; the
+		// message resolves through the normal retry/ack path. That's why
+		// the condition keys only on NotFound.
+		if result.Stats.NotFound > 0 {
+			if err := forceRemoveFromCategory(ctx, categoryKey, ids); err != nil {
+				return purged, fmt.Errorf("clean orphans from category: %w", err)
+			}
 		}
 
 		if job.Meta == nil {
@@ -241,14 +256,8 @@ func (pm *PurgeManager) purgeMessages(ctx context.Context, job *publicqueue.Purg
 
 		updated, err := pm.jobStore.SaveProgress(ctx, job)
 		if err != nil {
-			// Redis is unreachable / misbehaving. Log and continue — the next
-			// batch's SaveProgress will retry, and the final Complete/Fail
-			// will reconcile.
 			pm.log.Error("save job progress failed", "jobID", job.ID, "error", err)
 		} else if !updated {
-			// Job transitioned out of PROCESSING (almost always: concurrent
-			// Cancel). Stop processing immediately — the caller will observe
-			// via IsCanceled and return, leaving status untouched.
 			pm.log.Info("job transitioned out of PROCESSING; stopping batch loop",
 				"jobID", job.ID, "purgedSoFar", purged)
 			return purged, nil

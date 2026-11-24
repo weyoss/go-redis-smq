@@ -19,6 +19,8 @@ import (
 
 	"github.com/weyoss/go-redis-smq"
 	internalconfig "github.com/weyoss/go-redis-smq/internal/config"
+	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
+	"github.com/weyoss/go-redis-smq/internal/redis/keys"
 	"github.com/weyoss/go-redis-smq/internal/testutil"
 	msg "github.com/weyoss/go-redis-smq/pkg/message"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
@@ -254,5 +256,114 @@ func TestPurge_EmptyQueue(t *testing.T) {
 			}
 			time.Sleep(500 * time.Millisecond)
 		}
+	}
+}
+
+// TestPurge_DoesNotOrphanPendingMessages pins the invariant that a purge
+// of Pending either deletes each message or leaves it in Pending —
+// never removes the ID without deleting the hash.
+//
+// Pre-fix, purgeMessages called trimCategory after DeleteMessages. The
+// Lua already LREM'd each successfully-deleted ID, so the subsequent
+// LTRIM removed the *next* N entries — orphaning them. With N > 2 *
+// defaultPurgeBatchSize (1000), roughly half the queue was orphaned per
+// run: hashes survived, IDs vanished from the pending list, `purged`
+// under-reported.
+func TestPurge_DoesNotOrphanPendingMessages(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 60*time.Second)
+	defer cancel()
+
+	params := publicqueue.MustQueueParams("test-purge-no-orphans")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	prod := testutil.StartProducer(t, ctx)
+	const N = 2500 // > 2 * defaultPurgeBatchSize, so at least 3 batches run
+
+	ids := make([]string, 0, N)
+	for i := 0; i < N; i++ {
+		produced, err := prod.Produce(ctx, msg.New().SetBody("msg").SetQueue(params))
+		if err != nil {
+			t.Fatalf("produce %d: %v", i, err)
+		}
+		ids = append(ids, produced[0])
+	}
+
+	qm := redissmq.NewQueueManager()
+	props, err := qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties before purge: %v", err)
+	}
+	if props.PendingMessagesCount != N {
+		t.Fatalf("pending before purge = %d, want %d", props.PendingMessagesCount, N)
+	}
+
+	jobID, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePending)
+	if err != nil {
+		t.Fatalf("enqueue purge: %v", err)
+	}
+
+	deadline := time.After(45 * time.Second)
+	tick := time.NewTicker(200 * time.Millisecond)
+	defer tick.Stop()
+
+	var job *publicqueue.PurgeJob
+wait:
+	for {
+		select {
+		case <-deadline:
+			t.Fatal("timeout waiting for purge completion")
+		case <-tick.C:
+			j, err := qm.GetPurgeJob(ctx, jobID)
+			if err != nil {
+				t.Fatalf("get purge job: %v", err)
+			}
+			switch j.Status {
+			case publicqueue.PurgeJobCompleted:
+				job = j
+				break wait
+			case publicqueue.PurgeJobFailed:
+				t.Fatalf("purge failed: %s", j.Error)
+			}
+		}
+	}
+
+	// Primary assertion: every message deleted, none orphaned.
+	// Buggy code reports purged ≈ 1500 (N/2 orphans); fixed code reports N.
+	if job.Meta.Purged != N {
+		t.Fatalf("purged = %d, want %d (pre-fix: ~N/2 orphans are silently lost)",
+			job.Meta.Purged, N)
+	}
+
+	// Defense-in-depth: pending list empty, all hashes gone.
+	props, err = qm.Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties after purge: %v", err)
+	}
+	if props.PendingMessagesCount != 0 {
+		t.Errorf("pending after purge = %d, want 0", props.PendingMessagesCount)
+	}
+
+	qKey := keys.Queue{Namespace: params.NS(), Name: params.Name()}
+	pendingIDs, err := internalredis.Client().LRange(ctx, qKey.Pending(), 0, -1).Result()
+	if err != nil {
+		t.Fatalf("lrange pending: %v", err)
+	}
+	if len(pendingIDs) != 0 {
+		t.Errorf("pending list has %d residual IDs: %v", len(pendingIDs), pendingIDs)
+	}
+
+	survivingHashes := 0
+	for _, id := range ids {
+		exists, err := internalredis.Client().Exists(ctx, keys.System{}.Message(id)).Result()
+		if err != nil {
+			t.Fatalf("exists message %s: %v", id, err)
+		}
+		if exists > 0 {
+			survivingHashes++
+		}
+	}
+	if survivingHashes > 0 {
+		t.Errorf("%d/%d message hashes survived the purge (orphaned)",
+			survivingHashes, N)
 	}
 }

@@ -63,36 +63,6 @@ func fetchBatch(ctx context.Context, key string, count int) ([]string, error) {
 	}
 }
 
-// trimCategory removes the first count entries from a Redis list or sorted set.
-//
-// It is used after a batch of messages has been processed to remove them
-// from the category list. For lists, LTRIM is used; for sorted sets, ZREM
-// removes the specified members.
-func trimCategory(ctx context.Context, key string, count int64) error {
-	t, err := redis.Client().Type(ctx, key).Result()
-	if err != nil {
-		return err
-	}
-	switch t {
-	case "list":
-		return redis.Client().LTrim(ctx, key, count, -1).Err()
-	case "zset":
-		ids, err := redis.Client().ZRange(ctx, key, 0, count-1).Result()
-		if err != nil {
-			return err
-		}
-		if len(ids) == 0 {
-			return nil
-		}
-		members := make([]interface{}, len(ids))
-		for i, id := range ids {
-			members[i] = id
-		}
-		return redis.Client().ZRem(ctx, key, members...).Err()
-	}
-	return nil
-}
-
 // resolveCategoryKey maps a browse filter to its Redis key.
 //
 // For BrowsePending, the key depends on two payload fields:
@@ -139,6 +109,47 @@ func resolveCategoryKey(
 
 	default:
 		return ""
+	}
+}
+
+// forceRemoveFromCategory removes the given IDs from a category key.
+//
+// The key may be a list (pending, acknowledged, dead-lettered, requeued)
+// or a sorted set (scheduled, priority pending). For lists: pipelined
+// LREM per ID (one round-trip). For sorted sets: bulk ZREM.
+// LREM/ZREM on non-existent elements are no-ops, so calling this with
+// IDs that were already removed (by delete-message.lua for successful
+// deletes, or by a concurrent peer) is safe.
+//
+// Called by purgeMessages only when DeleteMessages reports NotFound > 0.
+// Zero cost in the normal case (no orphans).
+func forceRemoveFromCategory(ctx context.Context, key string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+
+	t, err := redis.Client().Type(ctx, key).Result()
+	if err != nil {
+		return err
+	}
+	switch t {
+	case "list":
+		pipe := redis.Client().Pipeline()
+		for _, id := range ids {
+			pipe.LRem(ctx, key, 1, id)
+		}
+		_, err := pipe.Exec(ctx)
+		return err
+	case "zset":
+		members := make([]interface{}, len(ids))
+		for i, id := range ids {
+			members[i] = id
+		}
+		return redis.Client().ZRem(ctx, key, members...).Err()
+	case "none":
+		return nil
+	default:
+		return fmt.Errorf("force-remove: unexpected key type: %s", t)
 	}
 }
 
