@@ -107,14 +107,20 @@ func (m *Manager) Init(ctx context.Context) error {
 	return nil
 }
 
-// Get returns the current configuration.
+// Get returns a private clone of the current configuration. The caller
+// may mutate the returned pointer (the pattern
+// `cfg := manager.Get(); cfg.X = Y; manager.Save(ctx, cfg)` still works),
+// and the mutation does not touch m.instance or the pubconfig snapshot.
+//
+// Returns panic if Init has not been called. Callers running after
+// Close should use pubconfig.Get, which returns nil rather than panics.
 func (m *Manager) Get() *pubconfig.Config {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.instance == nil {
 		panic("config: not initialized — call Init first")
 	}
-	return m.instance
+	return m.instance.Clone()
 }
 
 // Save persists the given configuration and publishes an update event.
@@ -178,11 +184,19 @@ func (m *Manager) persistAndPublishLocked(ctx context.Context, c *pubconfig.Conf
 	return version, nil
 }
 
-// setCurrentConfigLocked updates the in‑memory instance and public snapshot.
+// setCurrentConfigLocked updates the in-memory instance and public snapshot.
+// It assumes the lock is held.
+//
+// Both m.instance and the pubconfig atomic get their own private clone of
+// c — so a caller who retains c after Save returns and mutates it (e.g., a
+// test re-flipping cfg.Logger.Enabled across repeated saves) cannot race
+// any concurrent Get reader. c.Version is written through to the caller's
+// pointer, which is intentional: the caller's cfg tracks the persisted
+// version across saves (see TestSave_UpdatesVersion).
 func (m *Manager) setCurrentConfigLocked(c *pubconfig.Config, version int) {
 	c.Version = version
-	m.instance = c
-	pubconfig.Set(c)
+	m.instance = c.Clone()
+	pubconfig.Set(m.instance)
 }
 
 // persistLocked saves the config and ensures the epoch exists in Redis.

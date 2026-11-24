@@ -26,10 +26,27 @@
 // values (such as the default namespace) can retrieve the snapshot using
 // Get() without depending on internal code.
 //
-//   - Get() returns the current snapshot.
-//   - Set() is used by the internal manager to update the snapshot.
-//   - DefaultNamespace() returns the default namespace for queue and exchange
-//     operations.
+//   - Get() returns an independent clone of the current snapshot. Callers
+//     may mutate the returned pointer freely (the canonical
+//     "Get, modify, Save" pattern), and the mutation does not affect the
+//     stored snapshot or race concurrent readers.
+//
+//   - Set() is used by the internal manager to update the snapshot. The
+//     input is cloned before storage, so a caller that retains its
+//     pointer and mutates it after Set has no effect on the stored value.
+//
+// Both the clone-on-Get and the clone-on-Set are required for the race-free
+// contract. Without the former, the pattern `cfg := Get(); cfg.X = Y;
+// Save(ctx, cfg)` mutates the shared snapshot pointer in place and races
+// every concurrent Get (logger, workers, other readers). Without the latter,
+// a caller that retains its pointer after Set and mutates it later has the
+// same effect. Together they make the returned pointer a private handle.
+//
+// Note on cost: Get() allocates a small struct clone per call. This is
+// negligible in the normal case. The internal logger (the highest-frequency
+// caller in the codebase — one Get per log line) caches the derived
+// settings against Config.Version to avoid the per-log allocation; see
+// internal/util/logger/logger.go.
 //
 // # Main Types
 //
@@ -41,7 +58,7 @@
 // # Example
 //
 //	cfgManager := redissmq.NewConfigManager()
-//	cfg := cfgManager.Get()
+//	cfg := cfgManager.Get()   // private clone
 //	cfg.Logger.Enabled = true
 //	version, err := cfgManager.Save(ctx, cfg)
 //	if err != nil {

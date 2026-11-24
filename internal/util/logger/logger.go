@@ -52,6 +52,32 @@ func Init() {
 	closed.Store(false)
 }
 
+// cachedSettings holds the derived logger settings for one configuration
+// version. It exists to avoid allocating a fresh *Config clone on every
+// log call now that pubconfig.Get() returns a clone rather than the
+// shared pointer (see pkg/config's doc.go for the clone-on-access
+// rationale).
+//
+// Invalidation: Keyed on Config.Version, which the internal config manager
+// monotonically increments on every Save/Reset/Reload. The cache is
+// consulted only when appconfig.Get() returns non-nil AND its Version
+// differs from the cached version. When appconfig.Get() returns nil (the
+// post-Close window), the caller already returns a disabled config before
+// reaching the cache, so cache staleness past Close is impossible.
+//
+// Thread safety: atomic.Pointer swap; each reader Loads the whole struct.
+// A racing writer produces either the old or the new cache but never a
+// torn read of individual fields.
+type cachedSettings struct {
+	version          int
+	enabled          bool
+	level            slog.Level
+	colorize         bool
+	includeTimestamp bool
+}
+
+var settingsCache atomic.Pointer[cachedSettings]
+
 // currentConfig returns the logger settings from the public configuration
 // snapshot. If logging is shut down or the config snapshot is nil, it
 // returns a disabled config.
@@ -73,6 +99,12 @@ func Init() {
 //
 // Both cases are handled by the same nil guard — defense in depth so
 // the logger can't panic during a lifecycle edge.
+//
+// Allocation note: appconfig.Get() returns a private clone (the config
+// package's race-safety contract). Allocating a clone per log call would
+// be wasteful given how frequently the logger is hit (every Debug/Info/
+// Warn/Error). The version-keyed cache below reduces that to one
+// allocation per config change.
 func currentConfig() Config {
 	if closed.Load() {
 		return Config{Enabled: false}
@@ -83,9 +115,34 @@ func currentConfig() Config {
 		return Config{Enabled: false}
 	}
 
+	// Fast path: cache hit for the current config version. The version
+	// field is bumped by every setCurrentConfigLocked call in
+	// internal/config/manager.go, so it is a valid cache key: same
+	// version ⇒ same derived settings.
+	if cached := settingsCache.Load(); cached != nil && cached.version == c.Version {
+		return Config{
+			Enabled:          cached.enabled,
+			Level:            cached.level,
+			Colorize:         cached.colorize,
+			IncludeTimestamp: cached.includeTimestamp,
+		}
+	}
+
+	// Miss: recompute and refresh the cache. Two concurrent misses may
+	// both compute — last writer wins. They produce identical structs
+	// (same Version ⇒ same derivation), so the transient double-work is
+	// harmless; the struct is replaced atomically.
+	level := slogLevelFromInt(c.Logger.Options.LogLevel)
+	settingsCache.Store(&cachedSettings{
+		version:          c.Version,
+		enabled:          c.Logger.Enabled,
+		level:            level,
+		colorize:         c.Logger.Options.Colorize,
+		includeTimestamp: c.Logger.Options.IncludeTimestamp,
+	})
 	return Config{
 		Enabled:          c.Logger.Enabled,
-		Level:            slogLevelFromInt(c.Logger.Options.LogLevel),
+		Level:            level,
 		Colorize:         c.Logger.Options.Colorize,
 		IncludeTimestamp: c.Logger.Options.IncludeTimestamp,
 	}

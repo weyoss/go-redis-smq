@@ -27,6 +27,30 @@ type Config struct {
 	MessageAudit MessageAudit `json:"messageAudit"`
 }
 
+// Clone returns an independent copy of the configuration. The copy and
+// the original share no state: mutating one does not affect the other.
+//
+// This is the API's defence against the pattern
+//
+//	cfg := config.Get()
+//	cfg.Logger.Enabled = true
+//	config.Save(ctx, cfg)
+//
+// Without cloning on Get, `cfg` is the shared snapshot pointer — the
+// assignment races any concurrent reader (logger, worker, another
+// `Get` caller). With cloning, every caller gets a private copy they
+// can safely mutate; Save persists the mutated copy.
+//
+// Config has only scalar fields (no pointers, slices, or maps), so a
+// shallow struct copy is a full deep clone.
+func (c *Config) Clone() *Config {
+	if c == nil {
+		return nil
+	}
+	cp := *c
+	return &cp
+}
+
 // LoggerConfig controls console output.
 type LoggerConfig struct {
 	// Enabled enables or disables console logging.

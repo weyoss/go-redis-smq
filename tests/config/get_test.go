@@ -42,15 +42,42 @@ func TestGet_DefaultConfig(t *testing.T) {
 	}
 }
 
-// Scenario: Get returns the same instance
-func TestGet_SameInstance(t *testing.T) {
+// Scenario: Get returns independent snapshots
+//
+// Pre-fix, Get returned the shared *Config pointer — two callers held the
+// same object, and one mutating it (as the canonical
+// "Get, modify, Save" pattern requires) raced every concurrent reader
+// (logger, workers, other Get callers). The race detector surfaced this
+// under the refactored process-scoped worker layout, where the coordinator
+// spawns workers that log at startup during a queue-created event.
+//
+// Post-fix, each Get returns a private clone. Mutating one snapshot has
+// no effect on another, and no race exists.
+func TestGet_ReturnsIndependentSnapshots(t *testing.T) {
 	testutil.Setup(t)
 
 	cfg1 := config.Get()
 	cfg2 := config.Get()
 
-	if cfg1 != cfg2 {
-		t.Fatal("Get should return the same instance")
+	if cfg1 == cfg2 {
+		t.Fatal("Get should return independent snapshots, not the same pointer")
+	}
+
+	// Same initial values.
+	if *cfg1 != *cfg2 {
+		t.Fatal("independent snapshots should have equal values")
+	}
+
+	// Mutating one has no effect on the other.
+	cfg1.Namespace = "mutated-only-in-cfg1"
+	if cfg2.Namespace == "mutated-only-in-cfg1" {
+		t.Fatal("mutating cfg1 must not affect cfg2")
+	}
+
+	// Mutating one has no effect on the stored snapshot either.
+	cfg3 := config.Get()
+	if cfg3.Namespace == "mutated-only-in-cfg1" {
+		t.Fatal("mutating cfg1 must not affect the stored snapshot")
 	}
 }
 
