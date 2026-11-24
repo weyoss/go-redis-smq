@@ -37,7 +37,11 @@ func WithRecoveryInterval(d time.Duration) PurgeWorkerOption {
 	}
 }
 
-// PurgeWorker is a background worker that processes purge jobs.
+// PurgeWorker is a background worker that processes purge jobs. It is
+// the canonical example of the "competing consumers" pattern described in
+// the internal/worker package documentation. See internal/worker/doc.go
+// for the two patterns and why PurgeWorker deliberately does not live
+// there.
 //
 // It uses its own dedicated Redis client to avoid blocking the shared pool
 // during long-running batch operations. The worker acquires jobs from the

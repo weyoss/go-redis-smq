@@ -67,6 +67,26 @@ func FixedBackoff(delay time.Duration, maxAttempts int) BackoffStrategy {
 // Lock represents a distributed lock using Redis Lua scripts.
 //   - extend-lock.lua: PEXPIRE if owner matches
 //   - release-lock.lua: DEL if owner matches
+//
+// # Loss detection
+//
+// When constructed with WithAutoRefresh (required for any use that expects
+// the lock to outlive its TTL) AND WithOnLost, the refresh loop actively
+// interprets the ExtendLock reply:
+//
+//   - 1 (owner still matches, PEXPIRE succeeded): lease is held; do nothing.
+//   - 0 (owner mismatch, or key gone): lease was lost — another process
+//     acquired the key after our TTL expired, or the key was DEL'd
+//     externally. The refresh loop sets acquired = false (so IsAcquired()
+//     and Release() observe the loss) and fires onLost exactly once.
+//   - Eval error (Redis unreachable, timeout, wrong reply type): treated
+//     as transient. The loop logs and retries on the next tick — a single
+//     failed refresh is not proof of loss, and killing workers on every
+//     blip would be worse than leaving them running for one more tick.
+//
+// Without WithOnLost, the refresh loop still detects loss (acquired = false)
+// but does not fire any callback — the holder can poll IsAcquired() if it
+// wants to react.
 type Lock struct {
 	client  *redis.Client
 	key     string
@@ -97,6 +117,17 @@ type Lock struct {
 	stopCh      chan struct{}
 	refreshDone chan struct{}
 
+	// onLost, when non-nil, is invoked exactly once by refreshLoop if the
+	// lease is observed as lost (ExtendLock returned 0). Captured under
+	// mu and called outside — the callback must not re-enter the Lock.
+	//
+	// The callback runs from the refresh loop's goroutine. It should be
+	// fast (typically: cancel a context and signal worker exit) and must
+	// not block on anything that depends on the refresh loop exiting —
+	// the loop's deferred close(refreshDone) fires only after onLost
+	// returns.
+	onLost func()
+
 	log *slog.Logger
 }
 
@@ -110,7 +141,7 @@ func WithTTL(ttl time.Duration) Option {
 	}
 }
 
-// WithAutoRefresh enables periodic lock TTL refreshing using the
+// WithAutoRefresh enables periodic lock TTL refreshing.
 // refresh is the interval between refreshes (should be < ttl).
 func WithAutoRefresh(refresh time.Duration) Option {
 	return func(l *Lock) {
@@ -123,6 +154,22 @@ func WithRetry(backoff BackoffStrategy) Option {
 	return func(l *Lock) {
 		l.retry = true
 		l.backoff = backoff
+	}
+}
+
+// WithOnLost registers a callback that fires exactly once, from the
+// refresh loop, if the lock is observed as lost — ExtendLock returns 0
+// (owner mismatch, or key gone).
+//
+// Only fires when WithAutoRefresh is also set: without a refresh loop,
+// there is no ExtendLock call and no loss-detection opportunity.
+//
+// The callback is invoked without holding the Lock's mutex. It should
+// not call back into the Lock (Acquire/Release/IsAcquired are safe but
+// pointless — acquired is already false; Release will short-circuit).
+func WithOnLost(fn func()) Option {
+	return func(l *Lock) {
+		l.onLost = fn
 	}
 }
 
@@ -223,6 +270,14 @@ func (l *Lock) Acquire(ctx context.Context) error {
 // unreachable Redis will error at the transport layer and the loop will
 // exit shortly after. A timeout on this wait would reintroduce the race
 // it's here to prevent.
+//
+// Short-circuit: if acquired is already false (loss detected by
+// refreshLoop, or a prior Release), returns nil immediately without
+// touching Redis. This is the correct behavior after lease loss — the
+// winner owns the key now; a release EVAL would either be a no-op (owner
+// mismatch — release-lock.lua's guard) or, in the same-owner case, would
+// wrongly DEL the winner's key. Short-circuiting avoids the round-trip
+// and the risk.
 func (l *Lock) Release(ctx context.Context) error {
 	l.mu.Lock()
 	if !l.acquired {
@@ -253,6 +308,10 @@ func (l *Lock) Release(ctx context.Context) error {
 }
 
 // IsAcquired returns whether the lock is currently held.
+//
+// Returns false after a loss is detected by the refresh loop — even if
+// Release has not been called. Callers using the lock as a liveness
+// signal (e.g. queueWorkers.isStale) rely on this.
 func (l *Lock) IsAcquired() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -279,6 +338,16 @@ func (l *Lock) tryAcquire(ctx context.Context) (bool, error) {
 //
 // done is closed on exit; Release waits on it to guarantee no in-flight
 // Redis EVAL survives past Release's own Redis operations.
+//
+// Loss detection: the ExtendLock reply is interpreted, not discarded.
+// A reply of 0 means the key is no longer ours (owner mismatch, or key
+// gone — either way, loss). The loop sets acquired = false, captures the
+// onLost callback under the mutex, releases the mutex, fires the callback,
+// and returns. Release and IsAcquired will observe the loss.
+//
+// Transient Eval errors are NOT treated as loss: a single failed refresh
+// is not proof the key was taken; the loop logs and retries on the next
+// tick. Only an actual 0 reply triggers the loss path.
 func (l *Lock) refreshLoop(stopCh <-chan struct{}, done chan<- struct{}) {
 	defer close(done)
 	ticker := time.NewTicker(l.refresh)
@@ -289,23 +358,65 @@ func (l *Lock) refreshLoop(stopCh <-chan struct{}, done chan<- struct{}) {
 		case <-stopCh:
 			return
 		case <-ticker.C:
+			// Hold l.mu across the Eval so Release cannot proceed between
+			// the acquired check and the ExtendLock call — that window
+			// would let Release delete the key, causing ExtendLock to
+			// return 0 and falsely report loss on a clean shutdown.
 			l.mu.Lock()
-			if l.acquired {
-				if _, err := redisClient.Eval(
-					context.Background(),
-					scripts.ExtendLock,
-					[]string{l.key},
-					l.owner,
-					l.ttl.Milliseconds(),
-				); err != nil {
-					l.log.Error("failed to extend lock",
-						"key", l.key,
-						"owner", l.owner,
-						"error", err,
-					)
-				}
+			if !l.acquired {
+				l.mu.Unlock()
+				return
 			}
+			reply, err := redisClient.Eval(
+				context.Background(),
+				scripts.ExtendLock,
+				[]string{l.key},
+				l.owner,
+				l.ttl.Milliseconds(),
+			)
+			if err != nil {
+				l.mu.Unlock()
+				l.log.Error("failed to extend lock",
+					"key", l.key,
+					"owner", l.owner,
+					"error", err,
+				)
+				continue
+			}
+
+			n, intErr := redisClient.Int64(reply)
+			if intErr != nil {
+				l.mu.Unlock()
+				l.log.Error("extend lock: unexpected reply",
+					"key", l.key,
+					"owner", l.owner,
+					"reply", reply,
+					"error", intErr,
+				)
+				continue
+			}
+
+			if n == 1 {
+				l.mu.Unlock()
+				continue
+			}
+
+			// ExtendLock returned 0 — the key is no longer ours.
+			// Set acquired = false so IsAcquired() and Release() observe
+			// the loss. Capture onLost under the mutex, fire it outside.
+			l.acquired = false
+			cb := l.onLost
 			l.mu.Unlock()
+
+			l.log.Warn("lock lost — another process acquired it",
+				"key", l.key,
+				"owner", l.owner,
+			)
+
+			if cb != nil {
+				cb()
+			}
+			return
 		}
 	}
 }

@@ -30,6 +30,16 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// The dead consumer's WorkersLock lease expires after LeaseTTL (5s under
+// TestIntervals). Then this Coordinator's reconcile picks up the queue
+// within Reconcile (250ms), and the reaper's first tick recovers the
+// in-flight message within Reaper (500ms). ~6s total; the deadline below
+// gives ~4x slack.
+var deadlineDuration = 3*testutil.WorkerIntervals().LeaseTTL +
+	testutil.WorkerIntervals().Reconcile +
+	testutil.WorkerIntervals().Reaper +
+	5*time.Second
+
 // Scenario: Consumer crashes while processing – message recovered and consumed by another consumer.
 //
 // This test uses a real separate process (crash_consumer/main.go) that picks up
@@ -141,12 +151,7 @@ func TestRecovery_CrashAndRecover(t *testing.T) {
 	}
 	defer consB.Shutdown()
 
-	// The dead consumer's worker lock (TTL 30 s) will expire soon because its
-	// refresh loop stopped when we killed the process.  After the lock expires,
-	// Consumer B will acquire it and start its reaper (runs every 30 s).
-	// We wait up to 120 seconds for the lock to expire, the reaper to run,
-	// and all three messages to be consumed.
-	deadline := time.After(120 * time.Second)
+	deadline := time.After(deadlineDuration)
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 

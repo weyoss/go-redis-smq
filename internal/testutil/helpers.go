@@ -13,9 +13,11 @@ package testutil
 import (
 	"context"
 	"testing"
+	"time"
 
 	redissmq "github.com/weyoss/go-redis-smq"
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
+	internalworker "github.com/weyoss/go-redis-smq/internal/worker"
 	"github.com/weyoss/go-redis-smq/pkg/producer"
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
@@ -41,4 +43,21 @@ func StartProducer(tb testing.TB, ctx context.Context) producer.Producer {
 	}
 	tb.Cleanup(func() { prod.Shutdown(ctx) })
 	return prod
+}
+
+// WorkerIntervals returns the intervals configured for the current test
+// run. Tests that poll for interval-driven events use this to scale their
+// deadlines instead of hardcoding durations. A change to TestIntervals
+// then automatically updates every deadline.
+func WorkerIntervals() internalworker.Intervals {
+	return internalworker.TestIntervals()
+}
+
+// IntervalDeadline returns a generous deadline for a condition gated on
+// the given interval: 20 ticks, capped at 2 minutes. Twenty ticks is
+// enough to catch a bug that fires on the first few executions without
+// making flaky CI wait indefinitely.
+func IntervalDeadline(interval time.Duration) time.Duration {
+	d := min(20*interval, 2*time.Minute)
+	return d
 }

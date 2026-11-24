@@ -23,6 +23,13 @@ import (
 	publicqueue "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// reapDeadline is scaled to the Reaper cadence. With TestIntervals
+// (500ms) this is 10s — plenty for the first few ticks to fire even
+// under -race. With production intervals it caps at 2 minutes.
+var reapDeadline = testutil.IntervalDeadline(
+	testutil.WorkerIntervals().Reaper,
+)
+
 // Scenario: A consumer that crashed while subscribed to an explicit
 // consumer group must be removed from that group's member set by the
 // reaper. Otherwise ConsumerGroupManager.Delete fails forever with
@@ -92,10 +99,7 @@ func TestReaper_RemovesDeadConsumerFromExplicitGroup(t *testing.T) {
 	}
 	defer cons.Shutdown()
 
-	// Poll for up to 90s — three reaper intervals. The first tick
-	// (30s after the consumer's worker lock is acquired) must do the
-	// work; the extra 60s is slack for slow CI.
-	deadline := time.Now().Add(90 * time.Second)
+	deadline := time.Now().Add(reapDeadline)
 	for time.Now().Before(deadline) {
 		isMember, err := redis.Client().SIsMember(ctx, qKey.ConsumerGroupMembers(groupID), crashedID).Result()
 		if err != nil {

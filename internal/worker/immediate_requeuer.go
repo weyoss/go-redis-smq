@@ -8,13 +8,12 @@
  *
  */
 
-package consumer
+package worker
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
@@ -28,64 +27,73 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-type ImmediateRequeuer struct {
-	queue      *queue.Params
-	groupID    string
-	consumerID string
-	interval   time.Duration
-	wg         sync.WaitGroup // tracks the requeue ticker goroutine
-	log        *slog.Logger
+// immediateRequeuer periodically moves unacknowledged messages from the
+// requeued list back to the pending queue (immediate retry) or to the
+// delayed sorted set (retry with backoff).
+//
+// Queue-scoped worker: spawned by Coordinator for every queue whose
+// WorkersLock this process holds. Runs until ctx is cancelled (by lease
+// loss, queue removal, or coordinator shutdown).
+//
+// Idempotence: requeue-immediate.lua gates each message with
+//
+//	if redis.call("LREM", keyQueueRequeued, 1, messageId) == 1 then
+//
+// Only one executor per message proceeds; all others skip. Safe under
+// concurrent execution during the ~10s split-brain window after a lease
+// loss.
+type immediateRequeuer struct {
+	queue    *queue.Params
+	interval time.Duration
+	log      *slog.Logger
 }
 
-func NewImmediateRequeuer(queue *queue.Params, groupID, consumerID string) *ImmediateRequeuer {
-	return &ImmediateRequeuer{
-		queue:      queue,
-		groupID:    groupID,
-		consumerID: consumerID,
-		interval:   5 * time.Second,
-		log:        logger.New("consumer", "immediate-requeuer", consumerID, queue.Name()),
+// newImmediateRequeuer constructs the worker for the given queue.
+//
+// No consumer ID: the requeuer is not tied to a consumer instance. The
+// messages it moves were previously unacknowledged by any consumer —
+// it doesn't matter which one.
+func newImmediateRequeuer(qp *queue.Params, interval time.Duration) *immediateRequeuer {
+	return &immediateRequeuer{
+		queue:    qp,
+		interval: interval,
+		log:      logger.New("worker", "immediate-requeuer", qp.Name()),
 	}
 }
 
-func (ir *ImmediateRequeuer) Run(ctx context.Context) {
+// Run blocks until ctx is cancelled. Spawned as a goroutine by
+// queueWorkers.trySpawnWorkers; the coordinator's per-queue wg tracks
+// this Run call, so wg.Wait() waits for the ticker loop (including any
+// in-flight requeue) to exit.
+//
+// Recover is local: a panic in requeue kills this worker's goroutine
+// but does not crash the process. The coordinator's reconcile tick will
+// re-elect on the next cycle if the lease is still held — with the same
+// caveat noted in scheduled_publisher.go about worker panics leaving the
+// lease held until the next reconcile.
+func (ir *immediateRequeuer) Run(ctx context.Context) {
 	ir.log.Debug("starting immediate requeuer", "interval", ir.interval)
-	ir.wg.Add(1)
-	go func() {
-		defer ir.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				ir.log.Error("immediate requeuer panicked", "panic", r)
-			}
-		}()
-		ticker := time.NewTicker(ir.interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				ir.log.Debug("immediate requeuer stopped")
-				return
-			case <-ticker.C:
-				ir.requeue(ctx)
-			}
+	defer ir.log.Debug("immediate requeuer stopped")
+	defer func() {
+		if r := recover(); r != nil {
+			ir.log.Error("immediate requeuer panicked", "panic", r)
 		}
 	}()
+
+	ticker := time.NewTicker(ir.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			ir.requeue(ctx)
+		}
+	}
 }
 
-// Wait blocks until the background goroutine exits. Called by
-// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
-// Redis operation remains when the process tears down the client via
-// internalredis.Close.
-//
-// The goroutine exits as soon as its select observes ctx.Done() — but if
-// it's mid-requeue (a Redis LRange plus per-message HGET plus the Lua
-// EVAL), Wait blocks until that whole batch completes. That's the point:
-// shutdown cannot proceed until the last Redis op is done.
-func (ir *ImmediateRequeuer) Wait() {
-	ir.wg.Wait()
-}
-
-func (ir *ImmediateRequeuer) requeue(ctx context.Context) {
+func (ir *immediateRequeuer) requeue(ctx context.Context) {
 	qKey := keys.Queue{
 		Namespace: ir.queue.NS(),
 		Name:      ir.queue.Name(),
@@ -126,7 +134,7 @@ func (ir *ImmediateRequeuer) requeue(ctx context.Context) {
 	ir.requeueMessages(ctx, qKey, messages)
 }
 
-func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope) {
+func (ir *immediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope) {
 	luaKeys := []string{
 		qKey.Properties(),
 		qKey.Requeued(),
@@ -161,7 +169,6 @@ func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 
 	pendingCount := 0
 	delayedCount := 0
-	deadLetteredCount := 0
 
 	for _, msg := range messages {
 		msgID := msg.ID()
@@ -228,9 +235,5 @@ func (ir *ImmediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 		default:
 			ir.log.Error("unexpected script reply", "reply", v)
 		}
-	}
-
-	if deadLetteredCount > 0 {
-		ir.log.Warn("messages dead-lettered during requeue", "count", deadLetteredCount)
 	}
 }

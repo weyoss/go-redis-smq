@@ -8,13 +8,12 @@
  *
  */
 
-package consumer
+package worker
 
 import (
 	"context"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -29,64 +28,73 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-type DelayedRequeuer struct {
-	queue      *queue.Params
-	groupID    string
-	consumerID string
-	interval   time.Duration
-	wg         sync.WaitGroup // tracks the requeue ticker goroutine
-	log        *slog.Logger
+// delayedRequeuer periodically moves due messages from the delayed
+// sorted set back to the pending queue.
+//
+// Queue-scoped worker: spawned by Coordinator for every queue whose
+// WorkersLock this process holds. Runs until ctx is cancelled (by lease
+// loss, queue removal, or coordinator shutdown).
+//
+// Idempotence: the per-message ZREM gate in requeue-delayed.lua
+// (`if redis.call("ZREM", keyQueueDelayed, messageId) == 1`) ensures
+// only one executor moves each message. Safe under concurrent execution
+// during the ~10s split-brain window that follows a lease loss.
+type delayedRequeuer struct {
+	queue    *queue.Params
+	interval time.Duration
+	log      *slog.Logger
 }
 
-func NewDelayedRequeuer(queue *queue.Params, groupID, consumerID string) *DelayedRequeuer {
-	return &DelayedRequeuer{
-		queue:      queue,
-		groupID:    groupID,
-		consumerID: consumerID,
-		interval:   5 * time.Second,
-		log:        logger.New("consumer", "delayed-requeuer", consumerID, queue.Name()),
+// newDelayedRequeuer constructs the worker for the given queue.
+//
+// No consumer ID: the requeuer is not tied to a consumer instance. It
+// moves messages that were previously unacknowledged (by any consumer
+// with a retry delay) back into the pending queue when their delay
+// expires.
+func newDelayedRequeuer(qp *queue.Params, interval time.Duration) *delayedRequeuer {
+	return &delayedRequeuer{
+		queue:    qp,
+		interval: interval,
+		log:      logger.New("worker", "delayed-requeuer", qp.Name()),
 	}
 }
 
-func (dr *DelayedRequeuer) Run(ctx context.Context) {
+// Run blocks until ctx is cancelled. Spawned as a goroutine by
+// queueWorkers.trySpawnWorkers; the coordinator's per-queue wg tracks
+// this Run call, so wg.Wait() waits for the ticker loop (including any
+// in-flight requeue) to exit.
+//
+// Recover is local: a panic in requeue kills this worker's goroutine
+// but does not crash the process. The coordinator's reconcile tick will
+// re-elect on the next cycle if the lease is still held (it isn't —
+// the panic handler returns from Run, wg.Done fires, but the lease is
+// still held by Coordinator.active until the next reconcile sees the
+// goroutine is gone. This is a known limitation of the current design
+// for any worker panic; addressing it would require the coordinator to
+// detect worker death, which it doesn't today).
+func (dr *delayedRequeuer) Run(ctx context.Context) {
 	dr.log.Debug("starting delayed requeuer", "interval", dr.interval)
-	dr.wg.Add(1)
-	go func() {
-		defer dr.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				dr.log.Error("delayed requeuer panicked", "panic", r)
-			}
-		}()
-		ticker := time.NewTicker(dr.interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				dr.log.Debug("delayed requeuer stopped")
-				return
-			case <-ticker.C:
-				dr.requeueDue(ctx)
-			}
+	defer dr.log.Debug("delayed requeuer stopped")
+	defer func() {
+		if r := recover(); r != nil {
+			dr.log.Error("delayed requeuer panicked", "panic", r)
 		}
 	}()
+
+	ticker := time.NewTicker(dr.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			dr.requeue(ctx)
+		}
+	}
 }
 
-// Wait blocks until the background goroutine exits. Called by
-// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
-// Redis operation remains when the process tears down the client via
-// internalredis.Close.
-//
-// The goroutine exits as soon as its select observes ctx.Done() — but if
-// it's mid-requeueDue (a Redis ZRANGEBYSCORE plus per-message HGET plus
-// the Lua EVAL), Wait blocks until that whole batch completes. That's the
-// point: shutdown cannot proceed until the last Redis op is done.
-func (dr *DelayedRequeuer) Wait() {
-	dr.wg.Wait()
-}
-
-func (dr *DelayedRequeuer) requeueDue(ctx context.Context) {
+func (dr *delayedRequeuer) requeue(ctx context.Context) {
 	qKey := keys.Queue{
 		Namespace: dr.queue.NS(),
 		Name:      dr.queue.Name(),
@@ -107,7 +115,7 @@ func (dr *DelayedRequeuer) requeueDue(ctx context.Context) {
 		return
 	}
 
-	dr.log.Debug("found delayed messages", "count", len(ids))
+	dr.log.Debug("found due delayed messages", "count", len(ids))
 
 	messages := make([]*internalMessage.Envelope, 0, len(ids))
 	for _, id := range ids {
@@ -130,10 +138,10 @@ func (dr *DelayedRequeuer) requeueDue(ctx context.Context) {
 		return
 	}
 
-	dr.enqueueDelayed(ctx, qKey, messages)
+	dr.requeueMessages(ctx, qKey, messages)
 }
 
-func (dr *DelayedRequeuer) enqueueDelayed(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope) {
+func (dr *delayedRequeuer) requeueMessages(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope) {
 	luaKeys := []string{
 		qKey.Properties(),
 		qKey.Delayed(),
@@ -185,11 +193,18 @@ func (dr *DelayedRequeuer) enqueueDelayed(ctx context.Context, qKey keys.Queue, 
 		}
 		luaKeys = append(luaKeys, msgKey, pendingKey, priorityKey)
 
-		argv = append(argv, msgID, priority, consumerGroupID)
+		argv = append(argv,
+			msgID,
+			priority,
+			consumerGroupID,
+		)
 		requeuedCount++
 	}
 
-	dr.log.Debug("requeuing delayed messages", "count", requeuedCount)
+	dr.log.Debug("requeuing delayed messages",
+		"total", len(messages),
+		"may_dead_letter", deadLetteredCount, // placeholder; actual count comes from Lua
+	)
 
 	reply, err := redisClient.Eval(ctx, scripts.RequeueDelayed, luaKeys, argv...)
 	if err != nil {
@@ -213,9 +228,5 @@ func (dr *DelayedRequeuer) enqueueDelayed(ctx context.Context, qKey keys.Queue, 
 		default:
 			dr.log.Error("unexpected script reply", "reply", v)
 		}
-	}
-
-	if deadLetteredCount > 0 {
-		dr.log.Warn("messages dead-lettered during delayed requeue", "count", deadLetteredCount)
 	}
 }

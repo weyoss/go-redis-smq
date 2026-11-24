@@ -46,15 +46,21 @@ func TestHandler_ErrorTriggersRetry(t *testing.T) {
 	})
 	cons.Run(ctx)
 
-	// Wait for requeuer to process (runs every 5s)
-	time.Sleep(10 * time.Second)
+	// Retry cycle is dominated by the ImmediateRequeuer cadence.
+	retryDeadline := max(20*testutil.WorkerIntervals().ImmediateRequeuer, 10*time.Second)
+	deadline := time.After(retryDeadline)
+	ticker := time.NewTicker(100 * time.Millisecond)
+	defer ticker.Stop()
 
-	count := attempts.Load()
-	cons.Shutdown()
-
-	if count < 2 {
-		t.Fatalf("attempts = %d, want >= 2", count)
+	for attempts.Load() < 2 {
+		select {
+		case <-deadline:
+			cons.Shutdown()
+			t.Fatalf("attempts = %d after 60s, want >= 2", attempts.Load())
+		case <-ticker.C:
+		}
 	}
+	cons.Shutdown()
 }
 
 // Scenario: Handler with message TTL expiry

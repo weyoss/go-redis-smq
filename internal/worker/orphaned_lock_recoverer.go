@@ -8,14 +8,13 @@
  *
  */
 
-package consumer
+package worker
 
 import (
 	"context"
 	"encoding/json"
 	"log/slog"
 	"strconv"
-	"sync"
 	"time"
 
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
@@ -27,85 +26,83 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-type OrphanedLockRecoverer struct {
-	queue      *queue.Params
-	consumerID string
-	interval   time.Duration
-	wg         sync.WaitGroup // tracks the recoverer ticker goroutine
-	log        *slog.Logger
+// orphanedLockRecoverer periodically checks for queues left in the
+// Locked state by a purge worker that has since died, and unlocks them.
+//
+// A queue is locked at purge start (state.go's acquireLock) with
+// LockOwnerPurgeJob and a lock ID equal to the purge job ID. The purge
+// job records its worker's liveness via WorkerHeartbeat(workerID). If
+// that process crashes, the job is left PROCESSING forever and the
+// queue stays LOCKED indefinitely — blocking all consumes and produces
+// for that queue. This worker detects the dead-worker condition and
+// unlocks the queue.
+//
+// Queue-scoped worker: spawned by Coordinator for every queue whose
+// WorkersLock this process holds. Runs until ctx is cancelled (by lease
+// loss, queue removal, or coordinator shutdown).
+//
+// Idempotence: set-queue-state.lua's INVALID_STATE_TRANSITION check
+// (expectedPreviousState) gates concurrent unlock attempts. Only one
+// executor transitions Locked → Active; others get a non-OK reply and
+// log Debug. Safe under concurrent execution during the ~10s
+// split-brain window after a lease loss.
+type orphanedLockRecoverer struct {
+	queue    *queue.Params
+	interval time.Duration
+	log      *slog.Logger
 }
 
-// OrphanedLockRecovererOption is a functional option for OrphanedLockRecoverer.
-type OrphanedLockRecovererOption func(*OrphanedLockRecoverer)
-
-// WithOrphanedLockRecoverInterval sets the interval between recovery checks.
-func WithOrphanedLockRecoverInterval(d time.Duration) OrphanedLockRecovererOption {
-	return func(o *OrphanedLockRecoverer) {
-		if d > 0 {
-			o.interval = d
-		}
+// newOrphanedLockRecoverer constructs the recoverer for the given queue.
+//
+// No consumer ID: the recoverer is not tied to a consumer instance. It
+// unlocks queues whose purge worker is dead, regardless of which process
+// elected the workers.
+//
+// No option pattern: the interval is fixed at 30s (matching the reaper
+// and the coordinator's reconcile cadence). The original exported a
+// WithOrphanedLockRecoverInterval option, but it existed only for a
+// test that doesn't exist in the current suite. If a future test needs
+// a faster tick, re-introduce the option then — don't carry dead
+// API surface speculatively.
+func newOrphanedLockRecoverer(qp *queue.Params, interval time.Duration) *orphanedLockRecoverer {
+	return &orphanedLockRecoverer{
+		queue:    qp,
+		interval: interval,
+		log:      logger.New("worker", "lock-recoverer", qp.Name()),
 	}
 }
 
-// NewOrphanedLockRecoverer creates a new OrphanedLockRecoverer.
-func NewOrphanedLockRecoverer(
-	q *queue.Params,
-	consumerID string,
-	opts ...OrphanedLockRecovererOption,
-) *OrphanedLockRecoverer {
-	r := &OrphanedLockRecoverer{
-		queue:      q,
-		consumerID: consumerID,
-		interval:   30 * time.Second,
-		log:        logger.New("consumer", "lock-recoverer", consumerID, q.Name()),
-	}
-	for _, opt := range opts {
-		opt(r)
-	}
-	return r
-}
-
-func (olr *OrphanedLockRecoverer) Run(ctx context.Context) {
+// Run blocks until ctx is cancelled. Spawned as a goroutine by
+// queueWorkers.trySpawnWorkers; the coordinator's per-queue wg tracks
+// this Run call, so wg.Wait() waits for the ticker loop (including any
+// in-flight recover) to exit.
+//
+// Recover is local: a panic in recover kills this worker's goroutine
+// but does not crash the process. See scheduled_publisher.go for the
+// worker-panic / lease-held-until-reconcile caveat.
+func (olr *orphanedLockRecoverer) Run(ctx context.Context) {
 	olr.log.Debug("starting orphaned lock recoverer", "interval", olr.interval)
-	olr.wg.Add(1)
-	go func() {
-		defer olr.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				olr.log.Error("orphaned lock recoverer panicked", "panic", r)
-			}
-		}()
-		ticker := time.NewTicker(olr.interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				olr.log.Debug("orphaned lock recoverer stopped")
-				return
-			case <-ticker.C:
-				olr.recover(ctx)
-			}
+	defer olr.log.Debug("orphaned lock recoverer stopped")
+	defer func() {
+		if r := recover(); r != nil {
+			olr.log.Error("orphaned lock recoverer panicked", "panic", r)
 		}
 	}()
+
+	ticker := time.NewTicker(olr.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			olr.recover(ctx)
+		}
+	}
 }
 
-// Wait blocks until the background goroutine exits. Called by
-// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
-// Redis operation remains when the process tears down the client via
-// internalredis.Close.
-//
-// The goroutine exits as soon as its select observes ctx.Done() — but if
-// it's mid-recover (a State.FetchCurrent call — several Redis reads — plus
-// the conditional IsWorkerAlive check — two more reads — plus the
-// SetQueueState Lua EVAL), Wait blocks until that whole cycle completes.
-// That's the point: shutdown cannot proceed until the last Redis op is
-// done.
-func (olr *OrphanedLockRecoverer) Wait() {
-	olr.wg.Wait()
-}
-
-func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
+func (olr *orphanedLockRecoverer) recover(ctx context.Context) {
 	qKey := keys.Queue{
 		Namespace: olr.queue.NS(),
 		Name:      olr.queue.Name(),
@@ -148,7 +145,7 @@ func (olr *OrphanedLockRecoverer) recover(ctx context.Context) {
 	olr.unlockQueue(ctx, qKey, lockID)
 }
 
-func (olr *OrphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Queue, lockID string) {
+func (olr *orphanedLockRecoverer) unlockQueue(ctx context.Context, qKey keys.Queue, lockID string) {
 	now := time.Now().UnixMilli()
 	from := queue.StateLocked
 	transition := queue.StateTransition{

@@ -8,14 +8,13 @@
  *
  */
 
-package consumer
+package worker
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -32,64 +31,71 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-type ScheduledPublisher struct {
-	queue      *queue.Params
-	groupID    string
-	consumerID string
-	interval   time.Duration
-	wg         sync.WaitGroup // tracks the publish ticker goroutine
-	log        *slog.Logger
+// scheduledPublisher periodically moves due scheduled messages into the
+// pending queue.
+//
+// Queue-scoped worker: spawned by Coordinator for every queue whose
+// WorkersLock this process holds. Runs until ctx is cancelled (by lease
+// loss, queue removal, or coordinator shutdown).
+//
+// Idempotence: case 2 of publish-scheduled.lua (repeating messages) is
+// safe under concurrent execution only because of the ZREM gate added to
+// the script. Without that gate, two executors for the same queue would
+// generate two different clone IDs and publish two clones. See the
+// script's docstring for the split-brain rationale.
+type scheduledPublisher struct {
+	queue    *queue.Params
+	interval time.Duration
+	log      *slog.Logger
 }
 
-func NewScheduledPublisher(queue *queue.Params, groupID, consumerID string) *ScheduledPublisher {
-	return &ScheduledPublisher{
-		queue:      queue,
-		groupID:    groupID,
-		consumerID: consumerID,
-		interval:   5 * time.Second,
-		log:        logger.New("consumer", "scheduled-publisher", consumerID, queue.Name()),
+// newScheduledPublisher constructs the worker for the given queue.
+//
+// No consumer ID: the scheduler is not tied to a consumer instance. Any
+// message it moves to pending is available to every consumer subscribed
+// to that queue (or to the target consumer group, for Pub/Sub).
+func newScheduledPublisher(qp *queue.Params, interval time.Duration) *scheduledPublisher {
+	return &scheduledPublisher{
+		queue:    qp,
+		interval: interval,
+		log:      logger.New("worker", "scheduled-publisher", qp.Name()),
 	}
 }
 
-func (sp *ScheduledPublisher) Run(ctx context.Context) {
+// Run blocks until ctx is cancelled. Spawned as a goroutine by
+// queueWorkers.trySpawnWorkers; the coordinator's per-queue wg tracks
+// this Run call, so wg.Wait() waits for the ticker loop (including any
+// in-flight publishDue) to exit.
+//
+// Recover is local: a panic in publishDue kills this worker's goroutine
+// but does not crash the process. The coordinator's reconcile tick will
+// re-elect on the next cycle (this worker's ctx stays cancelled because
+// nothing re-spawns it from within the panic handler; the next reconcile
+// will either re-acquire and re-spawn, or leave it to whoever currently
+// holds the lease).
+func (sp *scheduledPublisher) Run(ctx context.Context) {
 	sp.log.Debug("starting scheduled publisher", "interval", sp.interval)
-	sp.wg.Add(1)
-	go func() {
-		defer sp.wg.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				sp.log.Error("scheduled publisher panicked", "panic", r)
-			}
-		}()
-		ticker := time.NewTicker(sp.interval)
-		defer ticker.Stop()
-
-		for {
-			select {
-			case <-ctx.Done():
-				sp.log.Debug("scheduled publisher stopped")
-				return
-			case <-ticker.C:
-				sp.publishDue(ctx)
-			}
+	defer sp.log.Debug("scheduled publisher stopped")
+	defer func() {
+		if r := recover(); r != nil {
+			sp.log.Error("scheduled publisher panicked", "panic", r)
 		}
 	}()
+
+	ticker := time.NewTicker(sp.interval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			sp.publishDue(ctx)
+		}
+	}
 }
 
-// Wait blocks until the background goroutine exits. Called by
-// MessageHandler.beginShutdown after cancel, to guarantee no in-flight
-// Redis operation remains when the process tears down the client via
-// internalredis.Close.
-//
-// The goroutine exits as soon as its select observes ctx.Done() — but if
-// it's mid-publishDue (a Redis ZRANGEBYSCORE plus per-message HGET plus
-// the Lua EVAL), Wait blocks until that whole batch completes. That's the
-// point: shutdown cannot proceed until the last Redis op is done.
-func (sp *ScheduledPublisher) Wait() {
-	sp.wg.Wait()
-}
-
-func (sp *ScheduledPublisher) publishDue(ctx context.Context) {
+func (sp *scheduledPublisher) publishDue(ctx context.Context) {
 	qKey := keys.Queue{
 		Namespace: sp.queue.NS(),
 		Name:      sp.queue.Name(),
@@ -161,7 +167,7 @@ func (sp *ScheduledPublisher) publishDue(ctx context.Context) {
 //     between when the message was scheduled and when its delivery was
 //     due. A Pub/Sub message whose group is gone has nowhere to go —
 //     dead-lettering makes the loss visible instead of orphaning it.
-func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope, consumerGroupID string) {
+func (sp *scheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope, consumerGroupID string) {
 	pendingKey := qKey.Pending()
 	priorityKey := qKey.Priority()
 	if consumerGroupID != "" {
@@ -308,6 +314,13 @@ func (sp *ScheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 		GroupID:     consumerGroupID,
 	}
 	for _, publishedID := range publishedIDs {
+		// producer.messagePublished fires here (with empty ProducerID)
+		// because the scheduler is not a producer. This is the legacy
+		// signal that a scheduled message became pending. When
+		// scheduler.messagePublished is added (deferred per decision #2),
+		// it will fire alongside this call; subscribers can then choose
+		// which to consume. The producer event stays for backward
+		// compatibility with existing subscribers.
 		internalProducer.PublishMessagePublished(ctx, publishedID, queueParsed, "")
 	}
 }

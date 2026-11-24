@@ -36,6 +36,7 @@ import (
 	internalqueue "github.com/weyoss/go-redis-smq/internal/queue"
 	internalredis "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/util/logger"
+	internalworker "github.com/weyoss/go-redis-smq/internal/worker"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/eventbus"
@@ -51,9 +52,21 @@ var (
 	systemCtx context.Context
 	// systemStop cancels the root context.
 	systemStop context.CancelFunc
-	// purgeWorkerStop stops the background purge worker.
+
+	// purgeWorker is the process-scoped purge worker. Consumes
+	// PendingPurgeJobs and executes them one at a time. Started by Init,
+	// stopped by shutdownLocked.
 	purgeWorkerStop func()
 	purgeWorker     *internalqueue.PurgeWorker
+
+	// workerCoordinator is the process-scoped coordinator for per-queue
+	// background workers (scheduled publisher, delayed requeuer, immediate
+	// requeuer, dead-consumer reaper, orphaned lock recoverer). It elects
+	// one holder per queue across the cluster via the WorkersLock lease,
+	// and spawns the five workers only for queues it holds. Started by
+	// Init, stopped by shutdownLocked.
+	workerCoordinatorStop func()
+	workerCoordinator     *internalworker.Coordinator
 
 	lifecycleMu sync.Mutex
 	initialized bool
@@ -101,16 +114,63 @@ func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interfa
 	return sub, nil
 }
 
+// initOptions holds the configurable parameters of Init. Built up by
+// applying InitOption values; zero values are always overridden by
+// defaults before use.
+type initOptions struct {
+	workerIntervals internalworker.Intervals
+}
+
+// InitOption configures Init. See WithWorkerIntervals.
+type InitOption func(*initOptions)
+
+// WithWorkerIntervals overrides the coordinator's cadence configuration.
+//
+// Intended for tests (see internalworker.TestIntervals) and for deployments
+// that need a different cadence than internalworker.DefaultIntervals. The
+// cadences govern:
+//
+//   - Reconcile: how often the coordinator scans AllQueues for new,
+//     removed, or lease-stale queues.
+//   - ScheduledPublisher, DelayedRequeuer, ImmediateRequeuer: how often
+//     the per-queue workers move due messages into pending.
+//   - Reaper: how often the dead-consumer reaper scans for consumers
+//     whose heartbeat has expired.
+//   - LockRecoverer: how often the orphaned-lock recoverer scans for
+//     queues locked by a purge worker that has since died.
+//   - LeaseTTL, LeaseRefresh: the per-queue WorkersLock lifetime and
+//     refresh cadence. LeaseRefresh must be strictly less than LeaseTTL.
+//
+// Production deployments should leave this unset — DefaultIntervals
+// matches the historical hardcoded values.
+//
+// Invalid intervals (LeaseRefresh >= LeaseTTL, any interval <= 0) cause
+// Init to return an error before touching Redis or any runtime state.
+func WithWorkerIntervals(intervals internalworker.Intervals) InitOption {
+	return func(o *initOptions) {
+		o.workerIntervals = intervals
+	}
+}
+
 // Init initializes the RedisSMQ runtime with the given Redis client.
 //
 // The client must be a single-node Redis client (*redis.Client). Cluster and
 // ring clients are rejected because RedisSMQ relies on multi-key Lua scripts
 // that require all keys to reside on a single Redis node.
 //
-// It starts the internal system event bus, loads the
-// configuration, and launches background workers (such as the queue purge
-// worker). The provided context is used as the parent for all internal
-// operations; cancelling it triggers a graceful shutdown.
+// It starts the internal system event bus, loads the configuration, and
+// launches two process-scoped background workers:
+//
+//   - The queue purge worker: executes queue-purge jobs from
+//     PendingPurgeJobs, one at a time per process.
+//
+//   - The worker coordinator: for each live queue, elects one process
+//     across the cluster (via the per-queue WorkersLock) to run the five
+//     queue-scoped workers (scheduled publisher, delayed requeuer,
+//     immediate requeuer, dead-consumer reaper, orphaned lock recoverer).
+//
+// The provided context is used as the parent for all internal operations;
+// cancelling it triggers a graceful shutdown.
 //
 // Init is idempotent and can be called multiple times; subsequent calls
 // are no-ops.
@@ -118,13 +178,26 @@ func (a *userBusAdapter) Subscribe(handler func(eventName string, args []interfa
 // On failure, Init unwinds any partial initialization via shutdownLocked
 // before returning. The runtime is left in exactly the same state it was in
 // before the call — safe to retry with a fresh client (or a corrected
-// config). A precondition failure (wrong client type) returns before any
-// state is touched.
-func Init(ctx context.Context, client goredis.UniversalClient) error {
+// config). Precondition failures (wrong client type, invalid intervals)
+// return before any state is touched.
+func Init(ctx context.Context, client goredis.UniversalClient, opts ...InitOption) error {
 	// Precondition failure — nothing has been initialized, so there is
 	// nothing to unwind. Return the error without touching runtime state.
 	if _, ok := client.(*goredis.Client); !ok {
 		return fmt.Errorf("redissmq: only *redis.Client is supported; cluster and ring clients are not allowed")
+	}
+
+	// Resolve options before acquiring the lifecycle lock. Options are
+	// cheap to evaluate and this keeps the lock-free critical section
+	// (nothing needs the lock to compute a config) out of the locked path.
+	options := initOptions{
+		workerIntervals: internalworker.DefaultIntervals(),
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	if err := options.workerIntervals.Validate(); err != nil {
+		return fmt.Errorf("redissmq: %w", err)
 	}
 
 	lifecycleMu.Lock()
@@ -174,13 +247,20 @@ func Init(ctx context.Context, client goredis.UniversalClient) error {
 	purgeWorker = internalqueue.NewPurgeWorker(purgeManager)
 	purgeWorkerStop = purgeWorker.Start(systemCtx)
 
+	// Start the worker coordinator with the resolved cadences.
+	workerCoordinator = internalworker.NewCoordinatorWithIntervals(options.workerIntervals)
+	workerCoordinatorStop = workerCoordinator.Start(systemCtx)
+
 	go func() {
 		<-watchedCtx.Done()
 		shutdownIfCurrent(watchedGen)
 	}()
 
 	initialized = true
-	log.Info("RedisSMQ initialized successfully")
+	log.Info("RedisSMQ initialized successfully",
+		"reconcileInterval", options.workerIntervals.Reconcile,
+		"leaseTTL", options.workerIntervals.LeaseTTL,
+	)
 	return nil
 }
 
@@ -260,6 +340,18 @@ func shutdownLocked() {
 		log.Info("RedisSMQ shutting down...")
 	} else {
 		log.Debug("RedisSMQ rolling back partial initialization...")
+	}
+
+	// Stop the worker coordinator BEFORE the purge worker. The coordinator
+	// owns per-queue WorkersLock leases; releasing them cleanly means a
+	// subsequent process can elect workers immediately rather than waiting
+	// for TTL expiry. The purge worker runs independently (it holds a
+	// per-job lock, not the queue-level WorkersLock) and may be mid-purge;
+	// stopping it after the coordinator doesn't affect its job lifecycle.
+	if workerCoordinatorStop != nil {
+		workerCoordinatorStop()
+		workerCoordinatorStop = nil
+		workerCoordinator = nil
 	}
 
 	if purgeWorkerStop != nil {
