@@ -12,8 +12,10 @@ package ratelimit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	goredis "github.com/redis/go-redis/v9"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -117,6 +119,9 @@ func (s *Store) Clear(ctx context.Context, queueParams *publicqueue.Params) erro
 }
 
 // Get retrieves the current rate limit for a queue.
+//
+// Returns (nil, nil) only when the queue exists and has no rate limit
+// configured.
 func (s *Store) Get(ctx context.Context, queueParams *publicqueue.Params) (*publicqueue.RateLimitParams, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
@@ -126,6 +131,22 @@ func (s *Store) Get(ctx context.Context, queueParams *publicqueue.Params) (*publ
 	rateLimitJSON, err := redisClient.LoadHashField(ctx, key,
 		qSchema.RateLimit.Key(), "rate limit")
 	if err != nil {
+		// Not redis.Nil: a real transport / connection error. Propagate.
+		// Pre-fix swallowed this as (nil, nil), masking Redis outages as
+		// "no rate limit".
+		if !errors.Is(err, goredis.Nil) {
+			return nil, fmt.Errorf("get rate limit: %w", err)
+		}
+
+		// redis.Nil: field absent OR key absent. Distinguish.
+		exists, existsErr := redisClient.Client().Exists(ctx, key).Result()
+		if existsErr != nil {
+			return nil, fmt.Errorf("get rate limit: check queue exists: %w", existsErr)
+		}
+		if exists == 0 {
+			return nil, publicqueue.ErrNotFound
+		}
+		// Queue exists, no rate limit configured.
 		return nil, nil
 	}
 

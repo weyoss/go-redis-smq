@@ -12,6 +12,7 @@ package queue_test
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -236,5 +237,35 @@ func TestQueueRateLimit_InvalidParams(t *testing.T) {
 	_, err = queue.NewRateLimitParams(100, 500*time.Millisecond)
 	if err == nil {
 		t.Fatal("expected error for interval < 1s")
+	}
+}
+
+// TestQueueRateLimit_NotFound pins the ErrNotFound contract for a queue
+// that doesn't exist.
+func TestQueueRateLimit_NotFound(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-rate-nonexistent")
+	qm := redissmq.NewQueueManager()
+
+	// Queue does not exist — must be ErrNotFound, not (nil, nil).
+	got, err := qm.RateLimit(ctx, params)
+	if err == nil {
+		t.Fatalf("RateLimit on non-existent queue: expected ErrNotFound, got (%+v, nil)", got)
+	}
+	if !errors.Is(err, queue.ErrNotFound) {
+		t.Fatalf("RateLimit: err = %v, want ErrNotFound", err)
+	}
+
+	// Sanity: after creating the queue with no rate limit, must return
+	// (nil, nil) — the "no limit configured" case, which must remain
+	// distinct from the "no queue" case.
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	got, err = qm.RateLimit(ctx, params)
+	if err != nil {
+		t.Fatalf("RateLimit on existing queue: %v", err)
+	}
+	if got != nil {
+		t.Fatalf("RateLimit on existing queue with no limit: got %+v, want nil", got)
 	}
 }
