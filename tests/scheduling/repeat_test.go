@@ -11,6 +11,7 @@
 package scheduling_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -85,20 +86,21 @@ func TestRepeat_WithDelay(t *testing.T) {
 	}
 }
 
-// Scenario: Repeat count of 0 means indefinite
-func TestRepeat_Indefinite(t *testing.T) {
-	ctx := testutil.Setup(t)
+// Scenario: SetScheduledRepeat(0) delivers the message exactly once.
+func TestRepeat_ZeroMeansSingleDelivery(t *testing.T) {
+	ctx, cancel := context.WithTimeout(testutil.Setup(t), 15*time.Second)
+	defer cancel()
 
-	params := publicqueue.MustQueueParams("test-repeat-indefinite")
+	params := publicqueue.MustQueueParams("test-repeat-zero-single")
 	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
 
 	prod := testutil.StartProducer(t, ctx)
 
 	m := msg.New().
-		SetBody("indefinite").
+		SetBody("single-delivery").
 		SetQueue(params).
-		SetScheduledRepeat(0). // Indefinite
-		SetScheduledRepeatPeriod(60 * time.Second)
+		SetScheduledRepeat(0).                     // zero = no repeats
+		SetScheduledRepeatPeriod(60 * time.Second) // ignored: 0 repeat governs
 
 	ids, err := prod.Produce(ctx, m)
 	if err != nil {
@@ -108,9 +110,88 @@ func TestRepeat_Indefinite(t *testing.T) {
 		t.Fatalf("expected 1 message ID, got %d", len(ids))
 	}
 
-	props, _ := redissmq.NewQueueManager().Properties(ctx, params)
+	// ── Produce-time ──
+	// Repeat count 0 makes the envelope non-schedulable, so
+	// NextScheduledTimestamp returns 0 and the message is published as
+	// Pending immediately — not deferred into the scheduled set.
+	status, err := redissmq.NewMessageManager().Status(ctx, ids[0])
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if status != msg.StatusPending {
+		t.Errorf("status = %s, want PENDING "+
+			"(0-repeat must deliver immediately, not enter the scheduled set)",
+			status)
+	}
+
+	props, err := redissmq.NewQueueManager().Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties: %v", err)
+	}
+	if props.PendingMessagesCount != 1 {
+		t.Errorf("pending = %d, want 1", props.PendingMessagesCount)
+	}
+	if props.ScheduledMessagesCount != 0 {
+		t.Errorf("scheduled = %d, want 0 (no repeat cycle means no scheduled entry)",
+			props.ScheduledMessagesCount)
+	}
+
+	// ── Consume-time ──
+	var receivedMsg *msg.Transferable
+	receivedCh := make(chan *msg.Transferable, 10)
+	cons := redissmq.NewConsumer()
+	cons.Consume(params, func(ctx context.Context, m *msg.Transferable) error {
+		receivedCh <- m
+		return nil
+	})
+	if err := cons.Run(ctx); err != nil {
+		t.Fatalf("run consumer: %v", err)
+	}
+	defer cons.Shutdown()
+
+	select {
+	case receivedMsg = <-receivedCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout: message was not delivered")
+	}
+
+	// ScheduledRepeatCount tracks how many repeat ticks have fired. If
+	// the repeat path were engaged (even "indefinitely"), this would be
+	// > 0 after the first delivery. It must stay 0.
+	if receivedMsg.MessageState.ScheduledRepeatCount != 0 {
+		t.Errorf("ScheduledRepeatCount = %d, want 0 "+
+			"(message must not enter the repeat cycle)",
+			receivedMsg.MessageState.ScheduledRepeatCount)
+	}
+	// Single delivery means exactly one checkout — attempts == 1.
+	if receivedMsg.MessageState.Attempts != 1 {
+		t.Errorf("Attempts = %d, want 1 (single delivery, no retries)",
+			receivedMsg.MessageState.Attempts)
+	}
+
+	// ── Post-consume ──
+	// Any repeat tick would either push a clone into Scheduled (visible
+	// via ScheduledMessagesCount) or into Pending (visible as a second
+	// handler invocation). A short settle window catches anomalies that
+	// fire immediately; the counter checks below catch anything that
+	// lands after the window.
+	select {
+	case extra := <-receivedCh:
+		t.Fatalf("unexpected second delivery (id=%s); "+
+			"0-repeat must deliver exactly once", extra.ID)
+	case <-time.After(2 * time.Second):
+	}
+
+	props, err = redissmq.NewQueueManager().Properties(ctx, params)
+	if err != nil {
+		t.Fatalf("properties (post-consume): %v", err)
+	}
+	if props.ScheduledMessagesCount != 0 {
+		t.Errorf("scheduled after consume = %d, want 0", props.ScheduledMessagesCount)
+	}
 	if props.MessagesCount != 1 {
-		t.Errorf("messages = %d, want 1", props.MessagesCount)
+		t.Errorf("total messages = %d, want 1 (no repeat clone spawned)",
+			props.MessagesCount)
 	}
 }
 
