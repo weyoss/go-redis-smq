@@ -41,8 +41,6 @@ type BatchUnacker struct {
 	cfg            consumer.BatchConfig
 	buffer         []unackEntry
 	timer          *time.Timer
-	ctx            context.Context
-	cancel         context.CancelFunc
 	unacknowledger *MessageUnacknowledger
 	wg             sync.WaitGroup // tracks in-flight unacknowledge goroutines
 	log            *slog.Logger
@@ -62,8 +60,7 @@ func NewBatchUnacker(queue *queue.Params, groupID, consumerID string, cfg consum
 }
 
 // Run starts the batch unacker.
-func (bu *BatchUnacker) Run(ctx context.Context) {
-	bu.ctx, bu.cancel = context.WithCancel(ctx)
+func (bu *BatchUnacker) Run() {
 	bu.log.Debug("batch unacker started",
 		"enabled", bu.cfg.Enabled,
 		"batchSize", bu.cfg.BatchSize,
@@ -112,10 +109,6 @@ func (bu *BatchUnacker) Shutdown() {
 	defer bu.mu.Unlock()
 
 	bu.log.Debug("shutting down batch unacker", "pending", len(bu.buffer))
-
-	if bu.cancel != nil {
-		bu.cancel()
-	}
 
 	if bu.timer != nil {
 		bu.timer.Stop()

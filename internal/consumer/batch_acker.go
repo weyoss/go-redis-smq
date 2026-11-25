@@ -39,8 +39,6 @@ type BatchAcker struct {
 	cfg            consumer.BatchConfig
 	buffer         []string
 	timer          *time.Timer
-	ctx            context.Context
-	cancel         context.CancelFunc
 	wg             sync.WaitGroup
 	unacknowledger *MessageUnacknowledger
 	log            *slog.Logger
@@ -59,8 +57,7 @@ func NewBatchAcker(queue *queue.Params, consumerID string, cfg consumer.BatchCon
 }
 
 // Run starts the batch acker. Must be called before Ack.
-func (ba *BatchAcker) Run(ctx context.Context) {
-	ba.ctx, ba.cancel = context.WithCancel(ctx)
+func (ba *BatchAcker) Run() {
 	ba.log.Debug("batch acker started",
 		"enabled", ba.cfg.Enabled,
 		"batchSize", ba.cfg.BatchSize,
@@ -108,10 +105,6 @@ func (ba *BatchAcker) Shutdown() {
 	defer ba.mu.Unlock()
 
 	ba.log.Debug("shutting down batch acker", "pending", len(ba.buffer))
-
-	if ba.cancel != nil {
-		ba.cancel()
-	}
 
 	if ba.timer != nil {
 		ba.timer.Stop()

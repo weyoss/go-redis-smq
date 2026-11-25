@@ -152,11 +152,11 @@ func (mh *MessageHandler) Run(ctx context.Context) error {
 	mh.log.Debug("subscribed to queue")
 
 	mh.batchAcker = NewBatchAcker(mh.queue, mh.consumerID, mh.options.BatchAcks)
-	mh.batchAcker.Run(mh.ctx)
+	mh.batchAcker.Run()
 	mh.log.Debug("batch acker started", "enabled", mh.options.BatchAcks.Enabled)
 
 	mh.batchUnacker = NewBatchUnacker(mh.queue, mh.groupID, mh.consumerID, mh.options.BatchUnacks)
-	mh.batchUnacker.Run(mh.ctx)
+	mh.batchUnacker.Run()
 	mh.log.Debug("batch unacker started", "enabled", mh.options.BatchUnacks.Enabled)
 
 	mh.dequeuer = NewDequeueMessage(mh.queue, mh.groupID, mh.consumerID)
