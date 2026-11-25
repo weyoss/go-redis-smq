@@ -239,3 +239,30 @@ func TestPurgeErrors_ReturnCodeSemantics(t *testing.T) {
 		assertReports(t, err, "cancel", "completed")
 	})
 }
+
+// Scenario: Enqueue rejects unpurgeable filters synchronously and
+// leaves the queue in its original state.
+func TestError_EnqueueUnsupportedFilter(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := publicqueue.MustQueueParams("test-error-unsupported-filter")
+	testutil.CreateQueue(t, ctx, params, publicqueue.TypeFIFO, publicqueue.DeliveryPointToPoint)
+
+	qm := redissmq.NewQueueManager()
+	_, err := qm.PurgeQueue(ctx, params, publicqueue.BrowsePublished)
+	if err == nil {
+		t.Fatal("expected error: BrowsePublished is not purgeable")
+	}
+
+	// The queue must NOT have been locked. Pre-fix, the lock was
+	// acquired before the async failure surfaced.
+	sm := redissmq.NewStateManager()
+	transition, err := sm.Current(ctx, params)
+	if err != nil {
+		t.Fatalf("current: %v", err)
+	}
+	if transition.To != publicqueue.StateActive {
+		t.Errorf("queue state = %v, want ACTIVE "+
+			"(enqueue must fail before lock acquisition)", transition.To)
+	}
+}

@@ -320,20 +320,40 @@ func (pm *PurgeManager) unlockQueue(
 	}
 }
 
-// validateFilter checks that the message category is eligible for purge.
+// validateFilter rejects filters that cannot be purged.
+//
+// Purgeable filters are Pending, Scheduled, Acknowledged, and
+// DeadLettered — each maps to a Redis structure holding that category's
+// message IDs (see resolveCategoryKey). BrowsePublished maps to the
+// queue's all-messages index, not a single category: an item in that
+// list is a secondary index into a primary category, so "purge
+// published" would mean "delete every message regardless of state" —
+// a different operation, not supported by the purge-job model.
+//
+// Rejecting unsupported filters here (before lock acquisition and
+// enqueue) avoids the pre-fix flow: lock the queue → enqueue the job
+// → the worker's purgeMessages hits resolveCategoryKey's empty-string
+// return → the job fails asynchronously, and the queue stays LOCKED
+// until the failure path or the orphaned-lock recoverer unlocks it.
 func (pm *PurgeManager) validateFilter(filter publicqueue.BrowseFilter) error {
 	cfg := config.Get()
 	switch filter {
+	case publicqueue.BrowsePending, publicqueue.BrowseScheduled:
+		// Always purgeable — no audit gate.
+		return nil
 	case publicqueue.BrowseAcknowledged:
 		if !cfg.MessageAudit.AcknowledgedMessages.Enabled {
 			return fmt.Errorf("purge: %w", publicqueue.ErrAuditDisabled)
 		}
+		return nil
 	case publicqueue.BrowseDeadLettered:
 		if !cfg.MessageAudit.DeadLetteredMessages.Enabled {
 			return fmt.Errorf("purge: %w", publicqueue.ErrAuditDisabled)
 		}
+		return nil
+	default:
+		return fmt.Errorf("purge: filter %d is not purgeable", filter)
 	}
-	return nil
 }
 
 // recoverStuckJobs checks for jobs whose worker is no longer alive and re-queues them.
