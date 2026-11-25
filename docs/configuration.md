@@ -70,7 +70,7 @@ import "github.com/weyoss/go-redis-smq/pkg/config"
 cfg := config.Get()
 
 // Get the default namespace used by queue/exchange constructors
-ns := config.DefaultNamespace()
+ns := config.Get().Namespace
 ```
 
 ## Configuration Options

@@ -17,7 +17,7 @@ import (
 qm := redissmq.NewQueueManager()
 ```
 
-The queue manager implements the public `queue.QueueManager` interface and is used for all rate limiting operations.
+The queue manager implements the public `queue.Manager` interface and is used for all rate limiting operations.
 
 ## Quick Start
 

@@ -13,7 +13,7 @@ import (
     "github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
-qm := redissmq.NewQueueManager()          // returns queue.QueueManager
+qm := redissmq.NewQueueManager()          // returns queue.Manager
 sm := redissmq.NewStateManager()          // returns queue.StateManager
 cgm := redissmq.NewConsumerGroupManager() // returns queue.ConsumerGroupManager
 ```
