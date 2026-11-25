@@ -14,6 +14,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -220,11 +221,21 @@ func (r *PubSubTargetResolver) Clear() {
 // publish to queue-level Pending) from "queue is Pub/Sub but has zero groups"
 // (isPubSub=true, groups empty — caller must reject: publishing to
 // queue-level Pending would orphan the message).
+//
+// The returned slice is a private copy. Callers iterate it without holding
+// r.mu; Remove mutates r.targets[key] in place (append(groups[:i],
+// groups[i+1:]...) shifts elements left), so returning the internal slice
+// would let a concurrent group deletion corrupt the caller's iteration —
+// dispatching to the wrong group and silently skipping another. One small
+// allocation per Resolve, dwarfed by the dispatch's Redis round-trip.
 func (r *PubSubTargetResolver) Resolve(queueParams *queue.Params) (groups []string, isPubSub bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	groups, ok := r.targets[queueParams.String()]
-	return groups, ok
+	if !ok {
+		return nil, false
+	}
+	return slices.Clone(groups), true
 }
 
 func (r *PubSubTargetResolver) Add(queueParams *queue.Params, groupID string) {
