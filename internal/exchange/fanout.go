@@ -92,7 +92,7 @@ func (fs *FanoutStore) BindQueue(
 	}
 
 	txf := func(tx *redis.Tx) error {
-		_, err := fs.validator.ValidateQueueBinding(ctx, exchangeParams, queueParams)
+		policy, err := fs.validator.PolicyForBinding(ctx, exchangeParams, queueParams)
 		if err != nil {
 			return err
 		}
@@ -108,11 +108,10 @@ func (fs *FanoutStore) BindQueue(
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, exKey.Properties(),
 				exSchema.Type.Key(), exchangeParams.Type().Int(),
+				exSchema.Policy.Key(), policy.Int(),
 			)
-
 			pipe.SAdd(ctx, keys.System{}.AllExchanges(), exchangeStr)
 			pipe.SAdd(ctx, keys.Namespace{Name: exchangeParams.Namespace()}.Exchanges(), exchangeStr)
-
 			pipe.SAdd(ctx, exKey.FanoutQueues(), queueStr)
 			pipe.SAdd(ctx, qKey.ExchangeBindings(), exchangeStr)
 			return nil

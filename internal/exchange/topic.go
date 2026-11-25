@@ -100,7 +100,7 @@ func (ts *TopicStore) BindQueue(
 	}
 
 	txf := func(tx *redis.Tx) error {
-		_, err := ts.validator.ValidateQueueBinding(ctx, exchangeParams, queueParams)
+		policy, err := ts.validator.PolicyForBinding(ctx, exchangeParams, queueParams)
 		if err != nil {
 			return err
 		}
@@ -116,6 +116,7 @@ func (ts *TopicStore) BindQueue(
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, exKey.Properties(),
 				exSchema.Type.Key(), exchangeParams.Type().Int(),
+				exSchema.Policy.Key(), policy.Int(),
 			)
 
 			pipe.SAdd(ctx, keys.System{}.AllExchanges(), exchangeStr)

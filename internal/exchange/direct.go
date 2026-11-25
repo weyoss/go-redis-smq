@@ -87,7 +87,7 @@ func (ds *DirectStore) BindQueue(
 	}
 
 	txf := func(tx *redis.Tx) error {
-		_, err := ds.validator.ValidateQueueBinding(ctx, exchangeParams, queueParams)
+		policy, err := ds.validator.PolicyForBinding(ctx, exchangeParams, queueParams)
 		if err != nil {
 			return err
 		}
@@ -103,11 +103,10 @@ func (ds *DirectStore) BindQueue(
 		_, err = tx.TxPipelined(ctx, func(pipe redis.Pipeliner) error {
 			pipe.HSet(ctx, exKey.Properties(),
 				exSchema.Type.Key(), exchangeParams.Type().Int(),
+				exSchema.Policy.Key(), policy.Int(),
 			)
-
 			pipe.SAdd(ctx, keys.System{}.AllExchanges(), exchangeStr)
 			pipe.SAdd(ctx, keys.Namespace{Name: exchangeParams.Namespace()}.Exchanges(), exchangeStr)
-
 			pipe.SAdd(ctx, exKey.RoutingKeys(), routingKey)
 			pipe.SAdd(ctx, exKey.RoutingKeyQueues(routingKey), queueStr)
 			pipe.SAdd(ctx, qKey.ExchangeBindings(), exchangeStr)

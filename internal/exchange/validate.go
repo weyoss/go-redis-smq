@@ -64,25 +64,79 @@ func (v *Validator) ValidateQueueBinding(
 	exchangeProps, err := v.store.Load(ctx, params)
 	if err != nil {
 		if errors.Is(err, pubexchange.ErrNotFound) {
-			// Exchange doesn't exist yet - this is valid for new bindings
-			// The exchange will be created when the first binding is established
+			// Exchange doesn't exist yet — valid for new bindings. The
+			// exchange will be created when the first binding is
+			// established.
 			return nil, nil
 		}
 		return nil, fmt.Errorf("validate binding: load exchange: %w", err)
 	}
 
-	// Validate exchange type matches the expected type
-	// Prevents binding a queue to the wrong type of exchange
+	// Validate exchange type matches the expected type.
+	// Prevents binding a queue to the wrong type of exchange.
 	if exchangeProps.Type != params.Type() {
 		return nil, pubexchange.ErrTypeMismatch
 	}
 
-	// Validate queue type satisfies the exchange's queue policy
+	// Validate queue type satisfies the exchange's queue policy.
 	if err := checkPolicy(exchangeProps, queueProps.Type); err != nil {
 		return nil, err
 	}
 
 	return exchangeProps, nil
+}
+
+// PolicyForBinding validates a queue→exchange bind and returns the policy
+// to persist alongside the exchange type.
+//
+// On the auto-create path (exchange doesn't exist yet), the policy is
+// derived from the queue type — this is what makes a priority-first bind
+// produce a PolicyPriority exchange instead of the zero-value
+// PolicyStandard. On subsequent binds, the stored policy is validated
+// against the queue and returned.
+//
+// Callers use the returned policy in the same HSet that writes the type,
+// so the auto-create path is a single atomic write.
+func (v *Validator) PolicyForBinding(
+	ctx context.Context,
+	params *pubexchange.Params,
+	queueParams *publicqueue.Params,
+) (pubexchange.Policy, error) {
+	queueProps, err := v.queueStore.Load(ctx, queueParams)
+	if err != nil {
+		return 0, fmt.Errorf("validate binding: load queue: %w", err)
+	}
+
+	exchangeProps, err := v.store.Load(ctx, params)
+	if err != nil {
+		if errors.Is(err, pubexchange.ErrNotFound) {
+			// Exchange doesn't exist yet — auto-create. Derive the policy
+			// from the first binder's queue type.
+			return policyForQueueType(queueProps.Type), nil
+		}
+		return 0, fmt.Errorf("validate binding: load exchange: %w", err)
+	}
+
+	if exchangeProps.Type != params.Type() {
+		return 0, pubexchange.ErrTypeMismatch
+	}
+
+	if err := checkPolicy(exchangeProps, queueProps.Type); err != nil {
+		return 0, err
+	}
+
+	return exchangeProps.Policy, nil
+}
+
+// policyForQueueType returns the exchange policy compatible with the
+// given queue type. Used when auto-creating an exchange on first bind,
+// so the auto-created exchange's policy matches the first binder's queue
+// type. Mirrors the inverse of checkPolicy.
+func policyForQueueType(qType publicqueue.Type) pubexchange.Policy {
+	if qType == publicqueue.TypePriority {
+		return pubexchange.PolicyPriority
+	}
+	return pubexchange.PolicyStandard
 }
 
 // checkPolicy verifies a queue type satisfies the exchange's queue policy.
@@ -94,12 +148,12 @@ func (v *Validator) ValidateQueueBinding(
 func checkPolicy(props *pubexchange.Props, queueType publicqueue.Type) error {
 	switch props.Policy {
 	case pubexchange.PolicyStandard:
-		// Standard exchanges require FIFO or LIFO queues
+		// Standard exchanges require FIFO or LIFO queues.
 		if queueType != publicqueue.TypeFIFO && queueType != publicqueue.TypeLIFO {
 			return pubexchange.ErrPolicyViolation
 		}
 	case pubexchange.PolicyPriority:
-		// Priority exchanges require Priority queues
+		// Priority exchanges require Priority queues.
 		if queueType != publicqueue.TypePriority {
 			return pubexchange.ErrPolicyViolation
 		}

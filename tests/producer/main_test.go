@@ -8,7 +8,7 @@
  *
  */
 
-package producer
+package producer_test
 
 import (
 	"testing"
