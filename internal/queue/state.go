@@ -13,9 +13,12 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"time"
+
+	goredis "github.com/redis/go-redis/v9"
 
 	queueEvents "github.com/weyoss/go-redis-smq/internal/queue/events"
 	"github.com/weyoss/go-redis-smq/internal/queue/schema"
@@ -46,7 +49,10 @@ func (s *State) FetchCurrent(
 	client := redisClient.Client()
 
 	raw, err := client.HGet(ctx, propsKey, schema.OperationalState.Key()).Result()
-	if err != nil {
+	switch {
+	case err == nil:
+		// field present, raw holds the value — fall through
+	case errors.Is(err, goredis.Nil):
 		exists, existsErr := client.Exists(ctx, propsKey).Result()
 		if existsErr != nil {
 			return nil, existsErr
@@ -54,6 +60,11 @@ func (s *State) FetchCurrent(
 		if exists == 0 {
 			return nil, publicqueue.ErrNotFound
 		}
+		// Hash exists but field missing. Every Lua script that reads
+		// this field defaults to ACTIVE — see checkout-message.lua,
+		// set-queue-state.lua, subscribe-consumer.lua. Legacy hashes
+		// can lack it. Falls through with raw == "" (HGet's contract).
+	default:
 		return nil, err
 	}
 
