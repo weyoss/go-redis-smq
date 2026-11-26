@@ -1,16 +1,13 @@
+version: "2"
+
 linters:
   enable:
     # currently enabled
     - errcheck
-    - gosimple
     - govet
     - ineffassign
-    - staticcheck
+    - staticcheck    # gosimple and stylecheck are now merged into staticcheck in v2
     - unused
-
-    # formatting & imports
-    - gofmt
-    - goimports
 
     # style and best practices
     - revive           # drop-in replacement for golint, configurable
@@ -21,16 +18,28 @@ linters:
     - unconvert        # unnecessary type conversions
     - whitespace       # unnecessary blank lines
 
-issues:
-  exclude-rules:
-    - path: internal/testutil/
-      linters:
-        - revive
-      text: "context-as-argument" # In test helpers, it’s common to have testing.TB first
-  exclude:
-    - "SA1019" # ZRangeByScore/BRPopLPush/RPopLPush is deprecated
-  exclude-dirs:
-    - tests
-    - benchmark
+  exclusions:
+    rules:
+      - path: internal/testutil/
+        linters:
+          - revive
+        text: "context-as-argument" # In test helpers, it's common to have testing.TB first
 
+      # Replaces the old top-level `issues.exclude` for SA1019
+      - linters:
+          - staticcheck
+        text: "SA1019" # ZRangeByScore/BRPopLPush/RPopLPush is deprecated
 
+    paths:
+      - tests
+      - benchmark
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+
+  exclusions:
+    paths:
+      - tests
+      - benchmark
