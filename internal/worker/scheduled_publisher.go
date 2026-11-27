@@ -20,7 +20,6 @@ import (
 	"github.com/redis/go-redis/v9"
 	internalMessage "github.com/weyoss/go-redis-smq/internal/message"
 	"github.com/weyoss/go-redis-smq/internal/message/schema"
-	internalProducer "github.com/weyoss/go-redis-smq/internal/producer"
 	qSchema "github.com/weyoss/go-redis-smq/internal/queue/schema"
 	redisClient "github.com/weyoss/go-redis-smq/internal/redis"
 	"github.com/weyoss/go-redis-smq/internal/redis/keys"
@@ -298,31 +297,24 @@ func (sp *scheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 		return
 	}
 
+	queueParsed := queue.ParsedParams{
+		QueueParams: *sp.queue,
+		GroupID:     consumerGroupID,
+	}
+
 	if len(deadLetteredIDs) > 0 {
 		sp.log.Warn("scheduled messages dead-lettered during publication "+
 			"(consumer group no longer exists)",
 			"count", len(deadLetteredIDs),
 			"group", consumerGroupID,
 		)
+		for _, deadLetteredID := range deadLetteredIDs {
+			PublishMessageDeadLettered(ctx, deadLetteredID, queueParsed)
+		}
 	}
 
-	if len(publishedIDs) == 0 {
-		return
-	}
-
-	queueParsed := queue.ParsedParams{
-		QueueParams: *sp.queue,
-		GroupID:     consumerGroupID,
-	}
 	for _, publishedID := range publishedIDs {
-		// producer.messagePublished fires here (with empty ProducerID)
-		// because the scheduler is not a producer. This is the legacy
-		// signal that a scheduled message became pending. When
-		// scheduler.messagePublished is added (deferred per decision #2),
-		// it will fire alongside this call; subscribers can then choose
-		// which to consume. The producer event stays for backward
-		// compatibility with existing subscribers.
-		internalProducer.PublishMessagePublished(ctx, publishedID, queueParsed, "")
+		PublishMessagePublished(ctx, publishedID, queueParsed)
 	}
 }
 

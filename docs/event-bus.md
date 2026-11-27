@@ -45,13 +45,56 @@ func main() {
 
 Subscription functions are exposed directly in the domain packages:
 
-| Package        | Events                                     |
-|----------------|--------------------------------------------|
-| `pkg/queue`    | Queue lifecycle and state changes          |
-| `pkg/consumer` | Consumer lifecycle and message processing  |
-| `pkg/producer` | Producer lifecycle and message publication |
+| Package         | Events                                     |
+|-----------------|--------------------------------------------|
+| `pkg/queue`     | Queue lifecycle and state changes          |
+| `pkg/consumer`  | Consumer lifecycle and message processing  |
+| `pkg/producer`  | Producer lifecycle and message publication |
+| `pkg/scheduler` | Scheduled-message fire-time events         |
 
 All subscription functions return a `publiceventbus.Subscription`. Call `Unsubscribe()` when you no longer need events.
+
+## Event Taxonomy
+
+Messages travel through the system in two flows, and the public events reflect that split:
+
+| Flow      | Produce-time event          | Fire-time event(s)                                                          |
+|-----------|-----------------------------|-----------------------------------------------------------------------------|
+| Immediate | `producer.messagePublished` | *(none — the message is pending as soon as it is produced)*                 |
+| Scheduled | `producer.messageScheduled` | `scheduler.messagePublished` **or** `scheduler.messageDeadLettered`         |
+
+The **producer** events fire when `Produce` succeeds. One event per destination queue, multiplied by the number of consumer groups for Pub/Sub destinations — matching the number of IDs `Produce` returns.
+
+The **scheduler** events fire later, whenever the scheduled message becomes due. That may be milliseconds after produce, hours later, or never (if the message is cancelled, deleted, or the queue is dropped before its due time).
+
+> ⚠️ **Breaking change.** `producer.messagePublished` no longer fires for scheduled messages becoming pending. Subscribers that relied on that signal (the pre-change scheduled publisher fired `producer.messagePublished` with an empty `producerID`) should migrate to `scheduler.SubscribeMessagePublished`. No other event's semantics changed.
+
+### Full lifecycle of a scheduled message
+
+For a repeating scheduled message with `repeat = 2`, the event sequence is:
+
+```
+producer.messageScheduled         ← Produce returns
+  ↓  (repeat tick 1: clone published)
+scheduler.messagePublished        ← clone's ID
+  ↓  (repeat tick 2: clone published)
+scheduler.messagePublished        ← another clone's ID
+  ↓  (repeat limit reached; parent's cycle ends)
+  (no more events — nothing to deliver)
+```
+
+For a simple (non-repeating) scheduled message that becomes due:
+
+```
+producer.messageScheduled         ← Produce returns
+  ↓  (delay elapses)
+scheduler.messagePublished        ← the message's own ID
+  ↓  (consumer processes)
+consumer.messageReceived
+consumer.messageAcknowledged      ← or Unacknowledged / DeadLettered / etc.
+```
+
+If the target consumer group on a Pub/Sub queue is deleted before the message's due time, the fire-time event is `scheduler.messageDeadLettered` instead of `scheduler.messagePublished`.
 
 ## Available Events
 
@@ -162,22 +205,99 @@ Payload:
 
 #### `producer.messagePublished`
 
-Fires when a message is published to a queue or via an exchange.
+Fires when an **immediate** (non-scheduled) produce succeeds — one event per destination queue, multiplied by the number of consumer groups for Pub/Sub destinations.
+
+Does **not** fire for scheduled produces; see `producer.messageScheduled` below.
 
 ```go
 sub, _ := producer.SubscribeMessagePublished(func(p producer.MessagePublishedPayload) {
     fmt.Printf("Message %s published to %s by %s\n",
-        p.MessageID, p.Queue.Name(), p.ProducerID)
+        p.MessageID, p.Queue.QueueParams.Name(), p.ProducerID)
 })
 ```
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ProducerID` | `string`       |
+| Field          | Type                 | Description                                                                          |
+|----------------|----------------------|--------------------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                                           |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` (name, ns) + `GroupID` (empty for point-to-point)                      |
+| `p.ProducerID` | `string`             | Producer ID                                                                          |
+
+#### `producer.messageScheduled`
+
+Fires when a **scheduled** produce succeeds — one event per destination queue, multiplied by the number of consumer groups for Pub/Sub destinations. The message has entered the scheduled set; its due time is set (delay, CRON, repeat) but not yet reached.
+
+Does **not** fire for immediate produces; see `producer.messagePublished` above.
+
+```go
+sub, _ := producer.SubscribeMessageScheduled(func(p producer.MessageScheduledPayload) {
+    fmt.Printf("Message %s scheduled on %s by %s\n",
+        p.MessageID, p.Queue.QueueParams.Name(), p.ProducerID)
+})
+```
+
+Payload:
+
+| Field          | Type                 | Description                                                                          |
+|----------------|----------------------|--------------------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                                           |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` (name, ns) + `GroupID` (empty for point-to-point)                      |
+| `p.ProducerID` | `string`             | Producer ID                                                                          |
+
+For a repeating message, this fires once — for the parent. The clones created by subsequent repeat ticks each fire `scheduler.messagePublished` (see below), not `producer.messageScheduled`.
+
+### Scheduler Events
+
+Scheduler events fire when a scheduled message becomes due. They do **not** carry a `ProducerID` — the scheduler is not a producer, and by the time a message's due time arrives the originating producer may have long since shut down.
+
+#### `scheduler.messagePublished`
+
+Fires when the scheduled publisher moves a due scheduled message into a pending list, ready for consumption. One event per published ID.
+
+For a simple (non-repeating) scheduled message, `MessageID` is the message's own ID (as returned by the original `Produce` call).
+
+For a repeating message, `MessageID` is the **clone's** ID — the parent stays in the scheduled set for its next tick, so `scheduler.messagePublished` fires once per clone, not for the parent.
+
+```go
+import "github.com/weyoss/go-redis-smq/pkg/scheduler"
+
+sub, _ := scheduler.SubscribeMessagePublished(func(p scheduler.MessagePublishedPayload) {
+    fmt.Printf("Message %s now pending on %s\n",
+        p.MessageID, p.Queue.QueueParams.Name())
+})
+```
+
+Payload:
+
+| Field         | Type                 | Description                                                              |
+|---------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID` | `string`             | Message ID (simple) or clone ID (repeating)                              |
+| `p.Queue`     | `queue.ParsedParams` | `QueueParams` (name, ns) + `GroupID` (empty for point-to-point)          |
+
+#### `scheduler.messageDeadLettered`
+
+Fires when a due scheduled message could not be delivered because its target consumer group no longer exists.
+
+On a Pub/Sub queue, a message is bound to a specific consumer group at produce time. If that group is deleted between produce and the message's due time, there is nowhere for the message to go — the scheduled publisher dead-letters it instead of orphaning it.
+
+For a **simple** scheduled message, the message itself is dead-lettered and `MessageID` is the message's own ID.
+
+For a **repeating** scheduled message, the parent is dead-lettered to terminate its cycle; the would-be clone for the current firing is discarded. `MessageID` is the parent's ID.
+
+```go
+sub, _ := scheduler.SubscribeMessageDeadLettered(func(p scheduler.MessageDeadLetteredPayload) {
+    fmt.Printf("Message %s dead-lettered on %s (group %q gone)\n",
+        p.MessageID, p.Queue.QueueParams.Name(), p.Queue.GroupID)
+})
+```
+
+Payload:
+
+| Field         | Type                 | Description                                                              |
+|---------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID` | `string`             | Message ID (simple) or parent ID (repeating)                             |
+| `p.Queue`     | `queue.ParsedParams` | `QueueParams` (name, ns) + `GroupID` (the deleted group's ID)            |
 
 ### Consumer Events
 
@@ -209,11 +329,11 @@ sub, _ := consumer.SubscribeMessageReceived(func(p consumer.MessageReceivedPaylo
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ConsumerID` | `string`       |
+| Field          | Type                 | Description                                                              |
+|----------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                               |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` + effective `GroupID` (empty for point-to-point)           |
+| `p.ConsumerID` | `string`             | Consumer ID                                                              |
 
 #### `consumer.messageAcknowledged`
 
@@ -227,11 +347,11 @@ sub, _ := consumer.SubscribeMessageAcknowledged(func(p consumer.MessagePayload) 
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ConsumerID` | `string`       |
+| Field          | Type                 | Description                                                              |
+|----------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                               |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` + effective `GroupID`                                      |
+| `p.ConsumerID` | `string`             | Consumer ID                                                              |
 
 #### `consumer.messageUnacknowledged`
 
@@ -245,12 +365,12 @@ sub, _ := consumer.SubscribeMessageUnacknowledged(func(p consumer.MessageUnackno
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ConsumerID` | `string`       |
-| `p.Cause`      | `int`          |
+| Field          | Type                 | Description                                                              |
+|----------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                               |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` + effective `GroupID`                                      |
+| `p.ConsumerID` | `string`             | Consumer ID                                                              |
+| `p.Cause`      | `int`                | A `consumer.UnacknowledgeCause` value (see `unacknowledge_cause.go`)     |
 
 #### `consumer.messageDeadLettered`
 
@@ -264,12 +384,12 @@ sub, _ := consumer.SubscribeMessageDeadLettered(func(p consumer.MessageDeadLette
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ConsumerID` | `string`       |
-| `p.Cause`      | `int`          |
+| Field          | Type                 | Description                                                              |
+|----------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                               |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` + effective `GroupID`                                      |
+| `p.ConsumerID` | `string`             | Consumer ID                                                              |
+| `p.Cause`      | `int`                | A `consumer.DeadLetterCause` value (see `deadletter_cause.go`)           |
 
 #### `consumer.messageRequeued`
 
@@ -283,11 +403,11 @@ sub, _ := consumer.SubscribeMessageRequeued(func(p consumer.MessagePayload) {
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ConsumerID` | `string`       |
+| Field          | Type                 | Description                                                              |
+|----------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                               |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` + effective `GroupID`                                      |
+| `p.ConsumerID` | `string`             | Consumer ID                                                              |
 
 #### `consumer.messageDelayed`
 
@@ -301,11 +421,11 @@ sub, _ := consumer.SubscribeMessageDelayed(func(p consumer.MessagePayload) {
 
 Payload:
 
-| Field          | Type           |
-|----------------|----------------|
-| `p.MessageID`  | `string`       |
-| `p.Queue`      | `queue.Params` |
-| `p.ConsumerID` | `string`       |
+| Field          | Type                 | Description                                                              |
+|----------------|----------------------|--------------------------------------------------------------------------|
+| `p.MessageID`  | `string`             | Message ID                                                               |
+| `p.Queue`      | `queue.ParsedParams` | `QueueParams` + effective `GroupID`                                      |
+| `p.ConsumerID` | `string`             | Consumer ID                                                              |
 
 ## Unsubscribing
 
@@ -328,4 +448,5 @@ RedisSMQ also uses an internal system bus for cross‑instance synchronisation. 
 - Keep handlers fast; they run synchronously.
 - Do not rely on events for critical data delivery; use message audit for persistent records.
 - Unsubscribe when subscriptions are no longer needed.
-- If you don’t need public events, you can ignore them entirely; the public bus is only started when you subscribe.
+- If you don't need public events, you can ignore them entirely; the public bus is only started when you subscribe.
+- When tracking a scheduled message end-to-end, subscribe to **both** `producer.SubscribeMessageScheduled` (produce-time) and `scheduler.SubscribeMessagePublished` / `SubscribeMessageDeadLettered` (fire-time). Neither package alone gives the full lifecycle.

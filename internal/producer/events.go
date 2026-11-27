@@ -21,6 +21,7 @@ const (
 	EventGoingUp          = "producer.goingUp"
 	EventGoingDown        = "producer.goingDown"
 	EventMessagePublished = "producer.messagePublished"
+	EventMessageScheduled = "producer.messageScheduled"
 )
 
 // ── Lifecycle payload ──

@@ -371,3 +371,54 @@ func TestProducerEvents_Unsubscribe(t *testing.T) {
 		t.Fatalf("expected still 1 event after unsubscribe, got %d", secondCount)
 	}
 }
+
+// Scenario: producer.messageScheduled fires when a scheduled produce
+// succeeds, replacing the pre-change silence for the scheduled branch.
+func TestProducerEvents_MessageScheduled(t *testing.T) {
+	ctx := testutil.Setup(t)
+
+	params := queue.MustQueueParams("test-events-msg-scheduled")
+	testutil.CreateQueue(t, ctx, params, queue.TypeFIFO, queue.DeliveryPointToPoint)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	var received publicProducer.MessageScheduledPayload
+	sub, err := publicProducer.SubscribeMessageScheduled(func(p publicProducer.MessageScheduledPayload) {
+		received = p
+		wg.Done()
+	})
+	if err != nil {
+		t.Fatalf("subscribe: %v", err)
+	}
+	defer sub.Unsubscribe()
+
+	prod := testutil.StartProducer(t, ctx)
+	ids, err := prod.Produce(ctx, msg.New().
+		SetBody("scheduled").
+		SetQueue(params).
+		SetScheduledDelay(1*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("produce: %v", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("timeout waiting for producer.messageScheduled")
+	}
+
+	if received.MessageID != ids[0] {
+		t.Errorf("messageID = %s, want %s", received.MessageID, ids[0])
+	}
+	if received.ProducerID == "" {
+		t.Error("producerID should not be empty")
+	}
+}

@@ -25,6 +25,7 @@ const (
 	EventGoingUp          = "producer.goingUp"
 	EventGoingDown        = "producer.goingDown"
 	EventMessagePublished = "producer.messagePublished"
+	EventMessageScheduled = "producer.messageScheduled"
 )
 
 // LifecyclePayload is the payload for producer.up / producer.down /
@@ -40,6 +41,25 @@ type LifecyclePayload struct {
 // consumer group ID.
 // For point-to-point queues, Queue.GroupID is empty.
 type MessagePublishedPayload struct {
+	MessageID  string
+	Queue      queue.ParsedParams
+	ProducerID string
+}
+
+// MessageScheduledPayload is the payload for producer.messageScheduled
+// events.
+//
+// Queue carries both the queue's (name, ns) identity and the effective
+// consumer group ID. For point-to-point queues, Queue.GroupID is empty.
+//
+// A scheduled produce fires this event at produce time (the message has
+// entered the scheduled set). The subsequent transition into a pending
+// list — whether it happens now or hours later — fires
+// scheduler.messagePublished instead (see pkg/scheduler). The pair is
+// symmetric: producer.messagePublished for immediate produces,
+// producer.messageScheduled for scheduled produces, and the scheduler
+// package reports what happens at fire time.
+type MessageScheduledPayload struct {
 	MessageID  string
 	Queue      queue.ParsedParams
 	ProducerID string
@@ -199,4 +219,39 @@ func SubscribeMessagePublished(handler func(MessagePublishedPayload)) (eventbus.
 			ProducerID: producerID,
 		})
 	}, EventMessagePublished)
+}
+
+// SubscribeMessageScheduled registers a handler for the
+// producer.messageScheduled event.
+func SubscribeMessageScheduled(handler func(MessageScheduledPayload)) (eventbus.Subscription, error) {
+	bus := eventbus.UserBus()
+	if bus == nil {
+		return nil, fmt.Errorf("producer events: user event bus not configured")
+	}
+
+	return bus.Subscribe(func(_ string, args []interface{}) {
+		if len(args) < 3 {
+			return
+		}
+
+		var messageID string
+		var queueParsed queue.ParsedParams
+		var producerID string
+
+		if err := decodeArg(args[0], &messageID); err != nil {
+			return
+		}
+		if err := decodeQueueArg(args[1], &queueParsed); err != nil {
+			return
+		}
+		if err := decodeArg(args[2], &producerID); err != nil {
+			return
+		}
+
+		handler(MessageScheduledPayload{
+			MessageID:  messageID,
+			Queue:      queueParsed,
+			ProducerID: producerID,
+		})
+	}, EventMessageScheduled)
 }

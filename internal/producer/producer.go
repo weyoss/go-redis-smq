@@ -535,11 +535,14 @@ func (prod *Producer) dispatch(
 
 	switch replyStr {
 	case "OK":
-		if !isScheduled {
-			PublishMessagePublished(ctx, messageID, queue.ParsedParams{
-				QueueParams: *queueParams,
-				GroupID:     envelope.ConsumerGroupID(),
-			}, prod.id)
+		queueParsed := queue.ParsedParams{
+			QueueParams: *queueParams,
+			GroupID:     envelope.ConsumerGroupID(),
+		}
+		if isScheduled {
+			PublishMessageScheduled(ctx, messageID, queueParsed, prod.id)
+		} else {
+			PublishMessagePublished(ctx, messageID, queueParsed, prod.id)
 		}
 		prod.log.Debug("message published",
 			"messageID", messageID,

@@ -59,3 +59,12 @@ func PublishGoingDown(ctx context.Context, producerID string) {
 func PublishMessagePublished(ctx context.Context, messageID string, queue queue.ParsedParams, producerID string) {
 	publish(ctx, EventMessagePublished, messageID, queue, producerID)
 }
+
+// PublishMessageScheduled fires producer.messageScheduled — a scheduled
+// message was accepted by the producer (via dispatch when isScheduled
+// was true). Fires once per dispatch — one per destination queue,
+// multiplied by the number of consumer groups for Pub/Sub destinations,
+// matching PublishMessagePublished's cadence.
+func PublishMessageScheduled(ctx context.Context, messageID string, queue queue.ParsedParams, producerID string) {
+	publish(ctx, EventMessageScheduled, messageID, queue, producerID)
+}

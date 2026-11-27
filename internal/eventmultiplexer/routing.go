@@ -13,10 +13,10 @@ package eventmultiplexer
 // routingPolicies maps each RedisSMQ event to its destination bus target.
 //
 // The default policy for events not listed here is TargetUser, meaning
-// producer and consumer events are public-only. Queue lifecycle events are
-// sent to both buses because they are needed internally for cache
-// synchronisation and are also useful for external monitoring.
-// Configuration updates are internal only.
+// producer, consumer, and scheduler events are public-only. Queue
+// lifecycle events are sent to both buses because they are needed
+// internally for cache synchronisation and are also useful for external
+// monitoring. Configuration updates are internal only.
 var routingPolicies = map[string]Target{
 	"queue.queueCreated":         TargetBoth,
 	"queue.queueDeleted":         TargetBoth,
