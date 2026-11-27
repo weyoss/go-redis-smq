@@ -42,7 +42,7 @@ func TestConsumers_EmptyQueue(t *testing.T) {
 		t.Errorf("consumers = %d, want 0", len(consumers))
 	}
 
-	ids, err := qm.GetConsumerIds(ctx, params)
+	ids, err := qm.GetConsumerIDs(ctx, params)
 	if err != nil {
 		t.Fatalf("get consumer ids: %v", err)
 	}
@@ -142,7 +142,7 @@ func TestConsumers_SingleConsumer(t *testing.T) {
 		t.Errorf("ipAddress should serialize as a JSON array, got: %s", ipField)
 	}
 
-	ids, err := qm.GetConsumerIds(ctx, params)
+	ids, err := qm.GetConsumerIDs(ctx, params)
 	if err != nil {
 		t.Fatalf("get consumer ids: %v", err)
 	}
@@ -189,7 +189,7 @@ func TestConsumers_MultipleConsumers(t *testing.T) {
 		t.Errorf("consumer 2 (%s) not found", cons2.ID())
 	}
 
-	ids, err := qm.GetConsumerIds(ctx, params)
+	ids, err := qm.GetConsumerIDs(ctx, params)
 	if err != nil {
 		t.Fatalf("get consumer ids: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestConsumers_QueueNotFound(t *testing.T) {
 		t.Errorf("GetConsumers: err = %v, want ErrNotFound", err)
 	}
 
-	_, err = qm.GetConsumerIds(ctx, params)
+	_, err = qm.GetConsumerIDs(ctx, params)
 	if err == nil {
 		t.Fatal("GetConsumerIds: expected error for non-existent queue")
 	}

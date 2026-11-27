@@ -18,6 +18,7 @@ import (
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
+// Consumer event names.
 const (
 	EventUp                    = "consumer.up"
 	EventDown                  = "consumer.down"
@@ -31,6 +32,8 @@ const (
 	EventMessageDelayed        = "consumer.messageDelayed"
 )
 
+// LifecyclePayload is the payload for the consumer.up, consumer.down,
+// consumer.goingUp, and consumer.goingDown events.
 type LifecyclePayload struct {
 	ConsumerID string
 }
@@ -46,16 +49,25 @@ type MessagePayload struct {
 	ConsumerID string
 }
 
+// MessageUnacknowledgedPayload is the payload for the
+// consumer.messageUnacknowledged event. Cause carries a
+// consumer.UnacknowledgeCause value (see unacknowledge_cause.go).
 type MessageUnacknowledgedPayload struct {
 	MessagePayload
 	Cause int
 }
 
+// MessageDeadLetteredPayload is the payload for the
+// consumer.messageDeadLettered event. Cause carries a
+// consumer.DeadLetterCause value (see deadletter_cause.go).
 type MessageDeadLetteredPayload struct {
 	MessagePayload
 	Cause int
 }
 
+// MessageReceivedPayload is the payload for the consumer.messageReceived
+// event. Fires when a message is checked out for processing, before the
+// handler is invoked.
 type MessageReceivedPayload struct {
 	MessageID  string
 	Queue      queue.ParsedParams

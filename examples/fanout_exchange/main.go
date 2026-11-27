@@ -18,107 +18,125 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq"
+
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/exchange"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := redissmq.Init(ctx, rdb); err != nil {
-		log.Fatalf("init: %v", err)
+		return fmt.Errorf("init: %w", err)
 	}
 	defer redissmq.Shutdown()
 
-	//
 	qm := redissmq.NewQueueManager()
 
-	// Create queues
 	emailQueue := queue.MustQueueParams(fmt.Sprintf("email-alerts-%d", time.Now().UnixMilli()))
-	qm.Create(ctx, emailQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	if err := qm.Create(ctx, emailQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
+		return fmt.Errorf("create email queue: %w", err)
+	}
 
 	smsQueue := queue.MustQueueParams(fmt.Sprintf("sms-alerts-%d", time.Now().UnixMilli()))
-	qm.Create(ctx, smsQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	if err := qm.Create(ctx, smsQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
+		return fmt.Errorf("create sms queue: %w", err)
+	}
 
 	pushQueue := queue.MustQueueParams(fmt.Sprintf("push-alerts-%d", time.Now().UnixMilli()))
-	qm.Create(ctx, pushQueue, queue.TypeFIFO, queue.DeliveryPointToPoint)
+	if err := qm.Create(ctx, pushQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
+		return fmt.Errorf("create push queue: %w", err)
+	}
 
-	// Create fanout exchange
 	fx := redissmq.NewFanoutExchange()
 	exchangeParams := exchange.MustExchangeParams("system-alerts", exchange.TypeFanout)
 
-	// Bind all queues — no routing key needed
 	if err := fx.BindQueue(ctx, emailQueue, exchangeParams); err != nil {
-		log.Fatalf("bind email: %v", err)
+		return fmt.Errorf("bind email: %w", err)
 	}
 	if err := fx.BindQueue(ctx, smsQueue, exchangeParams); err != nil {
-		log.Fatalf("bind sms: %v", err)
+		return fmt.Errorf("bind sms: %w", err)
 	}
 	if err := fx.BindQueue(ctx, pushQueue, exchangeParams); err != nil {
-		log.Fatalf("bind push: %v", err)
+		return fmt.Errorf("bind push: %w", err)
 	}
 
-	// Show bound queues
-	bound, _ := fx.BoundQueues(ctx, exchangeParams)
+	bound, err := fx.BoundQueues(ctx, exchangeParams)
+	if err != nil {
+		return fmt.Errorf("bound queues: %w", err)
+	}
 	log.Printf("Bound queues: %d", len(bound))
 	for _, q := range bound {
 		log.Printf("  - %s", q.String())
 	}
 
-	// Consumers
 	type result struct {
 		queue string
 		body  interface{}
 	}
 	ch := make(chan result, 3)
 
-	startConsumer := func(queue *queue.Params, label string) {
+	startConsumer := func(q *queue.Params, label string) error {
 		c := redissmq.NewConsumer()
-		c.Consume(queue, func(ctx context.Context, m *message.Transferable) error {
+		c.Consume(q, func(_ context.Context, m *message.Transferable) error {
 			ch <- result{queue: label, body: m.Body}
 			return nil
 		})
-		c.Run(ctx)
+		if err := c.Run(ctx); err != nil {
+			return fmt.Errorf("run %s consumer: %w", label, err)
+		}
+		return nil
 	}
 
-	startConsumer(emailQueue, "email")
-	startConsumer(smsQueue, "sms")
-	startConsumer(pushQueue, "push")
+	if err := startConsumer(emailQueue, "email"); err != nil {
+		return err
+	}
+	if err := startConsumer(smsQueue, "sms"); err != nil {
+		return err
+	}
+	if err := startConsumer(pushQueue, "push"); err != nil {
+		return err
+	}
 
-	// Producer
 	p := redissmq.NewProducer()
-	p.Run(ctx)
+	if err := p.Run(ctx); err != nil {
+		return fmt.Errorf("run producer: %w", err)
+	}
 
-	// Send one message — goes to ALL bound queues
 	m := message.New().
 		SetBody(map[string]interface{}{
 			"alert":   "System maintenance in 5 minutes",
 			"urgency": "high",
 		}).
 		SetFanoutExchange(exchangeParams)
-	// No routing key needed for fanout
 
 	ids, err := p.Produce(ctx, m)
 	if err != nil {
-		log.Fatalf("produce: %v", err)
+		return fmt.Errorf("produce: %w", err)
 	}
 	log.Printf("Produced 1 message → %d queue(s): %v", len(ids), ids)
 
-	// All 3 queues should receive the message
 	for i := 0; i < 3; i++ {
 		select {
 		case r := <-ch:
 			log.Printf("[%s] Received: %v", r.queue, r.body)
 		case <-time.After(10 * time.Second):
-			log.Fatal("timeout waiting for messages")
+			return fmt.Errorf("timeout waiting for messages")
 		}
 	}
 
 	log.Println("Fanout exchange example complete")
+	return nil
 }

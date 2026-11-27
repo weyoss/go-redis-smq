@@ -59,7 +59,7 @@ type Manager interface {
 	//
 	// Fails with ErrNotFound if the queue does not exist. Returns an
 	// empty slice if the queue exists but has no consumers.
-	GetConsumerIds(ctx context.Context, params *Params) ([]string, error)
+	GetConsumerIDs(ctx context.Context, params *Params) ([]string, error)
 
 	// BrowseMessages returns a page of message IDs from a queue.
 	BrowseMessages(ctx context.Context, queueParams *Params, params *BrowseParams) (*BrowseResult, error)

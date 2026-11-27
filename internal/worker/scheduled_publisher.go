@@ -175,7 +175,8 @@ func (sp *scheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 		priorityKey = qKey.PriorityWithGroup(consumerGroupID)
 	}
 
-	luaKeys := []string{
+	luaKeys := make([]string, 0, 7+2*len(messages))
+	luaKeys = append(luaKeys,
 		qKey.Properties(),
 		pendingKey,
 		qKey.Published(),
@@ -183,7 +184,7 @@ func (sp *scheduledPublisher) enqueueScheduled(ctx context.Context, qKey keys.Qu
 		qKey.Scheduled(),
 		qKey.DeadLetter(),
 		qKey.ConsumerGroups(),
-	}
+	)
 
 	argv := buildScheduledArgs()
 

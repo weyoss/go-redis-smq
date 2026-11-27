@@ -102,17 +102,6 @@ func (rc *reapConsumers) Run(ctx context.Context) {
 	}
 }
 
-// runOnce performs a single reap cycle. Test-only entry point —
-// production code goes through Run, which wraps reap in a ticker.
-//
-// Unexported but reachable from internal/worker/*_test.go (same
-// package). Used by TestReaper_DoesNotReapFreshConsumer to force a
-// reap immediately after a consumer subscribes, before its first
-// scheduled heartbeat tick would have fired under the pre-fix code.
-func (rc *reapConsumers) runOnce(ctx context.Context) {
-	rc.reap(ctx)
-}
-
 func (rc *reapConsumers) reap(ctx context.Context) {
 	qKey := redisKeys.Queue{
 		Namespace: rc.queue.NS(),

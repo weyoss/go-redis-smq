@@ -21,50 +21,51 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq"
+
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := redissmq.Init(ctx, rdb); err != nil {
-		log.Fatalf("init: %v", err)
+		return fmt.Errorf("init: %w", err)
 	}
 	defer redissmq.Shutdown()
 
-	// Create a queue (if not exists)
 	ordersQueue := queue.MustQueueParams(fmt.Sprintf("orders-%d", time.Now().UnixMilli()))
 	if err := redissmq.NewQueueManager().Create(ctx, ordersQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
-		// Queue may already exist — continue
 		log.Printf("create queue: %v (may already exist)", err)
 	}
 
-	// Start consumer
 	c := redissmq.NewConsumer(
 		consumer.WithHeartbeatTTL(30 * time.Second),
 	)
-
-	c.Consume(ordersQueue, func(ctx context.Context, m *message.Transferable) error {
+	c.Consume(ordersQueue, func(_ context.Context, m *message.Transferable) error {
 		log.Printf("Received: %v (ID: %s)", m.Body, m.ID)
 		return nil
 	})
-
 	if err := c.Run(ctx); err != nil {
-		log.Fatalf("run consumer: %v", err)
+		return fmt.Errorf("run consumer: %w", err)
 	}
 
-	// Wait for shutdown signal
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
 	<-sigCh
 
 	log.Println("Shutting down...")
-	cancel()
+	return nil
 }

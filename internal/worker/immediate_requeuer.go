@@ -135,17 +135,19 @@ func (ir *immediateRequeuer) requeue(ctx context.Context) {
 }
 
 func (ir *immediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queue, messages []*internalMessage.Envelope) {
-	luaKeys := []string{
+	luaKeys := make([]string, 0, 5+3*len(messages))
+	luaKeys = append(luaKeys,
 		qKey.Properties(),
 		qKey.Requeued(),
 		qKey.Delayed(),
 		qKey.DeadLetter(),
 		qKey.ConsumerGroups(),
-	}
+	)
 
 	timestamp := time.Now().UnixMilli()
 
-	argv := []interface{}{
+	argv := make([]interface{}, 0, 19+5*len(messages))
+	argv = append(argv,
 		qSchema.Type.Key(),
 		qSchema.RequeuedMessagesCount.Key(),
 		qSchema.DelayedMessagesCount.Key(),
@@ -165,7 +167,7 @@ func (ir *immediateRequeuer) requeueMessages(ctx context.Context, qKey keys.Queu
 		queue.StateStopped.Int(),
 		queue.StateLocked.Int(),
 		timestamp,
-	}
+	)
 
 	pendingCount := 0
 	delayedCount := 0

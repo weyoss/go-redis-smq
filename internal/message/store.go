@@ -211,7 +211,8 @@ func (s *Store) deleteMessageGroup(
 		priorityKey = qKey.PriorityWithGroup(consumerGroupID)
 	}
 
-	luaKeys := []string{
+	luaKeys := make([]string, 0, 9+2*len(messages))
+	luaKeys = append(luaKeys,
 		qKey.Properties(),
 		qKey.Published(),
 		pendingKey,
@@ -221,9 +222,10 @@ func (s *Store) deleteMessageGroup(
 		qKey.DeadLetter(),
 		qKey.Delayed(),
 		qKey.Requeued(),
-	}
+	)
 
-	luaArgs := []interface{}{
+	luaArgs := make([]interface{}, 0, 23+len(messages))
+	luaArgs = append(luaArgs,
 		qSchema.Type.Key(),
 		qSchema.MessagesCount.Key(),
 		qSchema.AcknowledgedMessagesCount.Key(),
@@ -247,7 +249,7 @@ func (s *Store) deleteMessageGroup(
 		publicqueue.StateLocked.Int(),
 		qSchema.LockID.Key(),
 		lockID,
-	}
+	)
 
 	for _, env := range messages {
 		luaKeys = append(luaKeys,

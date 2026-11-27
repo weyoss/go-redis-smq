@@ -167,17 +167,19 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 		}
 	}
 
-	luaKeys := []string{
+	luaKeys := make([]string, 0, 3+len(ids))
+	luaKeys = append(luaKeys,
 		qKey.ConsumerProcessing(ba.consumerID),
 		qKey.Acknowledged(),
 		qKey.Properties(),
-	}
+	)
 	for _, id := range ids {
 		luaKeys = append(luaKeys, keys.System{}.Message(id))
 	}
 
 	now := time.Now().UnixMilli()
-	argv := []interface{}{
+	argv := make([]interface{}, 0, 14+len(ids))
+	argv = append(argv,
 		storeMessages,
 		expireStoredMessages,
 		storedMessagesSize,
@@ -192,7 +194,7 @@ func (ba *BatchAcker) acknowledge(ids []string) {
 		schema.AcknowledgedAt.Key(),
 		qSchema.AcknowledgedMessagesCount.Key(),
 		qSchema.ProcessingMessagesCount.Key(),
-	}
+	)
 	for _, id := range ids {
 		argv = append(argv, id)
 	}

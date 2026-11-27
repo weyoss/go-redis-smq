@@ -25,6 +25,15 @@ linters:
           - revive
         text: "context-as-argument" # In test helpers, it's common to have testing.TB first
 
+      # Internal packages don't carry a public API contract. Suppress
+      # revive's missing-doc-comment warnings for exported symbols and
+      # for the package doc itself — these are enforced only on pkg/.
+      # Split into two rules if you ever want to re-enable just one.
+      - path: internal/
+        linters:
+          - revive
+        text: "^(exported|package-comments):"
+
       # Replaces the old top-level `issues.exclude` for SA1019
       - linters:
           - staticcheck

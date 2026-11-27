@@ -18,65 +18,66 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq"
+
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := redissmq.Init(ctx, rdb); err != nil {
-		log.Fatalf("init: %v", err)
+		return fmt.Errorf("init: %w", err)
 	}
 	defer redissmq.Shutdown()
 
-	// Create Pub/Sub queue
 	notifQueue := queue.MustQueueParams(fmt.Sprintf("notifications-%d", time.Now().UnixMilli()))
 	if err := redissmq.NewQueueManager().Create(ctx, notifQueue, queue.TypeFIFO, queue.DeliveryPubSub); err != nil {
-		log.Fatalf("create queue: %v", err)
+		return fmt.Errorf("create queue: %w", err)
 	}
 
-	// Create consumer groups
 	cgm := redissmq.NewConsumerGroupManager()
 	if _, err := cgm.Save(ctx, notifQueue, "email-service"); err != nil {
-		log.Fatalf("create email group: %v", err)
+		return fmt.Errorf("create email group: %w", err)
 	}
 	if _, err := cgm.Save(ctx, notifQueue, "sms-service"); err != nil {
-		log.Fatalf("create sms group: %v", err)
+		return fmt.Errorf("create sms group: %w", err)
 	}
 
-	// Consumer: Email service
 	emailCh := make(chan string, 5)
 	emailConsumer := redissmq.NewConsumer()
-	emailConsumer.ConsumeWithGroup(notifQueue, "email-service", func(ctx context.Context, m *message.Transferable) error {
+	emailConsumer.ConsumeWithGroup(notifQueue, "email-service", func(_ context.Context, m *message.Transferable) error {
 		emailCh <- fmt.Sprintf("Email received: %v", m.Body)
 		return nil
 	})
 	if err := emailConsumer.Run(ctx); err != nil {
-		log.Fatalf("run email consumer: %v", err)
+		return fmt.Errorf("run email consumer: %w", err)
 	}
 
-	// Consumer: SMS service
 	smsCh := make(chan string, 5)
 	smsConsumer := redissmq.NewConsumer()
-	smsConsumer.ConsumeWithGroup(notifQueue, "sms-service", func(ctx context.Context, m *message.Transferable) error {
+	smsConsumer.ConsumeWithGroup(notifQueue, "sms-service", func(_ context.Context, m *message.Transferable) error {
 		smsCh <- fmt.Sprintf("SMS received: %v", m.Body)
 		return nil
 	})
-
 	if err := smsConsumer.Run(ctx); err != nil {
-		log.Fatalf("run sms consumer: %v", err)
+		return fmt.Errorf("run sms consumer: %w", err)
 	}
 
-	// Produce one message
 	p := redissmq.NewProducer()
 	if err := p.Run(ctx); err != nil {
-		log.Fatalf("run producer: %v", err)
+		return fmt.Errorf("run producer: %w", err)
 	}
 
 	m := message.New().
@@ -85,12 +86,10 @@ func main() {
 
 	ids, err := p.Produce(ctx, m)
 	if err != nil {
-		log.Fatalf("produce: %v", err)
+		return fmt.Errorf("produce: %w", err)
 	}
-	// Pub/Sub returns one ID per consumer group
 	log.Printf("Produced: %v (expecting %d IDs)", ids, 2)
 
-	// Both services should receive the message
 	for i := 0; i < 2; i++ {
 		select {
 		case msg := <-emailCh:
@@ -98,9 +97,10 @@ func main() {
 		case msg := <-smsCh:
 			log.Println(msg)
 		case <-time.After(10 * time.Second):
-			log.Fatal("timeout waiting for messages")
+			return fmt.Errorf("timeout waiting for messages")
 		}
 	}
 
 	log.Println("Pub/Sub example complete")
+	return nil
 }

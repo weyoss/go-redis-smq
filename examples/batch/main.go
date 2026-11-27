@@ -18,28 +18,34 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq"
+
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/consumer"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := redissmq.Init(ctx, rdb); err != nil {
-		log.Fatalf("init: %v", err)
+		return fmt.Errorf("init: %w", err)
 	}
 	defer redissmq.Shutdown()
 
-	// Create queue
 	batchQueue := queue.MustQueueParams(fmt.Sprintf("batch-test-%d", time.Now().UnixMilli()))
 	if err := redissmq.NewQueueManager().Create(ctx, batchQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
-		log.Fatalf("create queue: %v", err)
+		return fmt.Errorf("create queue: %w", err)
 	}
 
 	// Consumer with batch acknowledgments
@@ -52,16 +58,19 @@ func main() {
 			BatchTimeout: 2 * time.Second,
 		}),
 	)
-
-	c.Consume(batchQueue, func(ctx context.Context, m *message.Transferable) error {
+	c.Consume(batchQueue, func(_ context.Context, m *message.Transferable) error {
 		consumed <- m.ID
 		return nil
 	})
-	c.Run(ctx)
+	if err := c.Run(ctx); err != nil {
+		return fmt.Errorf("run consumer: %w", err)
+	}
 
 	// Producer
 	p := redissmq.NewProducer()
-	p.Run(ctx)
+	if err := p.Run(ctx); err != nil {
+		return fmt.Errorf("run producer: %w", err)
+	}
 
 	// Produce 100 messages
 	start := time.Now()
@@ -69,10 +78,8 @@ func main() {
 		m := message.New().
 			SetBody(fmt.Sprintf("Message #%d", i)).
 			SetQueue(batchQueue)
-
-		_, err := p.Produce(ctx, m)
-		if err != nil {
-			log.Fatalf("produce: %v", err)
+		if _, err := p.Produce(ctx, m); err != nil {
+			return fmt.Errorf("produce: %w", err)
 		}
 	}
 
@@ -84,11 +91,12 @@ func main() {
 				log.Printf("Consumed: %s", id)
 			}
 		case <-time.After(30 * time.Second):
-			log.Fatalf("timeout after %d messages", i)
+			return fmt.Errorf("timeout after %d messages", i)
 		}
 	}
 
 	elapsed := time.Since(start)
 	log.Printf("100 messages in %v (%.0f msg/s)", elapsed, 100/elapsed.Seconds())
 	log.Println("Batch example complete")
+	return nil
 }

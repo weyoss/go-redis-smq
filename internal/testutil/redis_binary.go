@@ -98,7 +98,7 @@ func downloadAndExtract(url, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("download: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download: status %d", resp.StatusCode)
@@ -108,7 +108,7 @@ func downloadAndExtract(url, destPath string) error {
 	if err != nil {
 		return fmt.Errorf("gzip: %w", err)
 	}
-	defer gzReader.Close()
+	defer func() { _ = gzReader.Close() }()
 
 	tarReader := tar.NewReader(gzReader)
 
@@ -132,7 +132,7 @@ func downloadAndExtract(url, destPath string) error {
 			if err != nil {
 				return fmt.Errorf("create: %w", err)
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 
 			if _, err := io.Copy(f, tarReader); err != nil {
 				return fmt.Errorf("copy: %w", err)
@@ -148,7 +148,7 @@ func acquireLock(lockPath string) error {
 	for i := 0; i < 120; i++ {
 		f, err := os.OpenFile(lockPath, os.O_CREATE|os.O_EXCL, 0o644)
 		if err == nil {
-			f.Close()
+			_ = f.Close()
 			return nil
 		}
 		if !os.IsExist(err) {
@@ -160,5 +160,5 @@ func acquireLock(lockPath string) error {
 }
 
 func releaseLock(lockPath string) {
-	os.Remove(lockPath)
+	_ = os.Remove(lockPath)
 }

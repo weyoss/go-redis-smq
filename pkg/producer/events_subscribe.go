@@ -27,6 +27,8 @@ const (
 	EventMessagePublished = "producer.messagePublished"
 )
 
+// LifecyclePayload is the payload for producer.up / producer.down /
+// producer.goingUp / producer.goingDown events.
 type LifecyclePayload struct {
 	ProducerID string
 }

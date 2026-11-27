@@ -242,7 +242,8 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		)
 	}
 
-	keysToDelete := []string{
+	keysToDelete := make([]string, 0, 16+len(consumerGroupKeys)+len(processingQueues))
+	keysToDelete = append(keysToDelete,
 		key.Properties(),
 		key.Pending(),
 		key.DeadLetter(),
@@ -259,7 +260,7 @@ func (s *Store) Delete(ctx context.Context, queueParams *publicqueue.Params) err
 		key.WorkersLock(),
 		key.ExchangeBindings(),
 		key.StateHistory(),
-	}
+	)
 	keysToDelete = append(keysToDelete, consumerGroupKeys...)
 	keysToDelete = append(keysToDelete, processingQueues...)
 
@@ -367,12 +368,12 @@ func (s *Store) GetConsumers(ctx context.Context, queueParams *publicqueue.Param
 	return consumers, nil
 }
 
-// GetConsumerIds returns the IDs of the consumers currently registered
+// GetConsumerIDs returns the IDs of the consumers currently registered
 // for a queue.
 //
 // HKeys on the Consumers hash — no JSON decoding needed. Use
 // GetConsumers when the full consumer metadata is required.
-func (s *Store) GetConsumerIds(ctx context.Context, queueParams *publicqueue.Params) ([]string, error) {
+func (s *Store) GetConsumerIDs(ctx context.Context, queueParams *publicqueue.Params) ([]string, error) {
 	key := keys.Queue{
 		Namespace: queueParams.NS(),
 		Name:      queueParams.Name(),

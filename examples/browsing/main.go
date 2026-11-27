@@ -18,21 +18,28 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq"
+
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/config"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := redissmq.Init(ctx, rdb); err != nil {
-		log.Fatalf("init: %v", err)
+		return fmt.Errorf("init: %w", err)
 	}
 	defer redissmq.Shutdown()
 
@@ -43,32 +50,28 @@ func main() {
 	cfg.MessageAudit.DeadLetteredMessages.Enabled = true
 	cfg.MessageAudit.DeadLetteredMessages.QueueSize = 1000
 	if _, err := redissmq.NewConfigManager().Save(ctx, cfg); err != nil {
-		log.Fatalf("save config: %v", err)
+		return fmt.Errorf("save config: %w", err)
 	}
 
-	//
 	qm := redissmq.NewQueueManager()
 
-	// Create queue
 	browseQueue := queue.MustQueueParams(fmt.Sprintf("browse-test-%d", time.Now().UnixMilli()))
 	if err := qm.Create(ctx, browseQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
-		log.Fatalf("create queue: %v", err)
+		return fmt.Errorf("create queue: %w", err)
 	}
 
-	// Produce some messages
 	p := redissmq.NewProducer()
 	if err := p.Run(ctx); err != nil {
-		log.Fatalf("run producer: %v", err)
+		return fmt.Errorf("run producer: %w", err)
 	}
 
 	for i := 1; i <= 10; i++ {
 		m := message.New().
 			SetBody(fmt.Sprintf("Message #%d", i)).
 			SetQueue(browseQueue)
-
 		ids, err := p.Produce(ctx, m)
 		if err != nil {
-			log.Fatalf("produce: %v", err)
+			return fmt.Errorf("produce: %w", err)
 		}
 		log.Printf("Produced: %v", ids)
 	}
@@ -78,22 +81,21 @@ func main() {
 		SetBody("Scheduled message").
 		SetQueue(browseQueue).
 		SetScheduledDelay(1 * time.Hour)
-
 	ids, err := p.Produce(ctx, scheduledMsg)
 	if err != nil {
-		log.Fatalf("produce scheduled: %v", err)
+		return fmt.Errorf("produce scheduled: %w", err)
 	}
 	log.Printf("Produced scheduled: %v", ids)
 
 	// Consume 5 messages (they'll be acknowledged)
 	c := redissmq.NewConsumer()
 	consumed := make(chan string, 5)
-	c.Consume(browseQueue, func(ctx context.Context, m *message.Transferable) error {
+	c.Consume(browseQueue, func(_ context.Context, m *message.Transferable) error {
 		consumed <- m.ID
 		return nil
 	})
 	if err := c.Run(ctx); err != nil {
-		log.Fatalf("run consumer: %v", err)
+		return fmt.Errorf("run consumer: %w", err)
 	}
 
 	for i := 0; i < 5; i++ {
@@ -101,30 +103,26 @@ func main() {
 		case id := <-consumed:
 			log.Printf("Consumed: %s", id)
 		case <-time.After(10 * time.Second):
-			log.Fatal("timeout waiting for messages")
+			return fmt.Errorf("timeout waiting for messages")
 		}
 	}
 
-	time.Sleep(500 * time.Millisecond) // Let acks settle
+	time.Sleep(500 * time.Millisecond) // let acks settle
 
-	// ── Browse Messages ──
-
-	// Published: All messages in the queue
-	printBrowseResult(ctx, "Published", browseQueue, queue.BrowsePublished)
-
-	// Pending: Messages waiting to be consumed
-	printBrowseResult(ctx, "Pending", browseQueue, queue.BrowsePending)
-
-	// Scheduled: Messages waiting for future delivery
-	printBrowseResult(ctx, "Scheduled", browseQueue, queue.BrowseScheduled)
-
-	// Acknowledged: Successfully processed messages (requires audit)
-	printBrowseResult(ctx, "Acknowledged", browseQueue, queue.BrowseAcknowledged)
-
-	// Dead-Lettered: Failed messages (requires audit)
-	printBrowseResult(ctx, "Dead-Lettered", browseQueue, queue.BrowseDeadLettered)
-
-	// ── Pagination ──
+	for _, p := range []struct {
+		label  string
+		filter queue.BrowseFilter
+	}{
+		{"Published", queue.BrowsePublished},
+		{"Pending", queue.BrowsePending},
+		{"Scheduled", queue.BrowseScheduled},
+		{"Acknowledged", queue.BrowseAcknowledged},
+		{"Dead-Lettered", queue.BrowseDeadLettered},
+	} {
+		if err := printBrowseResult(ctx, p.label, browseQueue, p.filter); err != nil {
+			return err
+		}
+	}
 
 	fmt.Println("\n=== Pagination ===")
 	offset := int64(0)
@@ -137,7 +135,7 @@ func main() {
 			Count:  pageSize,
 		})
 		if err != nil {
-			log.Fatalf("browse: %v", err)
+			return fmt.Errorf("browse: %w", err)
 		}
 
 		fmt.Printf("Page %d [%d-%d] of %d:\n", page, offset, offset+result.Count-1, result.Total)
@@ -153,9 +151,10 @@ func main() {
 	}
 
 	log.Println("Browsing example complete")
+	return nil
 }
 
-func printBrowseResult(ctx context.Context, label string, queueParams *queue.Params, filter queue.BrowseFilter) {
+func printBrowseResult(ctx context.Context, label string, queueParams *queue.Params, filter queue.BrowseFilter) error {
 	qm := redissmq.NewQueueManager()
 	result, err := qm.BrowseMessages(ctx, queueParams, &queue.BrowseParams{
 		Filter: filter,
@@ -163,11 +162,11 @@ func printBrowseResult(ctx context.Context, label string, queueParams *queue.Par
 		Count:  100,
 	})
 	if err != nil {
-		fmt.Printf("%s: error: %v\n", label, err)
-		return
+		return fmt.Errorf("%s: %w", label, err)
 	}
 	fmt.Printf("\n%s: %d/%d\n", label, len(result.IDs), result.Total)
 	for _, id := range result.IDs {
 		fmt.Printf("  - %s\n", id)
 	}
+	return nil
 }

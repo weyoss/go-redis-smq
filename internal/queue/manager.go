@@ -125,9 +125,9 @@ func (m *Manager) GetConsumers(ctx context.Context, params *publicqueue.Params) 
 	return m.store.GetConsumers(ctx, params)
 }
 
-// GetConsumerIds implements publicqueue.Manager.
-func (m *Manager) GetConsumerIds(ctx context.Context, params *publicqueue.Params) ([]string, error) {
-	return m.store.GetConsumerIds(ctx, params)
+// GetConsumerIDs implements publicqueue.Manager.
+func (m *Manager) GetConsumerIDs(ctx context.Context, params *publicqueue.Params) ([]string, error) {
+	return m.store.GetConsumerIDs(ctx, params)
 }
 
 // BrowseMessages implements publicqueue.Manager.

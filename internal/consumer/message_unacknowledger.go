@@ -309,13 +309,15 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		maxHistorySize = cfg.MessageAudit.UnacknowledgementHistory.MaxSize
 	}
 
-	luaKeys := []string{
+	luaKeys := make([]string, 0, 3+3*len(entries))
+	luaKeys = append(luaKeys,
 		qKey.Requeued(),
 		qKey.DeadLetter(),
 		qKey.Properties(),
-	}
+	)
 
-	staticArgv := []interface{}{
+	staticArgv := make([]interface{}, 0, 21+7*len(entries))
+	staticArgv = append(staticArgv,
 		strconv.Itoa(int(ActionDelay)),
 		strconv.Itoa(int(ActionRequeue)),
 		storeMessages,
@@ -337,10 +339,9 @@ func (mu *MessageUnacknowledger) buildBatchLuaArgs(
 		queue.StateStopped.Int(),
 		queue.StateLocked.Int(),
 		strconv.Itoa(maxHistorySize),
-	}
+	)
 
 	precompute := make([]unackPrecompute, len(entries))
-
 	for i, entry := range entries {
 		msgID := entry.Message.ID()
 		msgKey := redisKeys.System{}.Message(msgID)

@@ -29,6 +29,9 @@ package queue
 // The field name IPAddresses is Go-idiomatic (plural for a slice). The
 // JSON wire name is "ipAddress" (singular) — matching the TypeScript
 // interface, whose ipAddress field is typed as string[].
+//
+// nolint:revive // "Consumer" would collide conceptually with
+// consumer.Consumer when both packages are imported.
 type QueueConsumer struct {
 	// IPAddresses holds every non-internal IPv4 address of the host as
 	// reported at subscription time. A host with multiple interfaces

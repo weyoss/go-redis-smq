@@ -18,84 +18,87 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
-	"github.com/weyoss/go-redis-smq"
+
+	redissmq "github.com/weyoss/go-redis-smq"
 	"github.com/weyoss/go-redis-smq/pkg/message"
 	"github.com/weyoss/go-redis-smq/pkg/queue"
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	rdb := redis.NewClient(&redis.Options{Addr: "127.0.0.1:6379"})
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }()
 
 	if err := redissmq.Init(ctx, rdb); err != nil {
-		log.Fatalf("init: %v", err)
+		return fmt.Errorf("init: %w", err)
 	}
 	defer redissmq.Shutdown()
 
-	// Create queue
 	qm := redissmq.NewQueueManager()
 	tasksQueue := queue.MustQueueParams(fmt.Sprintf("tasks-%d", time.Now().UnixMilli()))
 	if err := qm.Create(ctx, tasksQueue, queue.TypeFIFO, queue.DeliveryPointToPoint); err != nil {
-		log.Fatalf("create queue: %v", err)
+		return fmt.Errorf("create queue: %w", err)
 	}
 
-	// Consumer
 	consumed := make(chan string, 3)
 	c := redissmq.NewConsumer()
-	c.Consume(tasksQueue, func(ctx context.Context, m *message.Transferable) error {
+	c.Consume(tasksQueue, func(_ context.Context, m *message.Transferable) error {
 		consumed <- m.Body.(string)
 		return nil
 	})
-	c.Run(ctx)
+	if err := c.Run(ctx); err != nil {
+		return fmt.Errorf("run consumer: %w", err)
+	}
 
-	// Producer
 	p := redissmq.NewProducer()
-	p.Run(ctx)
+	if err := p.Run(ctx); err != nil {
+		return fmt.Errorf("run producer: %w", err)
+	}
 
-	// Message 1: Delayed by 2 seconds
 	delayedMsg := message.New().
 		SetBody("Delayed message").
 		SetQueue(tasksQueue).
 		SetScheduledDelay(2 * time.Second)
-
 	ids, err := p.Produce(ctx, delayedMsg)
 	if err != nil {
-		log.Fatalf("produce delayed: %v", err)
+		return fmt.Errorf("produce delayed: %w", err)
 	}
 	log.Printf("Scheduled delayed message: %v", ids)
 
-	// Message 2: Immediate (no delay)
 	immediateMsg := message.New().
 		SetBody("Immediate message").
 		SetQueue(tasksQueue)
-
 	ids, err = p.Produce(ctx, immediateMsg)
 	if err != nil {
-		log.Fatalf("produce immediate: %v", err)
+		return fmt.Errorf("produce immediate: %w", err)
 	}
 	log.Printf("Produced immediate message: %v", ids)
 
-	// Expect 2 messages
 	for i := 0; i < 2; i++ {
 		select {
 		case body := <-consumed:
 			log.Printf("Consumed: %s", body)
 		case <-time.After(15 * time.Second):
-			log.Fatal("timeout waiting for messages")
+			return fmt.Errorf("timeout waiting for messages")
 		}
 	}
 
-	// Check scheduled messages
 	result, err := qm.BrowseMessages(ctx, tasksQueue, &queue.BrowseParams{
 		Filter: queue.BrowseScheduled,
 	})
 	if err != nil {
-		log.Fatalf("browse scheduled: %v", err)
+		return fmt.Errorf("browse scheduled: %w", err)
 	}
 	log.Printf("Scheduled messages remaining: %d", result.Total)
 
 	log.Println("Scheduling example complete")
+	return nil
 }
